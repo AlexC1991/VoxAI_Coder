@@ -1,0 +1,18 @@
+# dependencies / build output
+node_modules/
+release/
+dist/
+
+# scratch — one-off debug scripts and boot logs from a working session
+_*.log
+_*.js
+fix-*.js
+smoke.log
+*.tmp
+
+# agent-local state written into a workspace
+.voxai/
+
+# OS
+Thumbs.db
+.DS_Store

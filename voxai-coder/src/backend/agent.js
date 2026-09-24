@@ -1,0 +1,860 @@
+/**
+ * VoxAI agent loop — our own state machine. Original code; no third party source
+ * is included. (An earlier header cited goose's crates/goose-agent/src/machine.rs
+ * as a parallel — that file was never read, only the compiled distribution was
+ * available. It is also a generic step-runner, not a tool-calling loop.)
+ *
+ * The loop:
+ *   runAgent({session, message, ...}) → async generator of UI events:
+ *     streaming   {type:'token', text} · {type:'reasoning', text}
+ *     turns       {type:'turn', n}
+ *     tools       {type:'tool_start', id, name, args}
+ *                 {type:'tool_end', id, name, ok, result, mutated?}
+ *     context     {type:'compacting'|'compacted'|'warning'} · {type:'todos', todos}
+ *     accounting  {type:'usage', usage} · {type:'budget', spent, budget}
+ *     sub-agents  {type:'sub'} · {type:'agent_finished'} · {type:'awaiting_agents'}
+ *     terminal    {type:'done'|'error'|'cancelled'|'limit_reached'|'budget_reached'}
+ *
+ *   Every one of these has a branch in the renderer; an emitted event with no
+ *   handler is invisible work, so test/regression-renderer.js asserts the pairing.
+ *
+ * Permission model mirrors the Forge mockup's "Allow shell command?" bar:
+ *   access 'ask each time' → every write/shell asks
+ *   'edit files freely'    → writes auto, shell asks
+ *   'edit + run tests'     → writes auto, test-ish commands auto, else asks
+ *   'full access'          → everything auto (still confined to workdir)
+ */
+
+const { chatCompletions } = require('./providers/openrouter');
+const tools = require('./tools');
+const { compactSession, estimateSessionTokens } = require('./compact');
+const { checkToolAllowed, checkShellCommand } = require('./tools/sandbox');
+const { normalizeAccess, labelFor } = require('./tools/sandbox');
+const bg = require('./background');
+
+// A runaway guard, not a budget. A real refactor across several files is routinely
+// 30-40 turns; the old ceiling of 25 cut work off mid-task and reported it as an
+// error. Hitting this now yields a resumable `limit_reached` instead.
+const MAX_TURNS = Number(process.env.VOX_MAX_TURNS) > 0 ? Number(process.env.VOX_MAX_TURNS) : 60;
+
+// Identical tool call (same name + same arguments) this many times in a row means
+// the model is stuck re-trying something that will not start working.
+const LOOP_REPEAT_LIMIT = 3;
+
+// Tools whose success means a file on disk changed.
+const MUTATING_TOOLS = new Set(['write', 'edit', 'patch']);
+
+// Hard ceiling on what a single run may spend, in USD. A runaway loop, a fan-out of
+// sub-agents, or simply a long task on an expensive model can otherwise empty an
+// account before anyone notices. Default is deliberately small.
+const DEFAULT_RUN_BUDGET_USD = (() => {
+  const n = Number(process.env.VOX_RUN_BUDGET_USD);
+  return Number.isFinite(n) && n > 0 ? n : 1.0;
+})();
+
+/**
+ * Take image payloads out of a tool result before it is serialised.
+ *
+ * Computer-use tools return screenshots as `data:image/png;base64,...` fields. Left
+ * in place, that string was JSON-encoded into a TEXT tool message and then trimmed
+ * by boundToolResult -- so the model received ~8 KB of truncated base64 per shot:
+ * not an image (tool messages are text), not even a valid PNG, and re-sent on every
+ * later turn. One session carried ~1M tokens of it. The model said as much: "the
+ * browser screenshots just return markup with base64 data I can't visually read".
+ *
+ * Returns a shallow copy with each image field nulled, plus the images. The caller
+ * decides what the model is told, because that depends on whether it can see them.
+ */
+const IMAGE_FIELDS = ['screenshot', 'image', 'dataUrl', 'png'];
+// Tags the user message that carries a turn's screenshots. The app wrote it, not the
+// person, and the renderer must not draw it as something they sent.
+const TOOL_IMAGES_MARKER = '[VOX TOOL SCREENSHOTS]';
+// Images are re-sent on every later turn, so keep only the newest few per turn.
+const MAX_IMAGES_PER_TURN = 2;
+function extractImages(result) {
+  if (!result || typeof result !== 'object' || Array.isArray(result)) return { result, images: [] };
+  let copy = null;
+  const images = [];
+  for (const k of IMAGE_FIELDS) {
+    const v = result[k];
+    if (typeof v === 'string' && /^data:image\/[a-z0-9.+-]+;base64,/i.test(v) && v.length > 64) {
+      if (!copy) copy = { ...result };
+      images.push({ field: k, url: v, bytes: Math.round((v.length - v.indexOf(',') - 1) * 0.75) });
+      copy[k] = null;
+    }
+  }
+  return { result: copy || result, images };
+}
+
+/**
+ * What did this turn cost?
+ *
+ * OpenRouter normally reports real spend in usage.cost. When a provider omits it we
+ * fall back to catalogue price x tokens, and when we have neither we return null —
+ * which the caller MUST treat as "cannot enforce", not as "free". A budget cap that
+ * silently reads every turn as $0 is worse than no cap at all.
+ */
+function turnCost(usage, priceIn, priceOut) {
+  const u = usage || {};
+  const reported = Number(u.total_cost) || Number(u.cost) || 0;
+  if (reported > 0) return { usd: reported, estimated: false };
+  const inTok = Number(u.prompt_tokens) || 0;
+  const outTok = Number(u.completion_tokens) || 0;
+  const cached = cacheReadTokens(u) || 0;
+  if ((priceIn > 0 || priceOut > 0) && (inTok || outTok)) {
+    // Cache reads are billed at a fraction of input; 0.1x is the common floor, so
+    // this errs slightly HIGH, which is the safe direction for a spend cap.
+    const fresh = Math.max(0, inTok - cached);
+    return { usd: (fresh * priceIn) + (cached * priceIn * 0.1) + (outTok * priceOut), estimated: true };
+  }
+  if (inTok || outTok) return { usd: 0, estimated: true, unknown: true };
+  return { usd: 0, estimated: false };
+}
+
+// Largest tool result we will put into the transcript, in characters. Applied ONCE,
+// at append time. Keep it generous — a truncated file read costs the model a retry.
+const TOOL_RESULT_MAX_CHARS = (() => {
+  const n = Number(process.env.VOX_TOOL_RESULT_MAX_CHARS);
+  return Number.isFinite(n) && n > 0 ? n : 8000;
+})();
+
+/**
+ * Bound a tool result at the moment it is appended.
+ *
+ * This replaces the previous `summarizeOldToolOutputs`, which walked back through
+ * the transcript on EVERY send and rewrote any tool message past the cutoff. That
+ * mutated a message in the middle of the history each turn — and because prompt
+ * caching matches a prefix and stops at the first changed byte, it invalidated the
+ * cache from that point forward, permanently, once per turn. Bounding at write time
+ * gets the same context saving with an append-only transcript, which is what the
+ * cache needs. Long sessions are still handled by compactSession().
+ */
+function boundToolResult(text, limit) {
+  const cap = Number(limit) > 0 ? Number(limit) : TOOL_RESULT_MAX_CHARS;
+  const s = typeof text === 'string' ? text : JSON.stringify(text || '');
+  if (s.length <= cap) return s;
+  const keepHead = Math.floor(cap * 0.7);
+  const keepTail = cap - keepHead;
+  const dropped = s.length - cap;
+  // Keep both ends: the head carries the shape of the output, the tail usually
+  // carries the error or the summary line. Say what was removed so the model knows
+  // it is looking at a partial result rather than the whole thing.
+  return `${s.slice(0, keepHead)}\n\n…[${dropped.toLocaleString()} characters truncated — `
+    + `re-run with a narrower query or read a specific range to see the rest]…\n\n${s.slice(-keepTail)}`;
+}
+
+/**
+ * How many input tokens were served from the provider's prefix cache?
+ *
+ * Providers spell this differently through OpenRouter, so read every known field.
+ * Returns null when NONE of them are present — "we cannot tell" is not "zero", and
+ * treating it as zero is what fired a scary cache-miss warning at a user whose
+ * session was caching perfectly well.
+ */
+function cacheReadTokens(usage) {
+  const u = usage || {};
+  const d = u.prompt_tokens_details || {};
+  const candidates = [d.cached_tokens, u.cache_read_input_tokens, u.cached_tokens, d.cache_read_tokens];
+  let seen = false;
+  let total = 0;
+  for (const c of candidates) {
+    if (c === undefined || c === null) continue;
+    seen = true;
+    total += Number(c) || 0;
+  }
+  return seen ? total : null;
+}
+
+// Fix 1: accumulate a run's OpenRouter usage onto the session (persisted later
+// by caller via store.saveSession + recordUsage).
+function accumulateUsage(session, usage) {
+  const u = usage || {};
+  const s = session._runUsage || (session._runUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 });
+  s.input += Number(u.prompt_tokens) || 0;
+  s.output += Number(u.completion_tokens) || 0;
+  s.cacheRead += cacheReadTokens(u) || 0;
+  s.cacheWrite += Number(u.cache_write_input_tokens) || 0;
+  s.cost += Number(u.total_cost) || Number(u.cost) || 0;
+  return s;
+}
+/**
+ * Load the durable, session-stable context: project memory + build state.
+ *
+ * These go into the SYSTEM PROMPT, not into a per-turn injection. That placement is
+ * the whole point: the system prompt is the cached prefix, so this costs the price
+ * of one cache write for the session instead of full input price every turn. It also
+ * fixes the amnesia — previously the memory tool was write-mostly, because nothing
+ * ever read the file back and the model had to spontaneously decide to look.
+ * Anything volatile (retrieval, search) stays a TOOL, so its output lands at the end
+ * of the transcript where changing content is free.
+ */
+async function loadDurableContext(workdir) {
+  let memFacts = [];
+  let buildState = '';
+  try {
+    const { loadMemory } = require('./tools/memory');
+    memFacts = (await loadMemory(workdir)) || [];
+  } catch { /* no memory yet */ }
+  try {
+    const { loadBuildState, formatBuildState } = require('./tools/build_state');
+    buildState = formatBuildState(await loadBuildState(workdir));
+  } catch { /* no build state yet */ }
+
+  const parts = [];
+  if (memFacts.length) {
+    // Bounded so a long-lived project cannot grow the prefix without limit.
+    const shown = memFacts.slice(-60).map((f) => `- ${String(f.text || f).slice(0, 300)}`);
+    parts.push(`[PROJECT MEMORY] (${memFacts.length} stored facts; newest last. `
+      + `Add durable conventions and decisions with the memory tool.)\n${shown.join('\n')}`);
+  }
+  if (buildState) parts.push(buildState);
+  return parts.join('\n\n');
+}
+
+/**
+ * Did the agent just write something whose purpose is to be looked at?
+ *
+ * The agent writes a page and then waits to be told to display it — in one real
+ * session it wrote an 18KB plan, spun up an HTTP server three times because the
+ * preview refused file://, and STILL only opened it when the user asked. If the
+ * model produced something whose whole purpose is to be looked at, looking at it
+ * should not be a separate request.
+ *
+ * Deliberately narrow, because auto-opening the wrong thing is worse than not
+ * opening: it must be a whole HTML document, newly written (not a one-line edit),
+ * not a test fixture or dependency, and not a path already shown this run.
+ */
+const VIEWABLE_EXT = /\.(html?|svg)$/i;
+const NOT_A_DELIVERABLE = /(^|[\\/])(node_modules|\.git|dist|build|coverage|__tests__|__snapshots__|fixtures?)([\\/]|$)/i;
+
+function isPreviewableWrite(toolName, args, result) {
+  if (toolName !== 'write') return false;                 // an edit is not "here is a page"
+  const p = String((args && args.path) || (result && result.path) || '');
+  if (!VIEWABLE_EXT.test(p)) return false;
+  if (NOT_A_DELIVERABLE.test(p)) return false;
+  const body = String((args && args.content) || '');
+  if (/\.svg$/i.test(p)) return /<svg[\s>]/i.test(body);
+  // A fragment or a template partial is not a page someone wants rendered.
+  return /<html[\s>]/i.test(body) || (/<body[\s>]/i.test(body) && /<\/body>/i.test(body));
+}
+
+function fileUrl(absPath) {
+  const norm = String(absPath).split(String.fromCharCode(92)).join('/');
+  return 'file:///' + encodeURI(norm.replace(/^\/+/, ''));
+}
+
+const PLATFORM_LINE = process.platform === 'win32'
+  ? 'Windows — the shell tool runs cmd.exe, not bash (see its description)'
+  : (process.platform === 'darwin' ? 'macOS, /bin/sh' : 'Linux, /bin/sh');
+const SYSTEM = (workdir, access, planMode = false, durable = '') =>
+  `You are Vox, the coding agent inside VoxAI Coder, a desktop coding app. ` +
+  `Workdir: ${workdir}. All file paths are relative to it; never escape it. ` +
+  // Static per machine, so it does not disturb the cached prefix.
+  `Platform: ${PLATFORM_LINE}. ` +
+  `Permission mode: "${labelFor(access)}". Use tools to read, write, edit, patch, search, run commands, and track todos. ` +
+  (planMode ? `PLAN MODE is ON. You must NOT make any changes, write/edit files, or run mutating commands on the first pass. Instead, explore (read/search/glob) freely, then present a clear step-by-step plan of exactly what you will change and how. Then call ask_confirm to get the user's approval before executing any write/edit/shell action. After approval, you may proceed. `
+    : ``) +
+  `Patch small changes with patch (exact old→new) instead of full-file write. ` +
+  `Store durable conventions/decisions with memory ("add" action) so future sessions remember them. ` +
+  `For large files (>12k chars) use rag to retrieve relevant chunks before editing. ` +
+  `For research outside the repo: web_search to find sources, web_fetch to read them. Never guess a URL, ` +
+  `and only cite or describe pages you actually fetched — if a source could not be reached, say so. ` +
+  `write/edit/patch syntax-check the file automatically and return the result. If one comes back ` +
+  `"was written, but it does not parse", the change IS already on disk — do not re-apply it; read the ` +
+  `reported error and make a corrective edit. ` +
+  `Use lsp for deeper project-wide checks, snapshot before risky multi-file changes, and node_repl for quick checks. ` +
+  `Keep a running todo for multi-step work. Explain briefly, then act. ` +
+  `Prefer small verified steps: read → change → run tests → report. ` +
+  `You may delegate self-contained work with spawn_agent; pass background:true to keep working while ` +
+  `it runs — its report is delivered to you automatically, so do not poll with the agents tool. ` +
+  `Before you finish a task, call build_state (action "set" or "merge") to record what ` +
+  `was completed, what is still in progress, anything blocked, and the agreed next steps — ` +
+  `that record is what the next session starts from. ` +
+  `When done, summarise files changed and test results.` +
+  (durable ? `\n\n${durable}` : ``);
+
+function looksLikeTestCmd(cmd) {
+  return /\b(npm (test|t\b)|pytest|vitest|jest|go test|cargo test|ruff|mypy|tsc\b)/i.test(cmd);
+}
+
+async function* runAgent(opts) {
+  const {
+    session, userText, apiKey, host, model,
+    reasoningEffort = 'balanced',
+    // 4096 was low enough that a long file write hit finish_reason:'length'
+    // mid-generation — which truncates the tool-call arguments JSON and lands on
+    // the parse-error path below. Goose sends 393k on the same models. 16k is safe
+    // across every current tool-capable model; TODO derive per-model from the
+    // catalogue's top_provider.max_completion_tokens.
+    maxTokens = Number(process.env.VOX_MAX_TOKENS) > 0 ? Number(process.env.VOX_MAX_TOKENS) : 16384,
+    signal, askPermission,
+    attachments = [],
+    onLiveEvent = null,
+    userData = null, live = null,
+    compactThreshold = null, contextLimit = null, hardFraction = null,
+    // Cap on a single tool result, in characters. Replaces the old `toolCutoff`,
+    // whose retroactive condensation was removed because it re-broke the cache
+    // on every send; bounding at write time does the same job cache-safely.
+    toolResultMaxChars = null,
+    isSubAgent = false,
+    subagentModel = '', subagentMaxTurns = null, subagentTimeoutMs = null,
+    maxTurns = null,
+    userInput = null,
+    onOpenUrl = null,
+    onAttachAtlas = null,
+    planMode = false,
+    // Spend ceiling for THIS run, in USD. Sub-agents receive whatever is left of
+    // the parent's allowance, so a fan-out cannot exceed the parent's cap.
+    budgetUsd = DEFAULT_RUN_BUDGET_USD,
+    priceIn = 0, priceOut = 0,   // $/token from the catalogue, for the cost fallback
+    // Restrict the surface for this run (sub-agent roles). null = everything.
+    // Scoping a worker's tools is what makes a role real rather than a prompt
+    // suggestion: an "explore" agent that CANNOT write is different in kind from
+    // one merely asked not to.
+    allowTools = null,
+    // Can this model read images? true / false from the catalogue; null = unknown.
+    // Decides whether a screenshot is handed over as a real image or described.
+    modelVision = null,
+  } = opts;
+  let access = normalizeAccess(opts.access || 'test');
+
+  const emitQueue = [];
+  /**
+   * Wake-up for the queue drain.
+   *
+   * `yield` cannot cross an `await`. While the generator is suspended inside a tool
+   * call, everything that tool emits just piles into emitQueue and reaches the UI
+   * only once the call returns. For a file read that is invisible; for spawn_agent
+   * it meant a fan-out showed NOTHING -- no sub-agent card, no tool rows, no token
+   * counts -- for up to the full sub-agent timeout, which is indistinguishable from
+   * a hang. So a tool that emits now wakes the loop, and the loop drains and yields
+   * mid-call.
+   */
+  let emitWake = null;
+  const pushEvent = (e) => {
+    emitQueue.push(e);
+    if (emitWake) { const w = emitWake; emitWake = null; try { w(); } catch {} }
+  };
+  let planApproved = planMode ? false : true;
+  const resolveIn = (wd, p) => {
+    const pathMod = require('path');
+    const full = pathMod.resolve(wd, p);
+    const rel = pathMod.relative(wd, full);
+    if (rel.startsWith('..') || pathMod.isAbsolute(rel)) throw new Error(`path escapes workdir: ${p}`);
+    return full;
+  };
+  const summarizeArgs = (a) => {
+    try {
+      const s = JSON.stringify(a || {});
+      if (s.length <= 120) return s;
+      return s.slice(0, 117) + '…';
+    } catch { return ''; }
+  };
+  const ctx = {
+    workdir: session.workdir,
+    session,
+    access,
+    userData,
+    live,
+    resolveIn,
+    userInput: userInput || (async () => ({ answer: null, cancelled: true })),
+    emit: pushEvent,
+    checkPermission: async (kind, target) => {
+      const auto =
+        access === 'full' ||
+        (kind === 'write-file' && access !== 'ask') ||
+        (kind === 'shell' && (access === 'full' || (access === 'edit + run tests' && looksLikeTestCmd(target)))) ||
+        // web-fetch auto below full access at "edit files freely"+ (ALIGNED with
+        // sandbox AUTO_LEVEL web_fetch:1) — previously only full access, which
+        // made sandbox say "no prompt" while this still prompted (double-gating bug).
+        (['web-fetch', 'web-search'].includes(kind) && access !== 'ask');
+      if (auto) return;
+      // ask the UI via callback; must resolve true/false (timeout → false)
+      const allowed = await askPermission({ kind, target });
+      if (!allowed) throw new Error(`permission denied: ${kind} ${target}`);
+    },
+  };
+
+  // Stall-hardening (goose post-mortem). Token-aware compact with a sane default
+  // context limit (compact.js default is 200K — NOT the 1.31M alias metadata, which
+  // goose trusted and never compacted until the provider started failing ~650K).
+  // IMPL 1: we only pass a limit when explicitly provided; otherwise the compactor
+  //         uses its sane default (VOX_CONTEXT_LIMIT or 200K).
+  // IMPL 2/3: compactSession has an internal hard limit (90%) + post-compact
+  //         self-check that shrinks the keep window until the result fits.
+  // Read once per run and reuse for every turn. It MUST be identical across turns of
+  // a run or it would move the cache boundary and defeat the whole point.
+  const durable = await loadDurableContext(session.workdir);
+  const systemPrompt = SYSTEM(session.workdir, access, planMode, durable);
+  const estimatedBefore = estimateSessionTokens(session, systemPrompt);
+  // User-visible compaction notices (like Codex/Claude Code): tell the UI before
+  // and after we fold older turns, so compaction is never silent.
+  const willCompact = (() => {
+    // cheap pre-check matching compactSession's trigger (budget = limit * threshold)
+    const limit = Number(contextLimit) > 0 ? Number(contextLimit) : (Number(process.env.VOX_CONTEXT_LIMIT) > 0 ? Number(process.env.VOX_CONTEXT_LIMIT) : 200000);
+    const th = compactThreshold != null ? Number(compactThreshold) : 0.8;
+    return estimatedBefore > Math.floor(limit * th) || Number(process.env.VOX_FORCE_COMPACT) > 0;
+  })();
+  if (willCompact) {
+    yield { type: 'compacting', estimatedBefore, contextLimit: Number(contextLimit) > 0 ? Number(contextLimit) : 200000 };
+  }
+  const comp = compactSession(session, {
+    contextLimit: Number(contextLimit) > 0 ? Number(contextLimit) : undefined,
+    threshold: compactThreshold != null ? Number(compactThreshold) : undefined,
+    hardFraction: hardFraction != null ? Number(hardFraction) : undefined,
+    systemPrompt,
+  });
+  if (comp.compacted) {
+    // codex/claude-style visible confirmation: "context was compacted, summary below"
+    yield {
+      type: 'compacted',
+      dropped: comp.dropped,
+      keptRecent: comp.keptRecent,
+      summaryChars: comp.summaryChars,
+      estimatedBefore: comp.estimatedBefore,
+      estimatedAfter: comp.estimatedAfter,
+      budget: comp.budget,
+      hardLimit: comp.hardLimit,
+      reason: comp.reason,
+      fitsHardLimit: comp.fitsHardLimit,
+    };
+  }
+  if (comp.compacted && !comp.fitsHardLimit) {
+    // The provider is about to receive a request that our own estimator flags as
+    // over the hard limit — surface it instead of silently shipping the goose fate.
+    emitQueue.push({
+      type: 'warning',
+      code: 'context-over-hard-limit',
+      message: `Session context is still over the ${comp.hardLimit.toLocaleString()} hard limit after compaction (est. ${comp.estimatedAfter.toLocaleString()} tokens). Continuing may stall — consider /compact again or a fresh session.`,
+    });
+  }
+  // (Tool output is now bounded once at append time by boundToolResult(). The old
+  // retroactive pass rewrote history mid-prefix on every send and destroyed the
+  // prompt cache; see the comment on boundToolResult.)
+
+  // Build the user message, supporting image attachments (multimodal content array).
+  const userParts = [];
+  if (userText) userParts.push({ type: 'text', text: userText });
+  // The renderer sends OpenAI-shaped parts ({type:'image_url', image_url:{url}}).
+  // This used to read only `att.dataUrl`, a field that shape does not have -- so
+  // EVERY attached image was silently dropped, while the user's own bubble still
+  // drew it locally and looked sent. Accept both shapes.
+  let droppedImages = 0;
+  for (const att of attachments || []) {
+    const url = (att && att.image_url && (att.image_url.url || att.image_url))
+      || (att && att.dataUrl)
+      || (att && att.url);
+    if (typeof url === 'string' && url) userParts.push({ type: 'image_url', image_url: { url } });
+    else if (att) droppedImages++;
+  }
+  session.messages.push({
+    role: 'user',
+    content: userParts.length ? userParts : userText || '',
+  });
+  // An attachment we could not read must be SAID, not skipped. The model has no way
+  // to know an image was meant to be there, so it carries on -- and in the session
+  // that exposed this, it substituted a render from the repo for "my character".
+  if (droppedImages) {
+    yield {
+      type: 'warning', code: 'attachment-dropped',
+      message: `${droppedImages} attachment${droppedImages === 1 ? '' : 's'} could not be read and ${droppedImages === 1 ? 'was' : 'were'} not sent to the model.`,
+    };
+  }
+
+  const turnLimit = Number(maxTurns) > 0 ? Math.max(1, Math.round(Number(maxTurns))) : MAX_TURNS;
+  const budget = Number(budgetUsd) > 0 ? Number(budgetUsd) : DEFAULT_RUN_BUDGET_USD;
+  let spent = 0;
+  let costUnknown = false;
+
+  for (let turn = 0; turn < turnLimit; turn++) {
+    if (signal && signal.aborted) { bg.cancelAll(session.id); yield { type: 'cancelled' }; return; }
+
+    // Deliver any background agent that finished since the last turn. There is no
+    // protocol slot for this — the spawn_agent call was already answered — so it
+    // arrives as a framed message appended at the END of the transcript, where
+    // changing content costs nothing in cache terms.
+    for (const rec of bg.drain(session.id)) {
+      session.messages.push({ role: 'user', content: bg.formatCompletion(rec) });
+      const rr = rec.result || {};
+      if (Number(rr.usage && rr.usage.cost) > 0) spent += Number(rr.usage.cost);
+      yield {
+        type: 'agent_finished',
+        subId: rec.subId,
+        label: rec.label,
+        stopReason: rr.stopReason || (rr.ok ? 'completed' : 'failed'),
+        files_changed: rr.files_changed || [],
+        ...(rr.needs_attention ? { needs_attention: rr.needs_attention } : {}),
+      };
+    }
+
+    // Check BEFORE spending, not only after, so the cap cannot be overshot by a
+    // whole extra turn — which on a large context is the most expensive turn.
+    if (spent >= budget) {
+      yield {
+        type: 'budget_reached',
+        spent, budget, turns: turn, resumable: true,
+        message: `Stopped: this run has spent $${spent.toFixed(4)} of its $${budget.toFixed(2)} limit. `
+          + `Work done so far is saved. Raise the limit in Settings to continue.`,
+      };
+      return;
+    }
+
+    const messages = [{ role: 'system', content: systemPrompt }, ...session.messages];
+    const { ALL: builtTools } = tools.buildTools({
+      workdir: session.workdir, session, emit: pushEvent, checkPermission: ctx.checkPermission,
+      resolveIn, userData, live, userInput: userInput || (async () => ({ answer: null, cancelled: true })),
+      runner: (o) => runAgent(o),
+      agentOpts: { apiKey, host, model, reasoningEffort, access, signal, isSubAgent, workdir: session.workdir,
+        defaultSubModel: subagentModel, defaultSubMaxTurns: subagentMaxTurns, defaultSubTimeoutMs: subagentTimeoutMs,
+        // Sub-agents spend the PARENT's remaining allowance, never a fresh one.
+        // Rebuilt each turn so a fan-out later in the run sees the depleted figure.
+        budgetRemaining: Math.max(0, budget - spent), priceIn, priceOut, modelVision },
+      getSettings: () => ({ access }),
+      getAccess: () => access,
+      showInApp: onOpenUrl,
+      attachAtlas: onAttachAtlas,
+    });
+    const toolList = Array.isArray(allowTools) && allowTools.length
+      ? builtTools.filter((t) => allowTools.includes(t.def.function.name))
+      : builtTools;
+
+    // A turn boundary. Without it the UI had no signal that one inference ended and
+    // the next began: a model that calls tools for six turns straight, emitting no
+    // prose in between, piled every call into a single unbroken block. The prototype
+    // groups each turn's calls as its own labelled run, and only the loop knows
+    // where those edges are.
+    if (turn > 0) yield { type: 'turn', n: turn + 1 };
+
+    let content = '';
+    const toolCalls = [];
+    let finishReason = null;
+    try {
+      const r = await chatCompletions({
+        apiKey, host, model, messages,
+        tools: toolList.map((t) => t.def),
+        reasoningEffort, maxTokens, signal,
+        sessionId: session.id,   // sticky routing — keeps the cache on one upstream
+        onEvent: (e) => {
+          if (e.token) {
+            content += e.token;
+            if (onLiveEvent) { try { onLiveEvent({ type: 'token', text: e.token }); } catch {} }
+          }
+          // Reasoning ("thinking") — forward so the renderer can show a thinking block.
+          if (e.reasoning) {
+            if (onLiveEvent) { try { onLiveEvent({ type: 'reasoning', text: e.reasoning }); } catch {} }
+          }
+        },
+      });
+      content = r.content;
+      toolCalls.push(...r.toolCalls);
+      finishReason = r.finishReason || null;
+      // 'length' = the model was cut off at max_tokens mid-generation. Any tool call
+      // in this turn may carry truncated arguments JSON, so say so rather than
+      // reporting a truncated answer as a clean completion.
+      if (finishReason === 'length') {
+        emitQueue.push({
+          type: 'warning',
+          code: 'output-truncated',
+          message: `Model output hit the ${maxTokens.toLocaleString()}-token limit and was cut off mid-generation`
+            + (toolCalls.length ? ' — a tool call in this turn may have incomplete arguments.' : '.')
+            + ' Raise VOX_MAX_TOKENS or ask for a smaller change.',
+        });
+      }
+      if (r.usage) {
+        accumulateUsage(session, r.usage);   // Fix 1: roll into run ledger
+        // Spend accounting for the run cap.
+        const tc = turnCost(r.usage, priceIn, priceOut);
+        spent += tc.usd;
+        if (tc.unknown && !costUnknown) {
+          // Be loud about this: an unenforceable cap is the failure mode that costs
+          // real money, and it is invisible unless we say so.
+          costUnknown = true;
+          emitQueue.push({
+            type: 'warning',
+            code: 'budget-unenforceable',
+            message: 'This provider is not reporting per-request cost and no catalogue price is available, '
+              + 'so the spend cap cannot be enforced for this run. Watch your OpenRouter balance directly.',
+          });
+        }
+        emitQueue.push({ type: 'budget', spent, budget, estimated: !!tc.estimated, unknown: !!tc.unknown });
+        // Cache guard. The old threshold was 300K tokens, which meant a session that
+        // never cached AT ALL stayed silent for its whole life — the failure this is
+        // supposed to catch. From turn 2 onward the prefix (system + tool schemas,
+        // ~4.5k tokens) should always be a cache read; if it isn't, something is
+        // busting the prefix and every turn is full price. Warn once per run.
+        const cached = cacheReadTokens(r.usage);   // null = provider did not report it
+        const prompt = Number(r.usage.prompt_tokens) || 0;
+        const warnAt = Number(process.env.VOX_CACHE_MISS_WARN_TOKENS) > 0 ? Number(process.env.VOX_CACHE_MISS_WARN_TOKENS) : 8000;
+        // Only warn on a REPORTED zero. If the provider says nothing about caching we
+        // genuinely do not know, and crying wolf costs more trust than it saves money.
+        if (turn > 0 && prompt > warnAt && cached === 0 && !session._cacheWarned) {
+          session._cacheWarned = true;
+          emitQueue.push({
+            type: 'warning',
+            code: 'cache-miss',
+            message: `Prefix cache not being used: this ${(prompt / 1000).toFixed(1)}k-token request reported 0 cached tokens. `
+              + `If it stays at 0 the session costs more than it needs to. Common causes: the upstream provider does not `
+              + `cache this model, or something changed the start of the conversation between turns.`,
+          });
+        }
+        emitQueue.push({ type: 'usage', usage: r.usage });
+      }
+    } catch (err) {
+      while (emitQueue.length) yield emitQueue.shift();
+      yield { type: 'error', message: err.message };
+      return;
+    }
+    while (emitQueue.length) yield emitQueue.shift();
+
+    if (!toolCalls.length) {
+      session.messages.push({ role: 'assistant', content });
+      // The model thinks it is finished — but a background agent still running means
+      // a report is coming that it has not seen. Finishing here would silently drop
+      // that work, which is the one thing background dispatch must never do.
+      if (bg.runningCount(session.id) > 0) {
+        const n = bg.runningCount(session.id);
+        yield { type: 'awaiting_agents', count: n };
+        await bg.waitForAll(session.id, 600000);
+        if (bg.runningCount(session.id) === 0) continue;   // next turn delivers the reports
+      }
+      yield { type: 'done', content };
+      return;
+    }
+
+    // assistant turn with tool calls (store, then execute each)
+    session.messages.push({
+      role: 'assistant', content: content || null,
+      tool_calls: toolCalls.map((t, i) => ({ id: t.id || `call_${turn}_${i}`, type: 'function', function: { name: t.name, arguments: t.arguments } })),
+    });
+
+    const turnImages = [];
+    for (let i = 0; i < toolCalls.length; i++) {
+      const tc = toolCalls[i];
+      const id = tc.id || `call_${turn}_${i}`;
+      let args = {};
+      try { args = tc.arguments ? JSON.parse(tc.arguments) : {}; }
+      catch (e) {
+        // EVERY tool_call id in the assistant message above must be answered by
+        // exactly one role:'tool' message, or the provider 400s the next request
+        // and the session is permanently unusable. A parse failure is a RESULT,
+        // not a reason to skip — hand the model the error so it can re-issue.
+        const msg = `DENIED_OR_ERROR: invalid JSON arguments for ${tc.name}: ${e.message}. `
+          + `Re-issue this tool call with valid JSON arguments.`;
+        session.messages.push({ role: 'tool', tool_call_id: id, content: msg });
+        yield { type: 'tool_end', id, name: tc.name, ok: false, result: msg };
+        continue;
+      }
+      const impl = toolList.find((t) => t.def.function.name === tc.name);
+      if (!impl) {
+        session.messages.push({ role: 'tool', tool_call_id: id, content: `unknown tool: ${tc.name}` });
+        yield { type: 'tool_end', id, name: tc.name, ok: false, result: 'unknown tool' };
+        continue;
+      }
+      // Loop detection. A model that repeats the same call with the same arguments
+      // is not making progress, and left alone it will burn the whole turn budget.
+      // Feed the observation back as a tool result so it can change approach —
+      // telling it what it is doing works better than silently failing the call.
+      const sig = `${tc.name}:${tc.arguments || ''}`;
+      if (sig === session._lastToolSig) session._lastToolRepeat = (session._lastToolRepeat || 1) + 1;
+      else { session._lastToolSig = sig; session._lastToolRepeat = 1; }
+      if (session._lastToolRepeat >= LOOP_REPEAT_LIMIT) {
+        session._lastToolSig = null;
+        session._lastToolRepeat = 0;
+        const msg = `DENIED_OR_ERROR: you have now called ${tc.name} with identical arguments `
+          + `${LOOP_REPEAT_LIMIT} times in a row and the result has not changed. Stop repeating it. `
+          + `Either gather different information first, change the arguments, or tell the user what is blocking you.`;
+        session.messages.push({ role: 'tool', tool_call_id: id, content: msg });
+        yield { type: 'tool_end', id, name: tc.name, ok: false, result: msg };
+        yield { type: 'warning', code: 'tool-loop', message: `Repeated ${tc.name} call detected and interrupted.` };
+        continue;
+      }
+      yield { type: 'tool_start', id, name: tc.name, args };
+      // sandbox policy: deny tools outside the access level; tools that need a
+      // permission decision (ALWAYS_PROMPT / lower-level) go through askPermission
+      // instead of hard-erroring, and a denial tells the model NOT to retry.
+      try {
+        const pol = checkToolAllowed(tc.name, access, args);
+        if (!pol.allowed) {
+          if (pol.needsPermission) {
+            // Full access auto-allows; below that we ASK the user (goose-style).
+            const allowed = await ctx.checkPermission(tc.name, summarizeArgs(args));
+            if (!allowed) {
+              const msg = `DENIED_OR_ERROR: permission denied for ${tc.name} — do NOT retry this tool call.`;
+              session.messages.push({ role: 'tool', tool_call_id: id, content: msg });
+              yield { type: 'tool_end', id, name: tc.name, ok: false, result: msg };
+                  continue;
+            }
+          } else {
+            throw new Error(`sandbox: ${pol.reason}`);
+          }
+        }
+        if (tc.name === 'shell') {
+          const sh = args.command ? checkShellCommand(args.command) : { blocked: false };
+          if (sh.blocked) throw new Error('sandbox: dangerous shell command blocked');
+        }
+        // PLAN MODE enforcement: block mutating tools until the plan has been
+        // explicitly approved by the user via ask_confirm (Claude/Codex plan mode).
+        if (planMode && !planApproved) {
+          // Folded surfaces carry the operation in `action`, so name alone is not
+          // enough: `fs` is only mutating for mkdir/move/remove, and `computer`
+          // drives a real browser so it counts throughout.
+          const MUTATING = ['write', 'edit', 'patch', 'shell', 'spawn_agent', 'spawn_parallel', 'worktree', 'computer'];
+          const MUTATING_ACTIONS = { fs: ['mkdir', 'move', 'remove'], mcp: ['call'] };
+          const act = args && (args.action || args.op);
+          const isMutating = MUTATING.includes(tc.name)
+            || (MUTATING_ACTIONS[tc.name] || []).includes(String(act));
+          if (isMutating) {
+            const msg = `PLAN MODE: ${tc.name} is blocked until you present a plan and get user approval. Call ask_confirm (e.g. "Here is my plan: … Proceed?") and only continue mutating once confirmed. Do NOT retry this call directly.`;
+            session.messages.push({ role: 'tool', tool_call_id: id, content: msg });
+            yield { type: 'tool_end', id, name: tc.name, ok: false, result: msg };
+            continue;
+          }
+        }
+        // Run the tool and pump its events out while it is still running.
+        let toolSettled = false;
+        const runP = impl.run(args, ctx)
+          .then((value) => ({ value }), (error) => ({ error }))
+          .then((outcome) => { toolSettled = true; pushEvent(null); return outcome; });
+        for (;;) {
+          while (emitQueue.length) { const e = emitQueue.shift(); if (e) yield e; }
+          if (toolSettled) break;
+          // pushEvent() resolves this the moment anything is emitted, and again when
+          // the tool settles. The timer is only a backstop so a lost wake-up costs a
+          // quarter second of latency rather than the whole run.
+          await new Promise((res) => { emitWake = res; setTimeout(res, 250); });
+        }
+        emitWake = null;
+        const outcome = await runP;
+        if (outcome.error) throw outcome.error;
+        const result = outcome.value;
+        // PLAN MODE: an approved ask_confirm unlocks mutating tools for the run.
+        if (planMode && tc.name === 'ask_confirm' && result && result.confirmed) planApproved = true;
+        if (planMode && tc.name === 'ask_user' && result && (result.answer === 'yes' || result.answer === 'approve' || result.answer === 'continue')) {
+          const planStr = String(args.question || '').toLowerCase();
+          if (/plan|proceed|approve|go ahead|continue/i.test(planStr) || /proceed|approve/i.test(planStr)) planApproved = true;
+        }
+        while (emitQueue.length) yield emitQueue.shift();
+        // FIX 6: fold sub-agent usage (tokens/cache/cost) into the parent ledger.
+        if ((tc.name === 'spawn_agent' || tc.name === 'spawn_parallel') && result && typeof result === 'object') {
+          const subs = (result.task_results && Array.isArray(result.task_results))
+            ? result.task_results
+            : [result];
+          let subIn = 0, subOut = 0, subCR = 0, subCost = 0;
+          for (const s of subs) {
+            const u = s && s.usage || {};
+            subIn += Number(u.input) || 0;
+            subOut += Number(u.output) || 0;
+            subCR += Number(u.cacheRead) || 0;
+            subCost += Number(u.cost) || 0;
+          }
+          if (subIn || subOut || subCost) {
+            const runUsage = session._runUsage || (session._runUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 });
+            runUsage.input += subIn; runUsage.output += subOut; runUsage.cacheRead += subCR; runUsage.cost += subCost;
+          }
+          // Charge sub-agent spend to the parent's cap. Without this a fan-out is
+          // the cheapest way to blow straight past the limit: each child tracks its
+          // own allowance and the parent never sees the total.
+          if (subCost > 0) {
+            spent += subCost;
+            emitQueue.push({ type: 'budget', spent, budget, estimated: false, source: 'subagent' });
+          }
+        }
+        // Tools that spend money themselves (web_search) report it as cost_usd. It is
+        // real spend, so it goes against the cap -- and out as a usage event, which is
+        // how a sub-agent's parent and the session ledger both learn about it.
+        if (result && typeof result === 'object' && Number(result.cost_usd) > 0) {
+          const c = Number(result.cost_usd);
+          spent += c;
+          emitQueue.push({ type: 'usage', usage: { prompt_tokens: 0, completion_tokens: 0, cost: c, total_cost: c, source: tc.name } });
+          emitQueue.push({ type: 'budget', spent, budget, estimated: false, source: tc.name });
+        }
+        // Screenshots out of the text; see extractImages().
+        const { result: forModel, images: shots } = extractImages(result);
+        for (const im of shots) {
+          forModel[im.field] = modelVision === true
+            ? `[image attached below, ${im.bytes.toLocaleString()} bytes]`
+            // Say it plainly, or the model assumes it looked and reports on a page it
+            // never saw.
+            : `[screenshot captured (${im.bytes.toLocaleString()} bytes) but NOT shown to you: this model `
+              + `${modelVision === false ? 'cannot read images' : 'is not confirmed to read images'}. `
+              + `Work from the page text and elements instead, and do not describe what it looks like.]`;
+          if (modelVision === true) turnImages.push({ tool: tc.name, url: im.url });
+        }
+        const text = boundToolResult(JSON.stringify(forModel), toolResultMaxChars);
+        session.messages.push({ role: 'tool', tool_call_id: id, content: text });
+        // Report file mutations structurally, not just as prose in the result blob.
+        // A parent delegating work needs to know WHICH files changed without
+        // re-reading the tree or trusting a summary sentence.
+        const mutated = MUTATING_TOOLS.has(tc.name) && result && typeof result === 'object'
+          ? {
+            path: args.path || result.path || null,
+            tool: tc.name,
+            verified: (result.verification && result.verification.verified) || null,
+            bytes: result.bytes, edits: result.edits, match: result.match,
+          }
+          : null;
+        yield { type: 'tool_end', id, name: tc.name, ok: true, result: text.slice(0, 4000), ...(mutated ? { mutated } : {}) };
+
+        // Detect → offer → remember, the way Claude Code handles a detected dev
+        // server: say that something is viewable and let the user decide once, per
+        // project. Silently hijacking the screen every time a model writes an HTML
+        // file is worse than making them ask; being told and clicking once is not.
+        if (isPreviewableWrite(tc.name, args, result)) {
+          const abs = (result && result.path) || resolveIn(session.workdir, args.path);
+          if (!session._offered) session._offered = new Set();
+          if (!session._offered.has(abs)) {
+            session._offered.add(abs);
+            yield {
+              type: 'previewable',
+              path: args.path,
+              absolute: abs,
+              url: fileUrl(abs),
+              bytes: (result && result.bytes) || 0,
+            };
+          }
+        }
+      } catch (err) {
+        while (emitQueue.length) yield emitQueue.shift();
+        const msg = `DENIED_OR_ERROR: ${err.message}`;
+        session.messages.push({ role: 'tool', tool_call_id: id, content: msg });
+        // A verification failure means the file WAS written and does not parse —
+        // that is a change the parent must hear about, not a no-op.
+        const failedMutation = MUTATING_TOOLS.has(tc.name) && err.verification
+          ? { path: args.path || null, tool: tc.name, verified: 'failed' }
+          : null;
+        yield { type: 'tool_end', id, name: tc.name, ok: false, result: msg, ...(failedMutation ? { mutated: failedMutation } : {}) };
+      }
+      if (signal && signal.aborted) { yield { type: 'cancelled' }; return; }
+    }
+    // Hand screenshots over as REAL images. In the chat-completions format a tool
+    // message is text, so an image can only be seen from a user message -- and it has
+    // to come after every tool result for this turn, or a tool_call is left without
+    // its result directly following the assistant message that made it.
+    if (turnImages.length) {
+      const keep = turnImages.slice(-MAX_IMAGES_PER_TURN);
+      session.messages.push({
+        role: 'user',
+        content: [
+          { type: 'text', text: `${TOOL_IMAGES_MARKER} ${keep.length} screenshot${keep.length === 1 ? '' : 's'} from `
+            + `${[...new Set(keep.map((k) => k.tool))].join(', ')} above`
+            + (turnImages.length > keep.length ? ` (newest ${keep.length} of ${turnImages.length})` : '') + '.' },
+          ...keep.map((k) => ({ type: 'image_url', image_url: { url: k.url } })),
+        ],
+      });
+    }
+    // loop: model sees tool results next turn
+  }
+  // Not an error: the work done so far is real and recorded, the run simply hit its
+  // runaway guard. The UI renders this as a resumable state with a Continue action
+  // rather than a failure.
+  yield {
+    type: 'limit_reached',
+    turns: turnLimit,
+    resumable: true,
+    message: `Paused after ${turnLimit} tool turns. Everything done so far is saved — `
+      + `send "continue" to carry on, or narrow the task.`,
+  };
+}
+
+module.exports = {
+  extractImages, TOOL_IMAGES_MARKER, runAgent, MAX_TURNS, boundToolResult, accumulateUsage };

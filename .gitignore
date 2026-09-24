@@ -1,0 +1,51 @@
+# ---- scratch / debug scripts (not part of the app) ----
+_q*.js
+_q2.js
+_inspect_*.ps1
+fix-*.js
+_*_home.js
+voxai-coder/_dump.js
+voxai-coder/_t.js
+voxai-coder/_q*.js
+*.log
+
+# ---- accidental/rouge files ----
+console.log('ERR'
+voxai-coder/console.log('ERR'
+
+# ---- one-off patches ----
+fix-cost.js
+fix-live.js
+fix-live2.js
+fix-stream.js
+fix-usage4.js
+fix-queue3b.js
+
+# ---- archives ----
+*.zip
+
+# ---- test / benchmark scratch (regenerated on demand) ----
+benchmark/work-voxai/
+benchmark/work-voxai-fixed/
+voxai-coder/benchmark/userdata-fixed/
+
+# ---- node ----
+node_modules/
+
+# ---- OS ----
+Thumbs.db
+.DS_Store
+
+# ---- archived working scratch (kept on disk, out of the repo) ----
+_scratch_archive/
+
+# ---- agent-local workspace state ----
+.voxai/
+
+# ---- electron build output ----
+voxai-coder/release/
+voxai-coder/dist/
+
+# ---- design canvas export (source of the UI mockup, not app source) ----
+Electron desktop coding app/
+app-src/
