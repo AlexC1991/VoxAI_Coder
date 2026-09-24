@@ -71,10 +71,15 @@ button{font-family:inherit} ::selection{background:rgba(200,169,97,.26)}
 .backend{margin-top:8px;border:1px solid var(--edge2);border-radius:7px;padding:8px 10px;font-family:"Sometype Mono",monospace;font-size:12px;color:var(--dim);display:flex;flex-direction:column;gap:6px}
 .backend .ok{color:var(--add)} .backend .bad{color:var(--del)}
 .work{flex:1;min-width:0;display:flex;flex-direction:column}
-.workhead{height:44px;flex:none;display:flex;align-items:center;gap:10px;padding:0 18px;border-bottom:1px solid var(--edge)}
-.workhead .t{font-weight:700;font-size:15px}
-.workhead .sub{font-family:"Sometype Mono",monospace;font-size:13px;color:var(--faint)}
-.workhead .workstats{margin-left:auto;display:flex;gap:16px;align-items:center}.workhead .stat{display:flex;flex-direction:column;align-items:flex-end;line-height:1.25}.workhead .stat i{font-style:normal;font-size:10px;letter-spacing:.14em;color:var(--faint)}.workhead .stat b{font-family:"Sometype Mono",monospace;font-size:12.5px;color:var(--gold);white-space:nowrap}
+/* One line, always. A session is titled by its first message, so titles are often long,
+   and with the preview open the header is narrow: the title wrapped one word per line,
+   spilled over the thread and pushed the stats off the right edge. Title and path now
+   truncate (the path gives way first) and the stats never shrink. */
+.workhead{height:44px;flex:none;display:flex;align-items:center;gap:10px;padding:0 18px;border-bottom:1px solid var(--edge);min-width:0;overflow:hidden}
+.workhead .t{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:60px;flex:0 1 auto}
+.workhead .sub{font-family:"Sometype Mono",monospace;font-size:13px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 8 auto}
+.workhead .pp-toggle,.workhead .dot{flex:none}
+.workhead .workstats{margin-left:auto;display:flex;gap:16px;align-items:center;flex:none}.workhead .stat{display:flex;flex-direction:column;align-items:flex-end;line-height:1.25}.workhead .stat i{font-style:normal;font-size:10px;letter-spacing:.14em;color:var(--faint)}.workhead .stat b{font-family:"Sometype Mono",monospace;font-size:12.5px;color:var(--gold);white-space:nowrap}
 .scroll{flex:1;min-height:0;overflow:auto;display:flex;justify-content:center;padding:26px 24px 0}
 .col{width:100%;max-width:760px;display:flex;flex-direction:column;gap:20px;padding-bottom:20px}
 .user{max-width:78%;background:var(--panel2);border:1px solid var(--edge);border-radius:9px;padding:10px 13px;font-size:15px;line-height:1.6}
@@ -1055,7 +1060,8 @@ function ppOpen(url){
   // address bar reading "http://localhost" while a different page was loading.
   if (url) ppSetUrl(url);
   ppSetOpen(true);
-  if (b) { try { b.open(url); } catch {} }
+  const wd = (actView() && actView().workdir) || '';
+  if (b) { try { b.open(url, wd); } catch {} }
   const body = $('ppBody'); if (body && url) body.classList.add('live');
 }
 
@@ -1269,6 +1275,7 @@ function paintActive(){
   const th = $('thread'); th.innerHTML = '';
   const v = activeId ? viewStore.get(activeId) : null;
   if (v) th.appendChild(v.root);
+  try { refreshChips(); } catch {}   // the model chip follows the session you switch to
   const busy = !!(v && v.busy);
   $('runDot').style.display = busy ? 'block' : 'none';
   updateSendState();
@@ -1352,7 +1359,7 @@ function kindName(name){
   if (name==='patch') return 'PATCH';
   if (name==='glob') return 'TREE';
   if (name==='grep') return 'GREP';
-  if (name==='shell') return 'BASH';
+  if (name==='shell') return /Windows/i.test(navigator.userAgent) ? 'CMD' : 'SHELL';  // it runs cmd.exe on Windows, /bin/sh elsewhere
   if (name==='todo') return 'TODO';
   if (name==='memory') return 'MEMORY';
   if (name==='rag') return 'RAG';
@@ -1747,7 +1754,11 @@ function chip(id, menuId, options, get, set){
   m.innerHTML=''; options.forEach(o=>{ const b=document.createElement('button'); b.textContent=o; if(o===get())b.classList.add('sel'); b.onclick=(e)=>{e.stopPropagation(); set(o); c.classList.remove('open'); refreshChips();}; m.appendChild(b); });
   c.onclick=(e)=>{ e.stopPropagation(); if(e.target.closest('.menu'))return; document.querySelectorAll('.chip.open').forEach(x=>{if(x!==c)x.classList.remove('open')}); c.classList.toggle('open'); };
 }
-function refreshChips(){ $('chipModelVal').textContent=S.openrouterModel; $('chipReasonVal').textContent=S.reasoningEffort||'balanced'; $('modelTag').textContent=S.openrouterModel; try { $('chipAccessVal').textContent=(ACCESS_LABELS[S.access]||ACCESS_LABELS.ask); } catch(e){} }
+// The model chip names the model the NEXT SEND will use: the open session's own model.
+// It used to always show the global default, so after opening an older session it could
+// name a model that would not be the one that ran.
+function activeModel(){ const v = actView(); return (v && v.model) || S.openrouterModel; }
+function refreshChips(){ $('chipModelVal').textContent=activeModel(); $('chipReasonVal').textContent=S.reasoningEffort||'balanced'; $('modelTag').textContent=activeModel(); try { $('chipAccessVal').textContent=(ACCESS_LABELS[S.access]||ACCESS_LABELS.ask); } catch(e){} }
 document.addEventListener('click',(e)=>{ if(e.target.closest && e.target.closest('.chip')) return; document.querySelectorAll('.chip.open').forEach(x=>x.classList.remove('open')); });
 
 // sessions / starters / files (Forge-flavoured placeholders wired to real runs)
@@ -1853,6 +1864,11 @@ function contextString(m){ return (m && m.context) ? Math.round(m.context / 1024
 async function setModel(id){
   if (!id) return;
   S = await window.voxai.saveSettings({ openrouterModel: id });
+  // The default for NEW sessions is above; this switches the session you are in.
+  if (activeId && window.voxai.sessionsSetModel) {
+    try { await window.voxai.sessionsSetModel(activeId, id); } catch {}
+    const av = viewOf(activeId); if (av) av.model = id;
+  }
   SESS_PRICE = modelPriceFor(id);
   $('chipModelVal').textContent = id;
   $('modelTag').textContent = id;
@@ -1893,13 +1909,14 @@ async function newSession(dir){
   // branch and diff.
   v.workdir = created.workdir || workdir || '';
   v._workdir = v.workdir;
+  v.model = created.model || S.openrouterModel || '';
   v._title = created.title || 'New session';
   v.ctx = null;
   v.diff = null;
   v.root.innerHTML = '';
   updateSessStats(v);
   activeId = created.id;
-  $('sessTitle').textContent = created.title || 'New session';
+  $('sessTitle').textContent = created.title || 'New session'; $('sessTitle').title = $('sessTitle').textContent;
   if (window.__syncTitlebar) __syncTitlebar(created.title || 'New session');
   $('sessSub').textContent = created.workdir || S.workingDir;
   refreshSessionList(); paintActive(); go('work'); updateSendState();
@@ -1920,6 +1937,7 @@ async function openSession(id){
     v.root.innerHTML = '';
     v._title = full.title; v._workdir = full.workdir;
     v.workdir = full.workdir;   // the context bar needs the real path, not just the label
+    v.model = full.model || '';  // what a run in THIS session will actually use
     // Fix 1: restore the persisted usage ledger so cost/cache history survives restarts.
     v.cost = 0; v.tokens = 0; v.rate = 0; v.inTokens = 0; v.outTokens = 0; v.cacheReadTokens = 0; v.cacheWriteTokens = 0;
     if (full.stats) {
@@ -1972,7 +1990,7 @@ async function openSession(id){
   if (v.curRun) { v.curRun = null; }
   v.latestTool = null;
   activeId = id;
-  $('sessTitle').textContent = v._title || 'Session';
+  $('sessTitle').textContent = v._title || 'Session'; $('sessTitle').title = $('sessTitle').textContent;
   if (window.__syncTitlebar) __syncTitlebar(v._title || 'Session');
   $('sessSub').textContent = v._workdir || '';
   document.querySelectorAll('.sess').forEach(x => x.classList.toggle('active', x.dataset.sid === id));
@@ -2243,7 +2261,9 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     } else if (event.ev === 'usage') {
       const u = event.usage || {};
       const tot = (Number(u.prompt_tokens) || 0) + (Number(u.completion_tokens) || 0);
-      if (tot) R.tokTd.textContent = fmtNum(tot);
+      // Each usage event is ONE turn. Showing the latest replaced the total with the
+      // last turn's figure (4,337 shown for a worker that used 9,973).
+      if (tot) { R.tok = (R.tok || 0) + tot; R.tokTd.textContent = fmtNum(R.tok); }
     } else if (event.ev === 'done' || event.ev === 'error' || event.ev === 'cancelled'
             || event.ev === 'limit_reached' || event.ev === 'budget_reached') {
       R.state = event.ev === 'done' ? 'done' : 'failed';
@@ -2279,10 +2299,13 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     const cached = Number(u.prompt_tokens_details && u.prompt_tokens_details.cached_tokens) || Number(u.cache_read_input_tokens) || 0;
     v.cacheReadTokens = (v.cacheReadTokens || 0) + cached;
     v.cacheWriteTokens = (v.cacheWriteTokens || 0) + (Number(u.cache_write_input_tokens) || 0);
-    // prefer real total_cost from OpenRouter when present
-    if (u.total_cost != null && Number(u.total_cost) !== 0) {
-      v.cost = (v.cost || 0) + Number(u.total_cost);
-      v.rate = (v.cost / v.tokens) * 1000000;
+    // Real spend. OpenRouter reports it as `usage.cost`; this only read `total_cost`,
+    // so the header's cost sat at $0.00 for every run while "run spend" (which the
+    // backend computes from `cost`) was right. Read either, once — never both.
+    const billed = Number(u.total_cost) || Number(u.cost) || 0;
+    if (billed > 0) {
+      v.cost = (v.cost || 0) + billed;
+      v.rate = v.tokens ? (v.cost / v.tokens) * 1000000 : null;
     } else if (u.prompt_cost != null || u.completion_cost != null) {
       v.cost = (v.cost || 0) + (Number(u.prompt_cost)||0) + (Number(u.completion_cost)||0);
       v.rate = v.tokens ? (v.cost / v.tokens) * 1000000 : null;
@@ -2638,11 +2661,15 @@ function openModal(){ $('modalBg').classList.add('show'); prefillAdvanced(); }
 function prefillAdvanced(){
   // Fix 4: populate advanced knobs from settings (S comes from settings:get)
   const s = S || {};
-  const ct = s.compactThreshold || process.env.VOX_COMPACT_THRESHOLD || '0.8';
-  const tc = s.toolResultMaxChars || process.env.VOX_TOOL_RESULT_MAX_CHARS || '8000';
-  const ttl = s.cacheTtlMinutes || process.env.VOX_CACHE_TTL_MIN || '5';
-  const cl = s.contextLimit || process.env.VOX_CONTEXT_LIMIT || '200000';
-  const hf = s.hardFraction || process.env.VOX_HARD_LIMIT_FRACTION || '0.9';
+  // No process.env here: the renderer is sandboxed and `process` does not exist, so
+  // any blank setting fell through to it and THREW -- the sub-agent model is blank by
+  // default, so every field after it (max turns, timeout) silently never filled and
+  // showed only its placeholder. main.js getSettings() already applies env defaults.
+  const ct = s.compactThreshold || '0.8';
+  const tc = s.toolResultMaxChars || '8000';
+  const ttl = s.cacheTtlMinutes || '5';
+  const cl = s.contextLimit || '200000';
+  const hf = s.hardFraction || '0.9';
   if ($('fCompact')) $('fCompact').value = ct;
   if ($('fToolResultMax')) $('fToolResultMax').value = tc;
   if ($('fCacheTtl')) $('fCacheTtl').value = ttl;
@@ -2650,8 +2677,8 @@ function prefillAdvanced(){
   if ($('fHardFraction')) $('fHardFraction').value = hf;
   if ($('fRunBudget')) $('fRunBudget').value = s.runBudgetUsd || '1.00';
   // sub-agent knobs
-  const sm = s.subagentModel || process.env.VOX_SUBAGENT_MODEL || '';
-  const smt = s.subagentMaxTurns || process.env.VOX_SUBAGENT_MAX_TURNS || '25';
+  const sm = s.subagentModel || '';
+  const smt = s.subagentMaxTurns || '25';
   // The field is in SECONDS; the setting is in milliseconds. Values under 1000 are
   // legacy saves that were already seconds (see subagentTimeoutToMs in main).
   const stoRaw = Number(s.subagentTimeoutMs) || 300000;
@@ -2962,7 +2989,11 @@ function updateSessStats(v){
   if (t) { t.textContent = fmtTok(v.tokens || 0); t.title = fmtNum(v.tokens || 0) + ' tokens'; }
   // cost — normalized $0.00 like Goose; real precision lives in the tooltip
   if (c) {
-    c.textContent = (costUsd != null && costUsd !== 0) ? '$' + Number(costUsd).toFixed(2) : '$0.00';
+    // Two decimals rounds every sub-cent session to "$0.00", and on cheap models that
+    // is nearly all of them. Show enough digits to see what was actually spent.
+    c.textContent = (costUsd != null && costUsd !== 0)
+      ? '$' + (Math.abs(costUsd) < 0.01 ? Number(costUsd).toFixed(4) : Number(costUsd).toFixed(2))
+      : '$0.00';
     let tip = 'total session cost: ' + (costUsd != null ? '$' + Number(costUsd).toFixed(4) : 'n/a');
     if (pp != null && cp != null) {
       const inCost = inTok * pp, outCost = outTok * cp;
@@ -3153,7 +3184,24 @@ async function doSend(v, text, parts){
     updateSendState();
   } catch (err) {
     const cur = actView();
-    if (cur) { T = cur; clearStatus(); addMsg('Error: ' + err.message, true); T = null; cur.busy = false; }
+    // Electron wraps every IPC rejection as "Error invoking remote method '<ch>': Error: <msg>".
+    // That wrapper is plumbing, not information — show the reason itself.
+    const reason = String((err && err.message) || err)
+      .replace(/^Error invoking remote method '[^']*':\s*/, '')
+      .replace(/^(Error:\s*)+/, '');
+    if (cur) { T = cur; clearStatus(); addMsg('Error: ' + reason, true); T = null; cur.busy = false; }
+    // The run never started, so nothing was sent. Hand the message back: a refusal like
+    // "this model cannot read images — switch model and send again" is useless if the
+    // image has already been cleared and has to be attached all over again.
+    const ta = $('prompt');
+    if (ta && !ta.value.trim()) ta.value = text;
+    if (!PENDING_ATTACH.length && Array.isArray(parts) && parts.length) {
+      for (const p of parts) {
+        const url = p && p.image_url && p.image_url.url;
+        if (url) PENDING_ATTACH.push({ dataUrl: url, name: 'attachment' });
+      }
+      renderAttachTray();
+    }
     $('runDot').style.display = 'none'; updateSendState();
   }
 }

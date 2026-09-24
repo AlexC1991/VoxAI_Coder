@@ -218,6 +218,23 @@ function loadWith(file, stubs) {
       if (['done', 'error', 'limit_reached'].includes(ev.type)) break;
     }
     check('a worker survives a realistic first-token delay', end && end.stopReason === 'completed', end && [end.stopReason, end.error]);
+
+    // Found live: a worker's spend was in the saved ledger but never on screen, because
+    // the header only sums `usage` events and none was emitted for the worker.
+    {
+      let k = 0;
+      global.fetch = async () => {
+        k++;
+        const chunks = k === 1 ? call('s2', 'spawn_agent', { task: 'count things', role: 'explore' })
+          : [{ choices: [{ delta: { content: k === 2 ? 'worker report' : 'done' } }] },
+            { choices: [{ delta: {}, finish_reason: 'stop' }], usage: { prompt_tokens: 1000, completion_tokens: 50, cost: 0.0012 } }];
+        const enc = new TextEncoder();
+        return { ok: true, text: async () => '', body: new ReadableStream({ start(c) { for (const ch of chunks) c.enqueue(enc.encode('data: ' + JSON.stringify(ch) + '\n\n')); c.enqueue(enc.encode('data: [DONE]\n\n')); c.close(); } }) };
+      };
+      const ev2 = await drain(runAgent({ session: { id: 'as2', workdir: WD, messages: [] }, userText: 'go', apiKey: 'k', model: 'm', access: 'full', askPermission: async () => true, maxTurns: 3, userData: WD }));
+      const subUsage = ev2.find((e) => e.type === 'usage' && e.usage.source === 'subagent');
+      check("a worker's spend reaches the live header", subUsage && subUsage.usage.cost === 0.0012 && subUsage.usage.prompt_tokens === 1000, ev2.filter((e) => e.type === 'usage').map((e) => e.usage));
+    }
   }
 
   // ------------------------------------------------------------------ [AT]
@@ -293,7 +310,21 @@ function loadWith(file, stubs) {
     const src = read('src/backend/tools/web_fetch.js');
     check('a guessing streak gets a stop hint', src.includes('if (misses >= MISS_STREAK_WARN)'), 'no hint');
     check('a success resets the streak', src.includes('if (sess) sess._fetchMisses = 0;'), 'never resets');
-    check('html results carry links', /kind: 'html'[^\n]*links \}/.test(src), 'links dropped');
+    check('html results carry links', /kind: 'html'[^\n]*links, text:/.test(src), 'links dropped');
+    // Found live, not offline: on a real page the links came AFTER ~20k chars of text,
+    // and the 8k head+tail bound cut them out every time. The offline fixture was tiny,
+    // so this passed while the feature did nothing. Bound a realistic result for real.
+    {
+      const { boundToolResult } = require(agentPath);
+      const bigPage = '<html><body>' + ('<p>' + 'lorem ipsum dolor sit amet '.repeat(40) + '</p>').repeat(30)
+        + Array.from({ length: 80 }, (_, i) => `<a href="/post-${i}">A reasonably long link title number ${i}</a>`).join('') + '</body></html>';
+      const linksOut = wf.extractLinks(bigPage, 'https://blog.google/', 30);
+      const result = { url: 'https://blog.google/', status: 200, kind: 'html', chars: bigPage.length, links: linksOut, text: wf.stripHtml(bigPage).slice(0, 20000) };
+      const bounded = boundToolResult(JSON.stringify(result), 8000);
+      check('a realistic page is actually bounded', bounded.length <= 8200 && /characters truncated/.test(bounded), bounded.length);
+      check('...and its links survive the bound', bounded.includes('"links"') && bounded.includes('https://blog.google/post-0'), bounded.slice(0, 200));
+      check('the link list is capped to fit', linksOut.length === 30 && JSON.stringify(linksOut).length < 4000, JSON.stringify(linksOut).length);
+    }
   }
 
   // ------------------------------------------------------------------ [AX]
@@ -362,7 +393,11 @@ function loadWith(file, stubs) {
       const enc = new TextEncoder();
       return { ok: true, text: async () => '', body: new ReadableStream({ start(c) { for (const ch of chunks) c.enqueue(enc.encode('data: ' + JSON.stringify(ch) + '\n\n')); c.enqueue(enc.encode('data: [DONE]\n\n')); c.close(); } }) };
     };
-    const evs = await drain(runAgent({ session: { id: 'ax', workdir: WD, messages: [] }, userText: 'research', apiKey: 'k', model: 'm', access: 'full', askPermission: async () => true, maxTurns: 3, budgetUsd: 1 }));
+    const axSession = { id: 'ax', workdir: WD, messages: [] };
+    const evs = await drain(runAgent({ session: axSession, userText: 'research', apiKey: 'k', model: 'm', access: 'full', askPermission: async () => true, maxTurns: 3, budgetUsd: 1 }));
+    // Found live: the header counted the fee, the SAVED ledger did not, so a reopened
+    // session's cost dropped by every search.
+    check('the search fee reaches the saved ledger', axSession._runUsage && axSession._runUsage.cost >= 0.0075, axSession._runUsage);
     const end = evs.find((e) => e.type === 'tool_end' && e.name === 'web_search');
     check('the agent can call it', end && end.ok === true, end && end.result);
     check('its cost is charged to the run budget', evs.some((e) => e.type === 'budget' && e.source === 'web_search' && e.spent >= 0.0075), evs.filter((e) => e.type === 'budget'));
@@ -377,6 +412,44 @@ function loadWith(file, stubs) {
     check('it sits at the same permission tier as web_fetch', /web_fetch: 1, web_search: 1/.test(read('src/backend/tools/sandbox.js')), 'different tier');
     check('the system prompt names the research workflow', read('src/backend/agent.js').includes('web_search to find sources, web_fetch to read them'), 'missing');
     check('the renderer labels and summarises it', HTML.includes("if (name==='web_search') return 'FIND';") && HTML.includes("Array.isArray(o.results) && o.query !== undefined"), 'raw');
+  }
+
+  // ------------------------------------------------------------------ [AY]
+  console.log('\n[AY] found by driving the real app (2026-09-24)');
+  {
+    const script = (HTML.match(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g) || []).join('\n');
+    const code = script.replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    // Settings threw "process is not defined" whenever a setting was blank, so every
+    // field after the sub-agent model silently showed only its placeholder.
+    check('the sandboxed renderer never touches process', !/\bprocess\.env\b/.test(code) && !/\bprocess\.(platform|versions|argv)\b/.test(code), (code.match(/process\.\w+/g) || []).slice(0, 3));
+
+    // A refused send (e.g. image to a text-only model) cleared the image it told you to resend.
+    check('a refused send gives the text back', /catch \(err\)[\s\S]{0,1600}if \(ta && !ta\.value\.trim\(\)\) ta\.value = text;/.test(HTML), 'text lost');
+    check('...and the attachments', /catch \(err\)[\s\S]{0,1800}PENDING_ATTACH\.push\(\{ dataUrl: url/.test(HTML), 'image lost');
+    check("Electron's IPC wrapper is stripped from errors", HTML.includes("replace(/^Error invoking remote method '[^']*':\\s*/, '')"), 'wrapper shown');
+
+    // The model picker only changed the global default; runs use the session's model.
+    check('switching model switches the open session', MAIN.includes("ipcMain.handle('sessions:setModel'") && read('src/preload/preload.js').includes('sessionsSetModel') && /async function setModel[\s\S]{0,500}sessionsSetModel\(activeId, id\)/.test(HTML), 'chip-only switch');
+    check('the chip names the model the next send will use', HTML.includes('function activeModel()') && /function refreshChips\(\)\{ \$\('chipModelVal'\)\.textContent=activeModel\(\)/.test(HTML), 'shows the global default');
+    check('the chip follows session switches', /function paintActive\(\)\{[\s\S]{0,300}refreshChips\(\)/.test(HTML), 'stale chip');
+    check('a loaded session remembers its model', HTML.includes("v.model = full.model || '';"), 'model dropped');
+
+    // OpenRouter reports spend as usage.cost; the header read only total_cost.
+    check('the header reads usage.cost', HTML.includes('const billed = Number(u.total_cost) || Number(u.cost) || 0;'), 'stuck at $0.00');
+    check('sub-cent spend is visible', HTML.includes('Math.abs(costUsd) < 0.01 ? Number(costUsd).toFixed(4)'), 'rounds to $0.00');
+
+    // A long session title wrapped one word per line and pushed the stats off-screen.
+    check('the session title stays on one line', /\.workhead \.t\{[^}]*white-space:nowrap[^}]*text-overflow:ellipsis/.test(HTML), 'wraps');
+    check('the header stats never shrink', /\.workhead \.workstats\{[^}]*flex:none/.test(HTML), 'clipped');
+
+    // The state PULL lacked the url the PUSH had: after a reload the bar read http://localhost.
+    check('preview state has one source', MAIN.includes('function previewState()') && MAIN.includes("ipcMain.handle('preview:state', () => previewState());"), 'pull without url');
+    // preview:open judged file:// against the GLOBAL folder, refusing other projects' files.
+    check("preview:open is judged against the session's folder", MAIN.includes('atlasOpenUrl(arg.url, arg.workdir)') && /b\.open\(url, wd\)/.test(HTML), 'global folder');
+
+    // The ledger showed the worker's LAST turn, not its total (4,337 of 9,973).
+    check('ledger tokens accumulate', HTML.includes('R.tok = (R.tok || 0) + tot;'), 'last turn only');
+    check('the shell row is not labelled BASH on Windows', !HTML.includes("if (name==='shell') return 'BASH';"), 'BASH');
   }
 
   // ------------------------------------------------------------------ [AW]

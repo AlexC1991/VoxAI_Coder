@@ -18,7 +18,8 @@ contextBridge.exposeInMainWorld('voxai', {
 
   // Atlas: in-app resizable browser (chat | browser split)
   preview: {
-    open: (url) => ipcRenderer.send('preview:open', url),
+    // workdir: the session's project, so a local file in it passes containment.
+    open: (url, workdir) => ipcRenderer.send('preview:open', workdir ? { url, workdir } : url),
     close: () => ipcRenderer.send('preview:close'),
     setBounds: (frac) => ipcRenderer.send('preview:set-bounds', frac),
     viewport: (rect) => ipcRenderer.send('preview:viewport', rect),
@@ -64,6 +65,7 @@ contextBridge.exposeInMainWorld('voxai', {
   sessionsOpen: (id) => ipcRenderer.invoke('sessions:open', id),
   sessionsDelete: (id) => ipcRenderer.invoke('sessions:delete', id),
   sessionsRename: (id, title) => ipcRenderer.invoke('sessions:rename', { id, title }),
+  sessionsSetModel: (id, model) => ipcRenderer.invoke('sessions:setModel', { id, model }),
   sessionsReveal: (id) => ipcRenderer.invoke('sessions:reveal', id),
 
   // agent (own Node loop, streamed events)

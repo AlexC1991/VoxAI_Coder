@@ -758,6 +758,12 @@ async function* runAgent(opts) {
             spent += subCost;
             emitQueue.push({ type: 'budget', spent, budget, estimated: false, source: 'subagent' });
           }
+          // ...and tell the UI. The saved ledger already counted this (runUsage, above)
+          // but the live header only sums `usage` events, so a fan-out's whole cost was
+          // missing on screen until the session was reopened. Found in a live run.
+          if (subIn || subOut || subCost) {
+            emitQueue.push({ type: 'usage', usage: { prompt_tokens: subIn, completion_tokens: subOut, cost: subCost, total_cost: subCost, source: 'subagent' } });
+          }
         }
         // Tools that spend money themselves (web_search) report it as cost_usd. It is
         // real spend, so it goes against the cap -- and out as a usage event, which is
@@ -765,6 +771,10 @@ async function* runAgent(opts) {
         if (result && typeof result === 'object' && Number(result.cost_usd) > 0) {
           const c = Number(result.cost_usd);
           spent += c;
+          // Into the saved ledger too. Only the live header counted it, so a session's
+          // cost dropped by every search fee when it was reopened. Found in a live run.
+          const ru = session._runUsage || (session._runUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 });
+          ru.cost += c;
           emitQueue.push({ type: 'usage', usage: { prompt_tokens: 0, completion_tokens: 0, cost: c, total_cost: c, source: tc.name } });
           emitQueue.push({ type: 'budget', spent, budget, estimated: false, source: tc.name });
         }

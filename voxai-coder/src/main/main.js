@@ -358,13 +358,22 @@ function previewableUrl(url, workdir) {
   } catch { return null; }
 }
 
-function broadcastPreviewState() {
-  const c = chatWebContents();
-  if (!c) return;
+/**
+ * The preview's state, in one place. The push (broadcast) carried the URL but the pull
+ * (preview:state, which the renderer calls when it starts) did not -- so after a reload
+ * the panel kept showing the page while its address bar read "http://localhost".
+ */
+function previewState() {
   let url = '';
   try { url = (browserV && browserV.webContents && browserV.webContents.getURL()) || ''; } catch {}
   if (url === 'about:blank') url = '';
-  try { c.send('preview:state', { open: atlasOpen, chatFraction: atlasFrac, url }); } catch {}
+  return { open: atlasOpen, chatFraction: atlasFrac, url };
+}
+
+function broadcastPreviewState() {
+  const c = chatWebContents();
+  if (!c) return;
+  try { c.send('preview:state', previewState()); } catch {}
 }
 
 /**
@@ -476,7 +485,13 @@ app.whenReady().then(() => {
   });
 
   // Atlas: in-app resizable browser (chat | browser split)
-  ipcMain.on('preview:open', (_e, url) => atlasOpenUrl(url));
+  // Judge a file:// URL against the SESSION's project. With only the url, containment
+  // used the global working folder, so a local file from any other project was refused
+  // and the panel sat on about:blank. Found live. A bare string still works.
+  ipcMain.on('preview:open', (_e, arg) => {
+    if (arg && typeof arg === 'object') atlasOpenUrl(arg.url, arg.workdir);
+    else atlasOpenUrl(arg);
+  });
   ipcMain.on('preview:close', () => atlasClose());
   ipcMain.on('preview:set-bounds', (_e, frac) => { atlasSetBounds(frac); broadcastPreviewState(); });
   // The renderer owns the panel's geometry; it reports the body rect and we slot the
@@ -485,7 +500,7 @@ app.whenReady().then(() => {
     previewRect = rect && Number.isFinite(rect.width) ? rect : null;
     layoutAtlas();
   });
-  ipcMain.handle('preview:state', () => ({ open: atlasOpen, chatFraction: atlasFrac }));
+  ipcMain.handle('preview:state', () => previewState());
   ipcMain.on('preview:back', () => { try { browserV && browserV.webContents.goBack(); } catch {} });
   ipcMain.on('preview:forward', () => { try { browserV && browserV.webContents.goForward(); } catch {} });
   ipcMain.on('preview:reload', () => { try { browserV && browserV.webContents.reload(); } catch {} });
@@ -520,6 +535,19 @@ app.whenReady().then(() => {
     if (!id || !t) return false;
     const sess = await getLive(id);
     sess.title = t.slice(0, 120);
+    await store.saveSession(userData(), sess);
+    return true;
+  });
+  // The composer's model picker. It used to save only the GLOBAL model, but a run uses
+  // `sess.model || s.openrouterModel` and every session is created with its model set,
+  // so switching models changed the chip and nothing else -- the next send still went
+  // to the old model. (Found live: "switch to a vision model and send again" was
+  // refused a second time, naming the model the user had just switched away from.)
+  ipcMain.handle('sessions:setModel', async (_e, { id, model }) => {
+    const m = String(model || '').trim();
+    if (!id || !m) return false;
+    const sess = await getLive(id);
+    sess.model = m;
     await store.saveSession(userData(), sess);
     return true;
   });

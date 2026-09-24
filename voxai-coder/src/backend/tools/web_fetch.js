@@ -44,7 +44,7 @@ function extractLinks(html, base, limit = 60) {
     try { abs = new URL(raw, base).href.replace(/#.*$/, ''); } catch { continue; }
     if (!/^https:\/\//i.test(abs) || seen.has(abs)) continue;
     seen.add(abs);
-    const text = stripHtml(m[5]).replace(/\s+/g, ' ').slice(0, 80);
+    const text = stripHtml(m[5]).replace(/\s+/g, ' ').slice(0, 60);
     (abs.startsWith(origin) ? same : other).push(text ? { url: abs, text } : { url: abs });
   }
   return same.concat(other).slice(0, limit);
@@ -52,6 +52,8 @@ function extractLinks(html, base, limit = 60) {
 
 // Consecutive failed fetches before the model is told to stop guessing.
 const MISS_STREAK_WARN = 3;
+// ~90 chars per link, so 30 links is ~2.7k — well inside the head a bounded result keeps.
+const LINKS_IN_RESULT = 30;
 
 function makeWebFetchTool({ checkPermission }) {
   return {
@@ -106,8 +108,12 @@ function makeWebFetchTool({ checkPermission }) {
         } catch { /* panel optional */ }
       }
       if (/html/i.test(ct)) {
-        const links = extractLinks(text, res.url || u);
-        return { url: u, status: res.status, kind: 'html', chars: text.length, text: stripHtml(text).slice(0, 20000), links };
+        // Links go BEFORE the text, and are capped. Tool results are bounded to their
+        // head and tail (8,000 chars by default); with up to 20,000 chars of page text
+        // first, the link list sat in the middle and was cut from every real page —
+        // found live, where a blog post came back with no links at all.
+        const links = extractLinks(text, res.url || u, LINKS_IN_RESULT);
+        return { url: u, status: res.status, kind: 'html', chars: text.length, links, text: stripHtml(text).slice(0, 20000) };
       }
       return { url: u, status: res.status, kind: ct.split(';')[0] || 'text', chars: text.length, text: text.slice(0, 20000) };
     },
