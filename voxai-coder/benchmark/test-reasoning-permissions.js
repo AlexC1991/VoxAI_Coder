@@ -2,7 +2,7 @@
  * test-reasoning-permissions.js — Reasoning + Permission (access) verification,
  * updated for the RENAMED access levels.
  *
- *  A. Reasoning levels map correctly.
+ *  A. Reasoning: what is sent follows the model's catalogue entry.
  *  B. Renamed access levels: canonical keys, friendly labels, migration of old
  *     stored values, monotonic hierarchy, double-gating consistency.
  *  C. Dangerous shell commands blocked.
@@ -14,19 +14,19 @@ function check(name, cond, extra) {
 }
 
 // ---- A. Reasoning ----
+// Levels now come from each model's catalogue entry (supported_efforts, default,
+// mandatory) rather than five fixed words mapped onto three efforts.
 console.log('=== A. Reasoning levels ===');
 const fs = require('fs');
-const orSrc = fs.readFileSync(require.resolve('../src/backend/providers/openrouter'), 'utf8');
-function mapEffort(e) {
-  if (e === 'brief') return 'low';
-  if (e === 'deep' || e === 'exhaustive') return 'high';
-  return 'medium';
-}
-check('5 levels', ['instant','brief','balanced','deep','exhaustive'].length === 5);
-check("brief->low", mapEffort('brief')==='low');
-check("deep/exhaustive->high", mapEffort('deep')==='high' && mapEffort('exhaustive')==='high');
-check("instant omits (default)", /reasoningEffort !== 'instant'/.test(orSrc));
-check("reasoning gated", /supportsReasoning\(model\)/.test(orSrc));
+const or = require('../src/backend/providers/openrouter');
+const dsv4 = { supported_efforts: ['max', 'high', 'low'], default_effort: 'high', default_enabled: true, mandatory: false };
+const J = (x) => JSON.stringify(x);
+check('model default sends nothing', J(or.reasoningParam('default', dsv4)) === '{}');
+check('a supported level is sent', J(or.reasoningParam('low', dsv4)) === J({ reasoning: { effort: 'low' } }));
+check('an unsupported level moves to the nearest', J(or.reasoningParam('medium', dsv4)) === J({ reasoning: { effort: 'high' } }));
+check('Off turns thinking off', J(or.reasoningParam('none', dsv4)) === J({ reasoning: { enabled: false } }));
+check('a model that cannot reason gets nothing', J(or.reasoningParam('high', null)) === '{}');
+check('old saved words still read', or.normalizeReasoning('instant') === 'none' && or.normalizeReasoning('balanced') === 'default');
 
 // ---- B. Renamed permissions ----
 console.log('\n=== B. Renamed access levels ===');

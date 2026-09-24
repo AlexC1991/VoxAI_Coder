@@ -24,8 +24,9 @@ console.log('PASS  planMode wiring in main.js');
 // 3) renderer chip present + wired
 const html = fs.readFileSync(require('path').join(__dirname, '..', 'src', 'renderer', 'index.html'), 'utf8');
 assert(html.includes('chipPlan'), 'plan chip element');
-assert(html.includes("PLANMODE"), 'plan chip options');
-assert(html.includes("saveSettings({planMode:"), 'plan chip saves setting');
+// Plan is a switch now, not a two-option dropdown.
+assert(/id="chipPlan"[^>]*role="switch"/.test(html), 'plan is a switch');
+assert(html.includes("saveSettings({ planMode: !S.planMode })"), 'plan switch saves setting');
 console.log('PASS  plan chip in renderer');
 
 // 4) native a11y module exports
