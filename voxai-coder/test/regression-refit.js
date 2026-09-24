@@ -213,6 +213,30 @@ async function drain(gen) {
     check('the window shows it too (taskbar from npm start)', /icon: path\.join\(__dirname, '\.\.', '\.\.', 'resources'/.test(read('src/main/main.js')), 'no window icon');
   }
 
+  // ------------------------------------------------------------------ [CF]
+  console.log('\n[CF] found by driving the app: approvals, Stop and the queue');
+  {
+    const HTML = read('src/renderer/index.html');
+    // Typing a follow-up as an approval appeared: the text vanished and Enter approved.
+    check('focus goes to the request, not the Allow button', HTML.includes('if (!ask.hidden) ask.focus();') && !HTML.includes("$('askAllow'); if (b && !ask.hidden) b.focus()"), 'Allow focused');
+    check('Enter waits until the request has settled and typing has stopped', /now - \(p\.shownAt \|\| 0\) < ASK_SETTLE_MS \|\| \(p\.typedAt && now - p\.typedAt < ASK_AFTER_TYPING_MS\)/.test(HTML), 'Enter approves at once');
+    check('typing during a request is kept as the draft', /if \(e\.key\.length === 1\) \{ e\.preventDefault\(\); pr\.value \+= e\.key;/.test(HTML), 'typing lost');
+    // The rows moved under the pointer as the note changed height.
+    check('the menu note holds one height', HTML.includes("note.style.minHeight = tallest ? tallest + 'px' : '';"), 'rows jump');
+    // A run with a queue could not be stopped; Stop then sent the queue.
+    check('the button stops a run that has a queue', /if \(busy && !hasText\) \{\s*btn\.classList\.add\('stop'\)/.test(HTML), 'Send while queued');
+    check('after Stop the queue waits', HTML.includes('if (v && v.stopRequested && !byHand)') && HTML.includes('v.stopRequested = true;'), 'Stop sends the queue');
+    check('an empty box sends the next queued message', HTML.includes('if (!text && !v.busy && v.queue && v.queue.length) { drainQueue(v.id, true); return; }'), 'dead Send');
+    check('Stop reads as stopped, not an error', HTML.includes("el('div', 'fold', 'stopped')"), 'shown as Error');
+
+    // The agent: a Stop mid-request is "cancelled", not "error: This operation was aborted".
+    fakeOpenRouter(() => { const e = new Error('This operation was aborted'); e.name = 'AbortError'; throw e; });
+    const ctl = new AbortController(); ctl.abort();
+    const ev = await drain(runAgent({ session: { id: 'cf', workdir: WD, messages: [] }, userText: 'go', apiKey: 'k', model: 'm', access: 'full', askPermission: async () => true, maxTurns: 2, signal: ctl.signal }));
+    const last = ev[ev.length - 1] || {};
+    check('an aborted request ends as cancelled', last.type === 'cancelled', last);
+  }
+
   try { fs.rmSync(WD, { recursive: true, force: true }); } catch {}
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

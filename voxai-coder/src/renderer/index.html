@@ -581,6 +581,9 @@ tests"). Scroll the row instead of breaking words:
 .ask-h span{font-size:13px;color:var(--sub)}
 .ask-what{margin:0;font:12.5px "Sometype Mono",monospace;color:var(--mut);background:var(--bg);border:1px solid var(--edge);border-radius:8px;padding:9px 12px;white-space:pre-wrap;word-break:break-word;max-height:30vh;overflow:auto}
 .ask-acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.ask:focus{outline:none}
+.ask-draft{font-size:12.5px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ask-draft b{color:var(--mut);font-weight:400}
 .b{font:600 12.5px Chivo,sans-serif;padding:7px 13px;border-radius:8px;border:1px solid var(--edge2);color:var(--mut);background:var(--panel2);cursor:pointer}
 .b:hover{color:var(--ink);border-color:var(--sub)}
 .b.pri{background:var(--gold);color:#0e0e10;border-color:var(--gold)}
@@ -745,9 +748,10 @@ tests"). Scroll the row instead of breaking words:
             </div>
           </div>
           <!-- an approval takes the place of the text box, where your eyes already are -->
-          <div class="ask" id="askBox" hidden>
+          <div class="ask" id="askBox" hidden tabindex="-1">
             <div class="ask-h"><b id="askTitle">Run a command?</b><span id="askSub"></span></div>
             <pre class="ask-what" id="askWhat"></pre>
+            <div class="ask-draft" id="askDraft" hidden></div>
             <div class="ask-acts">
               <button class="b lnk" id="askDetail" type="button">Details</button>
               <span class="sh-sp"></span>
@@ -1345,8 +1349,11 @@ function compactNow(){
 }
 $('shCompact').onclick = compactNow;
 
-function drainQueue(sid){
+function drainQueue(sid, byHand){
   const v = viewOf(sid);
+  // After Stop the queue waits; Send (or Enter on an empty box) sends the next one.
+  if (v && v.stopRequested && !byHand) { v.stopRequested = false; if (sid === activeId) updateSendState(); return false; }
+  if (v) v.stopRequested = false;
   if (!v || v.busy || !(v.queue && v.queue.length)) return false;
   const next = v.queue.shift();
   renderQueue(v);
@@ -2240,8 +2247,14 @@ function renderOptionMenu(menu, title, rows, onPick){
     const i = rows.indexOf(sel); if (i >= 0) body.children[i].classList.add('hot');
     note.textContent = sel ? sel.note || '' : '';
   };
+  // The menu hangs from its bottom edge, so a note that changed height as you moved
+  // down the list pushed every row up or down under the pointer -- aim at "Edit files",
+  // land on "Ask first". Hold the note at the height of its longest text.
+  let tallest = 0;
+  rows.forEach((o) => { note.textContent = o.note || ''; tallest = Math.max(tallest, Math.ceil(note.getBoundingClientRect().height)); });
+  note.style.minHeight = tallest ? tallest + 'px' : '';
   note.textContent = sel ? sel.note || '' : (rows[0] && rows[0].note) || '';
-  note.hidden = !note.textContent;
+  note.hidden = !rows.some((o) => o.note);
   return { body, note };
 }
 
@@ -2640,7 +2653,7 @@ async function newSession(dir){
   $('sessTitle').textContent = created.title || 'New session'; $('sessTitle').title = $('sessTitle').textContent;
   if (window.__syncTitlebar) __syncTitlebar(created.title || 'New session');
   $('sessSub').textContent = created.workdir || S.workingDir;
-  if (v.workdir) expandedFolders.add(v.workdir);
+  if (v.workdir) { expandedFolders.add(v.workdir); rememberOpenProjects(); }
   refreshSessionList(); paintActive(); go('work'); updateSendState();
   paintCtxBar(); refreshCtx();
   // Preview history and any staged attachment belong to the conversation you were
@@ -2745,7 +2758,7 @@ async function openSession(id){
   if (window.__syncTitlebar) __syncTitlebar(v._title || 'Session');
   $('sessSub').textContent = v._workdir || '';
   // Open the project it belongs to, and mark it as the one you are in.
-  if (v._workdir || v.workdir) expandedFolders.add(v._workdir || v.workdir);
+  if (v._workdir || v.workdir) { expandedFolders.add(v._workdir || v.workdir); rememberOpenProjects(); }
   renderSessionList();
   paintActive(); go('work'); updateSendState();
   // The ledger is restored from disk by openSession, but nothing ever painted it:
@@ -2824,6 +2837,13 @@ async function refreshSessionList(){
   let items = [];
   try { items = await window.voxai.sessionsList(); } catch { /* backend starting */ }
   SESS_ITEMS = items;
+  // A new session is named after its first message; the title bar should say so too.
+  const cur = items.find((s) => s.id === activeId);
+  if (cur && cur.title && $('sessTitle').textContent !== cur.title) {
+    $('sessTitle').textContent = cur.title;
+    const av = actView(); if (av) av._title = cur.title;
+    if (window.__syncTitlebar) __syncTitlebar(cur.title);
+  }
   // "Recent" in the model picker: the models your own sessions ran on, newest first.
   RECENT_MODELS = items.map((s) => s.model).filter((m, i, a) => m && a.indexOf(m) === i).slice(0, 5);
   renderSessionList();
@@ -2847,7 +2867,7 @@ function renderSessionList(){
   const newest = (k) => Math.max(...groups[k].map((s) => new Date(s.updatedAt || 0).getTime()));
   const keys = Object.keys(groups).sort((a, b) => newest(b) - newest(a));
   if (!keys.length) { box.appendChild(el('div', 'empty', 'No sessions match \u201c' + esc(q) + '\u201d.')); return; }
-  if (!foldersSeeded) { foldersSeeded = true; expandedFolders.add(keys[0]); }
+  if (!foldersSeeded) { foldersSeeded = true; expandedFolders.add(keys[0]); rememberOpenProjects(); }
   const activeWd = (SESS_ITEMS.find((s) => s.id === activeId) || {}).workdir;
   keys.forEach((k) => {
     const list = groups[k];
@@ -3341,9 +3361,10 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     drainQueue(sid);
   } else if (event.type === 'error' || event.type === 'cancelled') {
     clearTimeout(v.statusTimer);
-    finalizeStream(); finalizeRunCard();
+    finalizeStream(); sealThinking(v); finalizeRunCard();
     clearStatus();
-    addMsg(event.type === 'cancelled' ? '(cancelled)' : 'Error: ' + event.message);
+    if (event.type === 'cancelled') { const r = RR(); if (r) r.appendChild(el('div', 'fold', 'stopped')); }
+    else addMsg('Error: ' + event.message);
     v.busy = false; v.activity = '';
     v.runKeys.delete(runKey);
     if (sid === activeId) { $('runDot').style.display = 'none'; updateSendState(); paintShelf(); }
@@ -3453,9 +3474,20 @@ function paintAsk(){
     $('askWhat').textContent = p.showDetail ? (p.kind + '\n' + p.target) : (p.target || p.kind);
     $('askAlways').hidden = !p.canAlways;
     $('askDetail').textContent = p.showDetail ? 'Less' : 'Details';
-    setTimeout(() => { const b = $('askAllow'); if (b && !ask.hidden) b.focus(); }, 0);
+    // Focus the request, not the Allow button: Enter on a focused button clicks it, and
+    // someone mid-sentence when this appears would approve a command they never read.
+    setTimeout(() => { if (!ask.hidden) ask.focus(); }, 0);
+    paintAskDraft();
   }
   updateSendState();
+}
+/** What you typed while the request was showing: kept as your draft, and said so. */
+function paintAskDraft(){
+  const d = $('askDraft'), t = ($('prompt') && $('prompt').value) || '';
+  const v = actView(), p = v && v.perm;
+  if (!d) return;
+  d.hidden = !(p && p.typedAt && t.trim());
+  if (!d.hidden) d.innerHTML = 'Your message is kept for after this: <b>' + esc(t.slice(-80)) + '</b>';
 }
 async function answerAsk(allowed, always){
   const v = actView(); const p = v && v.perm;
@@ -3470,19 +3502,43 @@ $('askAllow').onclick = () => answerAsk(true, false);
 $('askAlways').onclick = () => answerAsk(true, true);
 $('askDeny').onclick = () => answerAsk(false, false);
 $('askDetail').onclick = () => { const v = actView(); if (v && v.perm) { v.perm.showDetail = !v.perm.showDetail; paintAsk(); } };
+// Enter allows only once the request has been on screen a moment and you have stopped
+// typing -- an Enter meant to send a message must not approve a command.
+const ASK_SETTLE_MS = 700, ASK_AFTER_TYPING_MS = 1500;
 document.addEventListener('keydown', (e) => {
   const v = actView();
-  if (!v || !v.perm || $('askBox').hidden) return;
+  const p = v && v.perm;
+  if (!p || $('askBox').hidden) return;
   if (document.querySelector('.modal-bg.show')) return;
-  if (e.key === 'Escape') { e.preventDefault(); answerAsk(false, false); }
-  else if (e.key === 'Enter' && !e.shiftKey && !(e.target && e.target.closest && e.target.closest('#askBox button'))) { e.preventDefault(); answerAsk(true, false); }
+  if (e.target && e.target.closest && e.target.closest('#askBox button')) return;   // Tab to a button, then Enter: deliberate
+  const now = Date.now();
+  if (e.key === 'Escape') { e.preventDefault(); answerAsk(false, false); return; }
+  if (e.key === 'Enter' && !e.shiftKey) {
+    e.preventDefault();
+    if (now - (p.shownAt || 0) < ASK_SETTLE_MS || (p.typedAt && now - p.typedAt < ASK_AFTER_TYPING_MS)) return;
+    answerAsk(true, false);
+    return;
+  }
+  // Typing while the text box is replaced: keep it in the draft instead of losing it.
+  const pr = $('prompt');
+  if (!pr || e.ctrlKey || e.metaKey || e.altKey) return;
+  if (e.key.length === 1) { e.preventDefault(); pr.value += e.key; p.typedAt = now; paintAskDraft(); }
+  else if (e.key === 'Backspace') { e.preventDefault(); pr.value = pr.value.slice(0, -1); p.typedAt = now; paintAskDraft(); }
+});
+// Pasted or IME text arrives as input, not keys.
+document.addEventListener('paste', (e) => {
+  const v = actView(), p = v && v.perm;
+  if (!p || $('askBox').hidden) return;
+  const t = (e.clipboardData && e.clipboardData.getData('text')) || '';
+  if (!t) return;
+  e.preventDefault(); $('prompt').value += t; p.typedAt = Date.now(); paintAskDraft();
 });
 window.voxai.onAgentPermission(({ permId, sessionId, kind, target, canAlways }) => {
   const v = sessionId ? viewOf(sessionId) : actView();
   if (!v) return;
   // The main process gives up after two minutes and treats it as a no; so does this.
   const timer = setTimeout(() => { if (v.perm && v.perm.permId === permId) { v.perm = null; if (v === actView()) paintAsk(); } }, 120000);
-  v.perm = { permId, kind, target: String(target || ''), canAlways: !!canAlways, timer };
+  v.perm = { permId, kind, target: String(target || ''), canAlways: !!canAlways, timer, shownAt: Date.now() };
   setActivity(v, 'Waiting for you');
   if (v === actView()) paintAsk();
   refreshSessionList();
@@ -3493,7 +3549,7 @@ $('btnSend').onclick = () => {
   const busy = !!(v && v.busy);
   const hasText = !!($('prompt') && $('prompt').value.trim());
   const queued = !!(v && v.queue && v.queue.length);
-  if (busy && !hasText && !queued) { stopCurrent(); return; }
+  if (busy && !hasText) { stopCurrent(); return; }
   send();
 };
 $('prompt').addEventListener('input', updateSendState);
@@ -3502,7 +3558,7 @@ $('prompt').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shi
   const busy = !!(av && av.busy);
   const hasText = !!e.target.value.trim();
   e.preventDefault();
-  if (!busy || hasText) send(); else stopCurrent();
+  if (!busy || hasText) send(); else stopCurrent();   // send() also sends the next queued message
 } });
 
 
@@ -3918,15 +3974,20 @@ function paintCtxBar(){
       + (c.removed ? '<span class="del">−' + Number(c.removed).toLocaleString() + '</span>' : '');
     bar.classList.add('can-open');
     bar.title = 'Show the changed files';
+  } else if (!c.repo && touched) {
+    // Without git there are no line counts, but the files this session changed are known.
+    d.innerHTML = '<b>' + touched + (touched === 1 ? ' file changed' : ' files changed') + '</b>';
+    bar.classList.remove('can-open');
+    bar.title = [...(TOUCHED.get(sid) || [])].join(String.fromCharCode(10));
   } else {
-    d.textContent = c.repo ? 'No uncommitted changes' : (c.cwd ? 'Not a git repository' : '');
+    d.textContent = c.repo ? 'No uncommitted changes' : '';
     bar.classList.remove('can-open');
     bar.title = '';
   }
   const chev = $('cbChev'); if (chev && !chev.innerHTML) chev.innerHTML = icon(DIFF_OPEN ? 'down' : 'right', 11);
 
   const t = $('cbTouched');
-  t.textContent = touched ? (touched + ' touched this session') : '';
+  t.textContent = touched && c.repo ? (touched + ' touched this session') : '';
   t.title = touched ? [...(TOUCHED.get(sid) || [])].join(String.fromCharCode(10)) : '';
   paintShelf();
 }
@@ -4144,7 +4205,10 @@ function updateSendState(){
   const busy = !!(v && v.busy);   // busy flips true the moment a run starts
   const hasText = !!($('prompt') && $('prompt').value.trim());
   const queued = !!(v && v.queue && v.queue.length);
-  if (busy && !hasText && !queued) {
+  // While a run is going and the box is empty, the button stops it -- queued messages
+  // or not. It used to turn back into Send as soon as anything was queued, and Send
+  // with an empty box does nothing, so a run with a queue could not be stopped.
+  if (busy && !hasText) {
     btn.classList.add('stop');
     btn.title = 'Stop generating';
     btn.disabled = false;
@@ -4160,6 +4224,7 @@ function updateSendState(){
   if (keys) {
     const k = (v && v.perm) ? ['\u21b5 allow once', 'Esc deny']
       : busy ? (hasText ? ['\u21b5 queue', '\u21e7\u21b5 new line'] : ['\u21b5 stop', 'type to queue a message'])
+      : (!hasText && queued) ? ['\u21b5 send the next queued message']
       : ['\u21b5 send', '\u21e7\u21b5 new line'];
     keys.innerHTML = k.map((x) => '<span>' + esc(x) + '</span>').join('');
   }
@@ -4169,6 +4234,8 @@ function updateSendState(){
 function stopCurrent(){
   const v = actView();
   if (!v || !v.busy) { updateSendState(); return; }
+  // Stop means stop: queued messages wait for you rather than starting the next run.
+  v.stopRequested = true;
   for (const rk of [...(v.runKeys || [])]) {
     try { window.voxai.agentCancel(rk); } catch {}
   }
@@ -4180,6 +4247,8 @@ async function send(){
   const v = actView();
   if (!v) return;
   const text = $('prompt').value.trim();
+  // An empty box with messages waiting (after a Stop): send the next one.
+  if (!text && !v.busy && v.queue && v.queue.length) { drainQueue(v.id, true); return; }
   if (!text) return;
   if (!S.hasOpenRouterKey) { openModal(); T = v; addMsg('Set your OpenRouter API key in ⚙ Settings first — all agent turns bill through it.'); T = null; return; }
   const parts = pendingAttachments(); // image parts (data URLs)
@@ -4200,6 +4269,7 @@ async function send(){
     $('prompt').value = '';
     clearAttachments();
     renderQueue(v);
+    updateSendState();
     return;
   }
   $('prompt').value = '';

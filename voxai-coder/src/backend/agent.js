@@ -641,6 +641,9 @@ async function* runAgent(opts) {
       }
     } catch (err) {
       while (emitQueue.length) yield emitQueue.shift();
+      // Stopping aborts the request mid-stream. That is the user's Stop, not a failure,
+      // and it showed as "Error: This operation was aborted".
+      if (signal && signal.aborted) { bg.cancelAll(session.id); yield { type: 'cancelled' }; return; }
       yield { type: 'error', message: err.message };
       return;
     }
