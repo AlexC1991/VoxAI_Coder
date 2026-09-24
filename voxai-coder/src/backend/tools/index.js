@@ -235,12 +235,22 @@ const shell = tool('shell', SHELL_DESC, {
   child.on('error', reject);
 }));
 
-const todo = tool('todo', 'Keep a running to-do list visible in the UI.', {
+// The plan. The user watches it pinned above the message box, so it is only useful
+// if it moves: the old description ("Keep a running to-do list visible in the UI")
+// never said to call it again, and models wrote a plan once and never ticked a step.
+const todo = tool('todo', 'The plan for this task, pinned above the user\'s message box where they follow it. '
+  + 'Call it once with every step before you start, then call it again with the whole list each time a step '
+  + 'starts or finishes: `active` is the step you are on now, `done` lists finished steps. Keep steps short.', {
   type: 'object',
-  properties: { items: { type: 'array', items: { type: 'string' } }, done: { type: 'array', items: { type: 'number' } } },
+  properties: {
+    items: { type: 'array', items: { type: 'string' }, description: 'Every step, in order, each time.' },
+    done: { type: 'array', items: { type: 'number' }, description: '0-based indexes of finished steps.' },
+    active: { type: 'number', description: '0-based index of the step in progress now.' },
+  },
   required: ['items'],
-}, async ({ items, done = [] }, ctx) => {
-  ctx.session.todos = items.map((text, i) => ({ text, done: done.includes(i) }));
+}, async ({ items, done = [], active }, ctx) => {
+  const doneSet = new Set((Array.isArray(done) ? done : []).map(Number));
+  ctx.session.todos = (items || []).map((text, i) => ({ text: String(text), done: doneSet.has(i), active: i === Number(active) && !doneSet.has(i) }));
   ctx.emit({ type: 'todos', todos: ctx.session.todos });
   return { todos: ctx.session.todos };
 });

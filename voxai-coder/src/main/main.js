@@ -679,7 +679,7 @@ app.whenReady().then(() => {
     controllers.set(runKey, ctl);
     const w = win();
 
-    const askPermission = ({ kind, target }) => new Promise((resolve) => {
+    const askPermission = ({ kind, target, note }) => new Promise((resolve) => {
       // whole-session allow (prototype "allow for the whole session"): remember
       // this exact target so future identical requests auto-allow without prompting.
       const key = kind + '\u0000' + String(target || '');
@@ -696,15 +696,18 @@ app.whenReady().then(() => {
           resolve(v);
         },
       });
-      const c0 = chatWebContents(); c0 && c0.send('agent:permission', { permId, sessionId, kind, target, canAlways: true });
+      const c0 = chatWebContents(); c0 && c0.send('agent:permission', { permId, sessionId, kind, target, canAlways: true, note: note || '' });
     });
 
     const askUserInput = ({ question, options, kind }) => new Promise((resolve) => {
       const inputId = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
       const timer = setTimeout(() => { pendingInputs.delete(inputId); resolve({ answer: null, cancelled: true }); }, 600000);
       pendingInputs.set(inputId, { resolve: (v) => { clearTimeout(timer); resolve(v); } });
+      // Through the agent-event channel the thread already draws. It was sent on its own
+      // 'agent:user_input' channel that nothing listened to, so the agent's questions
+      // never appeared and the run sat waiting ten minutes for an answer. Found in a live run.
       const c1 = chatWebContents();
-      c1 && c1.send('agent:user_input', { inputId, question, options: options || [], kind: kind || 'ask' });
+      c1 && c1.send('agent:event', { sessionId, runKey, event: { type: 'user_input', inputId, question, options: options || [], kind: kind || 'ask' } });
     });
 
     (async () => {
@@ -1003,10 +1006,17 @@ ipcMain.handle('openrouter:generations', async (_e, { limit = 40, cursor } = {})
           vision: m.architecture && Array.isArray(m.architecture.input_modalities)
             ? m.architecture.input_modalities.includes('image') : null,
           maxCompletion: (m.top_provider && m.top_provider.max_completion_tokens) || null,
+          // Can it do this job at all? It has to write text and call tools. Image and
+          // audio generators (Nano Banana, GPT Image, Lyria...) and models without tool
+          // calling were all in the picker; none of them can read or edit a file.
+          coding: params.has('tools') && !!(m.architecture && Array.isArray(m.architecture.output_modalities)
+            && m.architecture.output_modalities.length === 1 && m.architecture.output_modalities[0] === 'text'),
         };
       });
+      // Every model stays known for capability checks (an older session may name one),
+      // but the picker is offered only the ones that can code.
       modelCapCache = { at: Date.now(), byId: new Map(models.map((m) => [m.id, m])) };
-      return { ok: true, models };
+      return { ok: true, models: models.filter((m) => m.coding) };
     } catch (e) {
       return { ok: false, error: String((e && e.message) || e) };
     }

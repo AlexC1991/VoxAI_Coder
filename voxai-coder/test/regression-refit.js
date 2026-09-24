@@ -70,18 +70,28 @@ async function drain(gen) {
       return { asked, end: ev.find((e) => e.type === 'tool_end' && e.name === 'shell') };
     };
 
-    const ok = await runShell('edit', 'echo refit-ok', true);
-    check('Allow runs the command', ok.end && ok.end.ok === true && /refit-ok/.test(JSON.stringify(ok.end.result)), ok.end);
+    const ok = await runShell('edit', 'node -e console.log(424242)', true);
+    check('Allow runs the command', ok.end && ok.end.ok === true && /424242/.test(JSON.stringify(ok.end.result)), ok.end);
     check('asked exactly once, not again by the tool', ok.asked.length === 1, ok.asked);
-    check('the prompt shows the command, not JSON', ok.asked[0] && ok.asked[0].kind === 'shell' && ok.asked[0].target === 'echo refit-ok', ok.asked[0]);
+    check('the prompt shows the command, not JSON', ok.asked[0] && ok.asked[0].kind === 'shell' && ok.asked[0].target === 'node -e console.log(424242)', ok.asked[0]);
 
-    const no = await runShell('edit', 'echo should-not-run', false);
+    const no = await runShell('edit', 'node -e console.log(737373)', false);
     check('Deny stops it', no.end && no.end.ok === false && /permission denied/.test(String(no.end.result)), no.end);
-    check('and it is not run', !/should-not-run/.test(JSON.stringify(no.end && no.end.result)), no.end);
+    check('and it is not run', !/"stdout"/.test(String(no.end && no.end.result)), no.end);
+
+    // Read-only commands run at every level without a prompt; anything that changes
+    // something still asks.
+    const ro = await runShell('ask', 'dir', true);
+    check('a read-only command runs without asking, even at Ask first', ro.asked.length === 0 && ro.end && ro.end.ok === true, ro.asked);
+    const { isReadOnlyCommand } = require(path.join(ROOT, 'src/backend/tools/sandbox.js'));
+    const readOnly = ['dir /b', 'git status', 'git log --oneline -5', 'type README.md | findstr todo', 'node --version'];
+    const changes = ['ls > out.txt', 'del a.txt', 'git push', 'git branch -D x', 'cat a && rm b', 'dir /b && node todo.js list', 'npm install'];
+    check('read-only commands are recognised', readOnly.every(isReadOnlyCommand), readOnly.filter((c) => !isReadOnlyCommand(c)));
+    check('anything that changes something is not', !changes.some(isReadOnlyCommand), changes.filter(isReadOnlyCommand));
 
     const t = await runShell('test', 'ruff --version', true);
     check('Edit and test runs a check without asking', t.asked.length === 0, t.asked);
-    const t2 = await runShell('test', 'echo other', true);
+    const t2 = await runShell('test', 'node -e 1', true);
     check('Edit and test still asks about other commands', t2.asked.length === 1, t2.asked);
 
     // Writing at "ask first": one prompt, then the file exists.
@@ -235,6 +245,135 @@ async function drain(gen) {
     const ev = await drain(runAgent({ session: { id: 'cf', workdir: WD, messages: [] }, userText: 'go', apiKey: 'k', model: 'm', access: 'full', askPermission: async () => true, maxTurns: 2, signal: ctl.signal }));
     const last = ev[ev.length - 1] || {};
     check('an aborted request ends as cancelled', last.type === 'cancelled', last);
+  }
+
+  // ------------------------------------------------------------------ [CG]
+  console.log('\n[CG] a resumed sub-agent keeps its role');
+  {
+    const store = require(path.join(ROOT, 'src/backend/sessions.js'));
+    const { makeSpawnTool } = require(path.join(ROOT, 'src/backend/tools/spawn.js'));
+    const UD = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-resume-'));
+    const reviewer = store.createSession({ workdir: WD, model: 'm', title: 'subagent:review', parentId: 'p1' });
+    await store.saveSession(UD, reviewer);
+    let got = null;
+    const runner = (opts) => { got = opts; return (async function* () { yield { type: 'done', content: 'ok' }; })(); };
+    const tool = makeSpawnTool({ runner, agentOpts: { workdir: WD, sessionId: 'p1', model: 'm', access: 'full' }, userData: UD, emit: () => {} });
+    await tool.run('spawn_agent', { resume: reviewer.id, task: 'wrap up now' }, { workdir: WD, session: { id: 'p1' } });
+    check('resumed without a role, a reviewer stays a reviewer', got && got.access === 'ask', got && got.access);
+    check('and still cannot write or run commands', got && Array.isArray(got.allowTools) && !got.allowTools.includes('write') && !got.allowTools.includes('shell'), got && got.allowTools);
+    try { fs.rmSync(UD, { recursive: true, force: true }); } catch {}
+
+    // The sub-agent approval is readable: its role and task, not cut-off JSON.
+    fakeOpenRouter((n) => (n === 1 ? call('s1', 'spawn_agent', { role: 'review', task: 'Look at todo.js for bugs in the done command.' }) : say('done')));
+    const asked = [];
+    await drain(runAgent({ session: { id: 'cg', workdir: WD, messages: [] }, userText: 'go', apiKey: 'k', model: 'm', access: 'test', askPermission: async (q) => { asked.push(q); return false; }, maxTurns: 3 }));
+    check('the sub-agent request reads as role: task', asked[0] && asked[0].target === 'review: Look at todo.js for bugs in the done command.', asked[0]);
+  }
+
+  // ------------------------------------------------------------------ [CH]
+  console.log('\n[CH] the thread: following new output, the plan, running steps');
+  {
+    const HTML = read('src/renderer/index.html');
+    check('no forced scroll-into-view left in the thread', (HTML.match(/scrollIntoView\(\{\s*block:\s*'end'/g) || []).length === 0, 'still forcing');
+    check('scrolling up lets go; the bottom re-attaches', HTML.includes('THREAD_STICK = threadAtBottom(sc);') && /deltaY < 0\) \{ THREAD_JUMPING = false; if \(THREAD_STICK\)/.test(HTML), 'always follows');
+    check('Jump to latest lights up when output grows below', HTML.includes('else if (grew) { THREAD_UNSEEN = true; paintJump(); }'), 'no signal');
+    // The plan: pinned to the message box (always in view), Codex-style, not in the thread.
+    check('the plan is a tab on the box edge with a drawer (design B)', /<div class="plan-tab" id="planTab" hidden>\s*<div class="pt-drawer" id="planList"/.test(HTML) && HTML.includes('function paintPlanTray()') && !HTML.includes("'todos:\\n'"), 'not the pull tab');
+    check('the plan is not drawn into the thread', !/v\.todosEl = el\('div', 'plan'\)/.test(HTML), 'still in the thread');
+    const TOOLS = read('src/backend/tools/index.js');
+    check('the plan tool tells the model to keep it moving', /call it again with the whole list each time a step/.test(TOOLS) && /active: \{ type: 'number'/.test(TOOLS), 'written once, never ticked');
+    // An image and a model that cannot see it: said on the shelf, with a fix; Send keeps it.
+    check('a text-only model with an image is flagged before Send', HTML.includes('function imageProblem()') && HTML.includes("can\\u2019t see images.") && HTML.includes('if (parts.length && imageProblem())'), 'refused after Send');
+    check('a refused send is not drawn as sent', HTML.includes('try { if (bubble) bubble.remove(); } catch {}'), 'bubble left behind');
+    check('the plan tool row reads as a plan', HTML.includes("return items ? 'plan \\u00b7 ' + items.length"), 'raw JSON');
+    check('a running step keeps its clock going', HTML.includes('const end = card.running ? Date.now() : (card.t1 || 0);'), 'frozen');
+    check('after an approval the shelf says what is running again', HTML.includes("setActivity(v, allowed ? (p.kind === 'spawn_agent'"), 'stuck on Waiting for you');
+    check('Stop is a soft red button', HTML.includes('.send.stop{background:rgba(207,122,102,.12)'), 'gold with a red square');
+  }
+
+  // ------------------------------------------------------------------ [CI]
+  console.log('\n[CI] an earlier image does not lock a session to vision models');
+  {
+    let body = null;
+    global.fetch = async (_u, opts) => {
+      body = JSON.parse(opts.body);
+      const enc = new TextEncoder();
+      return { ok: true, text: async () => '', body: new ReadableStream({ start(c) { for (const ch of say('ok')) c.enqueue(enc.encode('data: ' + JSON.stringify(ch) + '\n\n')); c.enqueue(enc.encode('data: [DONE]\n\n')); c.close(); } }) };
+    };
+    const session = { id: 'ci', workdir: WD, messages: [
+      { role: 'user', content: [{ type: 'text', text: 'what is this?' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,iVBORw0KGgo=' } }] },
+      { role: 'assistant', content: 'A gold chevron.' },
+    ] };
+    await drain(runAgent({ session, userText: 'now add a clear command', apiKey: 'k', model: 'm', access: 'full', askPermission: async () => true, maxTurns: 2, modelVision: false }));
+    const sent = JSON.stringify(body && body.messages);
+    check('a text-only model is sent no image', body && !sent.includes('image_url'), 'image sent');
+    check('it is told one was there', /an image was attached here/.test(sent), 'silently dropped');
+    check('the saved history keeps the image', JSON.stringify(session.messages[0]).includes('image_url'), 'history rewritten');
+  }
+
+  // ------------------------------------------------------------------ [CJ]
+  console.log('\n[CJ] Auto mode: a safety check instead of a prompt');
+  {
+    // Streamed requests are the agent's turns; the one plain request per action is the check.
+    const autoRun = async (verdicts, calls) => {
+      let turn = 0, checks = 0;
+      global.fetch = async (_u, opts) => {
+        const body = JSON.parse(opts.body);
+        const enc = new TextEncoder();
+        if (!body.stream) {
+          const v = verdicts[Math.min(checks, verdicts.length - 1)]; checks++;
+          return { ok: true, text: async () => JSON.stringify({ choices: [{ message: { content: JSON.stringify(v) } }], usage: { prompt_tokens: 50, completion_tokens: 10, cost: 0.00001 } }) };
+        }
+        turn++;
+        const chunks = turn <= calls ? call('a' + turn, 'shell', { command: 'node -e console.log(' + (500 + turn) + ')' }) : say('done');
+        return { ok: true, text: async () => '', body: new ReadableStream({ start(c) { for (const ch of chunks) c.enqueue(enc.encode('data: ' + JSON.stringify(ch) + '\n\n')); c.enqueue(enc.encode('data: [DONE]\n\n')); c.close(); } }) };
+      };
+      const asked = [];
+      const ev = await drain(runAgent({ session: { id: 'cj', workdir: WD, messages: [] }, userText: 'run it', apiKey: 'k', model: 'm', access: 'auto', askPermission: async (q) => { asked.push(q); return true; }, maxTurns: calls + 2 }));
+      return { asked, checks, ends: ev.filter((e) => e.type === 'tool_end'), usage: ev.filter((e) => e.type === 'usage' && e.usage.source === 'auto-check') };
+    };
+    let r = await autoRun([{ decision: 'allow', reason: 'runs a script the user asked for' }], 1);
+    check('allowed by the check: it runs, nobody is asked', r.asked.length === 0 && r.ends[0] && r.ends[0].ok === true, r);
+    check('the check is paid for and counted', r.usage.length === 1 && r.usage[0].usage.cost > 0, r.usage);
+    r = await autoRun([{ decision: 'block', reason: 'not part of the request' }], 1);
+    check('blocked: it does not run, and the model is told why', r.asked.length === 0 && r.ends[0] && r.ends[0].ok === false && /blocked by Auto mode: not part of the request/.test(r.ends[0].result), r.ends[0]);
+    r = await autoRun([{ decision: 'block', reason: 'too risky' }], 3);
+    check('the third block in a row goes to the user, with the reason', r.asked.length === 1 && /Auto mode held this back: too risky/.test(r.asked[0].note), r.asked);
+    r = await autoRun([{ nonsense: true }], 1);
+    check('no clear answer from the check: the user decides', r.asked.length === 1 && /could not check/.test(r.asked[0].note), r.asked);
+
+    const HTML = read('src/renderer/index.html');
+    check('Auto is in the Permissions menu', /const ACCESS = \['ask','edit','test','auto','full'\]/.test(HTML) && /auto:'Auto'/.test(HTML), 'missing');
+    const SB = require(path.join(ROOT, 'src/backend/tools/sandbox.js'));
+    check('Auto is its own level, allowing what Edit and test allows', SB.normalizeAccess('auto') === 'auto' && SB.checkToolAllowed('write', 'auto').allowed === true && SB.checkToolAllowed('shell', 'auto').needsPermission === true, 'wrong level');
+  }
+
+  // ------------------------------------------------------------------ [CK]
+  console.log('\n[CK] the picker offers only models that can code');
+  {
+    const MAIN = read('src/main/main.js');
+    check('text out and tool calls, or not in the picker', /coding: params\.has\('tools'\) && [\s\S]{0,200}output_modalities\[0\] === 'text'/.test(MAIN) && MAIN.includes('models: models.filter((m) => m.coding)'), 'every model offered');
+  }
+
+  // ------------------------------------------------------------------ [CL]
+  console.log('\n[CL] the plan keeps moving; the agent\'s questions reach the screen');
+  {
+    // A plan, then several actions with no update: the model is reminded, once.
+    const seq = [call('p0', 'todo', { items: ['one', 'two', 'three'], active: 0 })];
+    for (let i = 1; i <= 5; i++) seq.push(call('r' + i, 'glob', { pattern: '*' + i }));
+    let bodies = [];
+    fakeOpenRouter((n, body) => { bodies.push(body); return seq[n - 1] || say('done'); });
+    const sess = { id: 'cl', workdir: WD, messages: [] };
+    await drain(runAgent({ session: sess, userText: 'go', apiKey: 'k', model: 'm', access: 'full', askPermission: async () => true, maxTurns: 10 }));
+    const toolMsgs = sess.messages.filter((m) => m.role === 'tool').map((m) => String(m.content));
+    const nudged = toolMsgs.filter((t) => t.includes('[plan check]'));
+    check('an untouched plan earns one reminder', nudged.length === 1, nudged.length);
+    check('the reminder comes after four actions', toolMsgs[4] && toolMsgs[4].includes('[plan check]'), toolMsgs.map((t) => t.includes('[plan check]')));
+
+    const MAIN = read('src/main/main.js');
+    check('questions go out on the channel the thread listens to', /c1\.send\('agent:event', \{ sessionId, runKey, event: \{ type: 'user_input'/.test(MAIN) && !MAIN.includes("c1.send('agent:user_input'"), 'unheard channel');
+    const HTML = read('src/renderer/index.html');
+    check('an answered question stays as one line with the answer', HTML.includes("line.lastChild.textContent = label ? 'You chose: ' + label : 'No answer';"), 'vanishes');
   }
 
   try { fs.rmSync(WD, { recursive: true, force: true }); } catch {}

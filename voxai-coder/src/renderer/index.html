@@ -149,7 +149,7 @@ tests"). Scroll the row instead of breaking words:
 .send{width:32px;height:32px;flex:none;border:1px solid var(--gold);border-radius:9px;background:var(--gold);cursor:pointer;display:flex;align-items:center;justify-content:center;color:#0e0e10;transition:background .12s,color .12s,border-color .12s,opacity .12s}
 .send:hover:not(:disabled){background:#d8bb74;border-color:#d8bb74}
 .send:disabled{background:var(--panel2);border-color:var(--edge2);color:var(--faint);cursor:default}
-.send.stop{border-color:var(--del);color:var(--del)}
+.send.stop{background:rgba(207,122,102,.12);border-color:var(--del);color:var(--del)}
 .send.stop:hover:not(:disabled){background:var(--del);color:#0e0e10;border-color:var(--del)}
 .send .ico-stop{display:none}
 .send.stop .ico-send{display:none}
@@ -461,6 +461,39 @@ tests"). Scroll the row instead of breaking words:
 .md{font-size:15px;line-height:1.65;text-wrap:pretty;overflow-wrap:break-word}
 .user{align-self:flex-end;max-width:80%;background:var(--panel2);border:0;border-radius:14px 14px 4px 14px;padding:10px 14px;font-size:14.5px;line-height:1.55}
 .col{gap:16px}
+/* the plan: a tab on the box's top edge, the whole plan in a drawer that rises behind it */
+.plan-tab{position:relative;display:flex;align-items:flex-end;height:30px;padding-left:16px;margin-bottom:-7px;z-index:4}  /* -7: the composer's 6px gap, plus 1px over the box border so the tab joins it */
+.plan-tab[hidden]{display:none}
+.pt-tab{position:relative;z-index:2;display:flex;align-items:center;gap:8px;height:31px;max-width:min(460px,calc(100% - 32px));padding:0 12px;background:var(--panel);border:1px solid var(--edge2);border-bottom-color:var(--panel);border-radius:10px 10px 0 0;color:var(--ink);font:12.5px Chivo,sans-serif;cursor:pointer;text-align:left}
+.pt-tab:hover .pt-now{color:var(--ink)}
+.pt-tab:focus-visible{outline:2px solid var(--goldedge);outline-offset:2px}
+.pt-ring{flex:none}
+.pt-ring .trk{fill:none;stroke:var(--edge2);stroke-width:2.6}
+.pt-ring .arc{fill:none;stroke:var(--gold);stroke-width:2.6;stroke-linecap:round;transition:stroke-dashoffset .45s cubic-bezier(.22,.61,.36,1),stroke .3s}
+.plan-tab.complete .pt-ring .arc{stroke:var(--add)}
+.pt-count{flex:none;font:500 11.5px "Sometype Mono",monospace;color:var(--sub)}
+.pt-now{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--mut)}
+.plan-tab.complete .pt-now{color:var(--add)}
+.pt-chev{flex:none;color:var(--sub);font-size:9px;transition:transform .2s}
+.plan-tab.open .pt-chev{transform:rotate(180deg)}
+.pt-drawer{position:absolute;left:16px;bottom:0;z-index:1;width:min(480px,calc(100% - 32px));max-height:min(46vh,360px);overflow:auto;display:flex;flex-direction:column;padding:12px 16px 42px;background:var(--panel2);border:1px solid var(--edge2);border-bottom:0;border-radius:12px 12px 0 0;box-shadow:0 -22px 44px -26px rgba(0,0,0,.85);opacity:0;transform:translateY(10px);pointer-events:none;transition:opacity .18s ease,transform .24s cubic-bezier(.22,.61,.36,1)}
+.plan-tab.open .pt-drawer{opacity:1;transform:none;pointer-events:auto}
+.plan-tab.open .pt-tab{background:var(--panel2);border-color:var(--edge2);border-bottom-color:var(--panel2)}
+.pt-dh{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;font-size:12px;color:var(--sub)}
+.pt-dh b{color:var(--ink);font-weight:600;font-size:12.5px}
+.pt-dh span{font:11.5px "Sometype Mono",monospace}
+.pt-step{position:relative;display:grid;grid-template-columns:12px minmax(0,1fr);gap:10px;padding:3px 0;font-size:13px;line-height:1.45;color:var(--sub)}
+.pt-step::before{content:"";position:absolute;left:5.5px;top:16px;bottom:-5px;width:1px;background:var(--edge2)}
+.pt-step:last-child::before{display:none}
+.pt-dot{position:relative;z-index:1;width:12px;height:12px;margin-top:3px;border-radius:50%;border:1.5px solid var(--edge2);background:var(--panel2)}
+.pt-step.is-done .pt-dot{background:var(--add);border-color:var(--add)}
+.pt-step.is-done::before{background:rgba(147,184,132,.45)}
+.pt-step.is-now{color:var(--ink)}
+.pt-step.is-now .pt-dot{border-color:var(--gold);box-shadow:0 0 0 3px rgba(200,169,97,.18);animation:railPulse 1.6s ease-in-out infinite}
+.pt-step.is-todo{color:var(--mut)}
+@media (prefers-reduced-motion: reduce){ .pt-drawer,.pt-ring .arc{transition:none} .pt-step.is-now .pt-dot{animation:none} }
+.sh-warn.flash{animation:shFlash .5s ease 2}
+@keyframes shFlash{50%{opacity:.35}}
 .fold{display:flex;align-items:center;gap:12px;font:12px "Sometype Mono",monospace;color:var(--sub)}
 .fold::before,.fold::after{content:"";flex:1;height:1px;background:var(--edge)}
 
@@ -491,6 +524,11 @@ tests"). Scroll the row instead of breaking words:
 
 /* ---- the message box ---- */
 .composer{gap:6px;container-type:inline-size}
+.composer-zone{position:relative}
+.jump-latest{position:absolute;top:-34px;left:50%;transform:translateX(-50%);display:flex;align-items:center;gap:6px;height:28px;padding:0 12px;border-radius:999px;border:1px solid var(--edge2);background:var(--panel2);color:var(--mut);font:12.5px Chivo,sans-serif;cursor:pointer;box-shadow:0 8px 20px -8px rgba(0,0,0,.7);z-index:6}
+.jump-latest[hidden]{display:none}
+.jump-latest:hover{color:var(--ink);border-color:var(--sub)}
+.jump-latest.fresh{color:var(--gold);border-color:var(--goldedge)}
 /* The controls row never hides Send: the model name gives way first, then the icons. */
 .composer-row{overflow:visible}
 #chipModel{flex:0 1 auto;min-width:56px}
@@ -582,6 +620,11 @@ tests"). Scroll the row instead of breaking words:
 .ask-what{margin:0;font:12.5px "Sometype Mono",monospace;color:var(--mut);background:var(--bg);border:1px solid var(--edge);border-radius:8px;padding:9px 12px;white-space:pre-wrap;word-break:break-word;max-height:30vh;overflow:auto}
 .ask-acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .ask:focus{outline:none}
+.ask-note{font-size:12.5px;color:var(--gold)}
+.uq-done{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;font-size:13px;color:var(--sub);padding-left:12px;border-left:2px solid var(--goldedge)}
+.uq-done .uq-q{color:var(--mut)}
+.uq-done .uq-a{color:var(--ink)}
+.ask-note[hidden]{display:none}
 .ask-draft{font-size:12.5px;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ask-draft b{color:var(--mut);font-weight:400}
 .b{font:600 12.5px Chivo,sans-serif;padding:7px 13px;border-radius:8px;border:1px solid var(--edge2);color:var(--mut);background:var(--panel2);cursor:pointer}
@@ -726,10 +769,14 @@ tests"). Scroll the row instead of breaking words:
       <div class="scroll"><div id="thread" style="width:100%;max-width:760px;display:flex;flex-direction:column;padding-bottom:20px">
         <div class="msg" style="color:var(--dim)">Open a folder, pick an OpenRouter model in ⚙ Settings, and ask for code. The agent runs on your own <b style="color:var(--gold)">vox</b> backend — file edits, shell, tests — billed to your OpenRouter key.</div>
       </div></div>
-      <div class="composer-zone"><div class="composer">
+      <div class="composer-zone"><button class="jump-latest" id="jumpLatest" type="button" hidden><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><polyline points="6 13 12 19 18 13"/></svg>Jump to latest</button><div class="composer">
         <!-- The changed files open ABOVE the box; everything else that used to stack up
              here (queue, steering, approvals, attachments, changes) lives inside it. -->
         <div class="difflist" id="diffList" style="display:none"></div>
+<div class="plan-tab" id="planTab" hidden>
+          <div class="pt-drawer" id="planList" role="list" aria-label="Plan"></div>
+          <button class="pt-tab" id="planHead" type="button" aria-expanded="false" aria-controls="planList"><svg class="pt-ring" viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><circle class="trk" cx="10" cy="10" r="7"></circle><circle class="arc" id="planArc" cx="10" cy="10" r="7" stroke-dasharray="43.98" stroke-dashoffset="43.98" transform="rotate(-90 10 10)"></circle></svg><span class="pt-count" id="planCount"></span><span class="pt-now" id="planNow"></span><span class="pt-chev" aria-hidden="true">▴</span></button>
+        </div>
 <div class="box" id="cmpBox">
           <!-- queued messages: open on top of the box, with grip, Steer, Edit and remove -->
           <div class="qrows" id="qrows" hidden></div>
@@ -737,6 +784,7 @@ tests"). Scroll the row instead of breaking words:
           <div class="shelf" id="shelf" hidden>
             <span class="sh-work" id="shWork" hidden><span class="spin"></span><span id="shWorkTxt">Working</span><span class="tm" id="shWorkTm"></span></span>
             <span class="sh-warn" id="shWarn" hidden><span id="shWarnTxt"></span><button class="sh-lnk" id="shCompact" type="button">Summarise now</button></span>
+            <span class="sh-warn" id="shImg" hidden><span id="shImgTxt"></span><button class="sh-lnk" id="shImgFix" type="button"></button></span>
             <span class="sh-steer" id="steerHint" hidden>Steering message <b id="steerHintTarget"></b><button id="steerHintCancel" type="button">Cancel</button></span>
             <div id="attachTray" class="attach-tray" hidden></div>
             <span class="sh-sp"></span>
@@ -751,6 +799,7 @@ tests"). Scroll the row instead of breaking words:
           <div class="ask" id="askBox" hidden tabindex="-1">
             <div class="ask-h"><b id="askTitle">Run a command?</b><span id="askSub"></span></div>
             <pre class="ask-what" id="askWhat"></pre>
+            <div class="ask-note" id="askNote" hidden></div>
             <div class="ask-draft" id="askDraft" hidden></div>
             <div class="ask-acts">
               <button class="b lnk" id="askDetail" type="button">Details</button>
@@ -911,12 +960,13 @@ tests"). Scroll the row instead of breaking words:
 <script>
 const $ = (id) => document.getElementById(id);
 // Access levels: short names for the chip, one plain sentence each for the menu.
-const ACCESS = ['ask','edit','test','full'];
-const ACCESS_LABELS = { ask:'Ask first', edit:'Edit files', test:'Edit and test', full:'Full access' };
+const ACCESS = ['ask','edit','test','auto','full'];
+const ACCESS_LABELS = { ask:'Ask first', edit:'Edit files', test:'Edit and test', auto:'Auto', full:'Full access' };
 const ACCESS_NOTES = {
   ask: 'Reads and searches the project. Asks before any change.',
   edit: 'Edits files and searches the web. Asks before running commands.',
   test: 'Also runs tests and checks, like npm test or pytest. Asks before other commands.',
+  auto: 'Like Edit and test, and a safety check decides the rest: it runs what is safe for your request, holds back anything risky, and asks you after repeated holds.',
   full: 'Runs any command without asking. Destructive system commands are still blocked.',
 };
 // OpenRouter's thinking levels, least to most, as the menu names them.
@@ -1275,10 +1325,47 @@ function paintShelf(){
   const busy = !!(v && v.busy);
   if (work) work.hidden = steering || !busy;
   if (busy) paintWork(v);
+  const img = imageProblem(), iw = $('shImg');
+  if (iw) {
+    iw.hidden = !img;
+    if (img) {
+      $('shImgTxt').textContent = img.name + ' can\u2019t see images.';
+      const fx = $('shImgFix');
+      fx.hidden = !img.fix;
+      if (img.fix) { fx.textContent = 'Use ' + describeModel(img.fix).name; fx.title = img.fix.id + ' \u00b7 ' + modelPrice(img.fix) + ' per 1M'; fx.onclick = async () => { await setModel(img.fix.id); paintShelf(); }; }
+    }
+  }
   const w = v ? contextWarning(v.ctxFill) : '';
-  if (warn) { warn.hidden = steering || busy || !w; $('shWarnTxt').textContent = w; }
+  if (warn) { warn.hidden = steering || busy || !w || !!img; $('shWarnTxt').textContent = w; }
   const any = [...$('shelf').children].some((c) => !c.hidden && !c.classList.contains('sh-sp'));
   $('shelf').hidden = !any;
+  paintPlanTray();
+}
+
+/**
+ * A model that can see images and use tools, for when the current one cannot see an
+ * attachment: the same provider's cheapest first, else the cheapest anywhere. From the
+ * catalogue, so nothing here names a model.
+ */
+function suggestVisionModel(id){
+  if (!ALL_MODELS.length) return null;
+  if (!PK_BROWSE) PK_BROWSE = browseModelIds(ALL_MODELS);
+  const cur = modelEntry(id);
+  const prov = cur ? describeModel(cur).provider : '';
+  const price = (m) => (Number(m.promptCents) || 0) + (Number(m.completionCents) || 0);
+  const ok = ALL_MODELS.filter((m) => m.vision === true && m.tools !== false && PK_BROWSE.has(m.id) && price(m) > 0);
+  const same = ok.filter((m) => describeModel(m).provider === prov);
+  const pool = same.length ? same : ok;
+  return pool.slice().sort((a, b) => price(a) - price(b))[0] || null;
+}
+/** Images attached, and the model cannot see them: say so now, not after Send. */
+function imageProblem(){
+  let pending = [];
+  try { pending = PENDING_ATTACH; } catch { return null; }   // the shelf can paint before attachments exist
+  if (!pending.length) return null;
+  const id = activeModel(), m = modelEntry(id);
+  if (!m || m.vision !== false) return null;
+  return { name: describeModel(m).name, fix: suggestVisionModel(id) };
 }
 
 /** What the run is doing, in words, and for how long. */
@@ -1673,15 +1760,73 @@ function paintActive(){
   try { refreshChips(); } catch {}   // the model chip follows the session you switch to
   const busy = !!(v && v.busy);
   $('runDot').style.display = busy ? 'block' : 'none';
+  // A session opens at its newest message, following from there.
+  requestAnimationFrame(() => followThread(true));
   // Everything in the box belongs to the session on screen.
   renderQueue(v);
   const hint = $('steerHint'); if (hint) hint.hidden = !(v && v.steerIdx != null);
-  paintAsk(); paintMeter(); paintShelf();
+  paintAsk(); paintMeter(); paintShelf(); paintPlanTray();
   updateSendState();
 }
 
+// ---- the thread follows new output, unless you have scrolled up to read ----
+// It used to scroll every new line into view, so reading anything above the latest
+// output meant being dragged back down several times a second. Now: at the bottom it
+// follows; scroll up and it lets go until you are back at the newest line.
+let THREAD_STICK = true;
+let THREAD_UNSEEN = false;   // new output arrived while you were reading above it
+let THREAD_OURS = null;      // where our own last scroll left it, to tell it from yours
+let THREAD_JUMPING = false;  // the smooth "Jump to latest" is under way
+function threadScroller(){ return document.querySelector('#screen-work .scroll'); }
+function threadAtBottom(sc){ return sc.scrollHeight - sc.scrollTop - sc.clientHeight < 32; }
+function followThread(force){
+  const sc = threadScroller(); if (!sc) return;
+  if (force) { THREAD_STICK = true; THREAD_UNSEEN = false; }
+  if (THREAD_STICK) {
+    if (sc.scrollHeight - sc.scrollTop - sc.clientHeight > 1) { sc.scrollTop = sc.scrollHeight; THREAD_OURS = sc.scrollTop; }
+  } else THREAD_UNSEEN = true;
+  paintJump();
+}
+function paintJump(){
+  const b = $('jumpLatest'); if (!b) return;
+  b.hidden = THREAD_STICK;
+  b.classList.toggle('fresh', !THREAD_STICK && THREAD_UNSEEN);
+}
+(function wireThreadFollow(){
+  const sc = threadScroller(); if (!sc) return;
+  sc.addEventListener('scroll', () => {
+    // Scroll events are merged per frame, so they cannot be counted; ours are the ones
+    // that land where we put it.
+    if (THREAD_OURS !== null && Math.abs(sc.scrollTop - THREAD_OURS) < 2) return;
+    if (THREAD_JUMPING) { if (threadAtBottom(sc)) THREAD_JUMPING = false; return; }
+    // Your scroll: back at the newest line re-attaches; anywhere above lets go.
+    THREAD_STICK = threadAtBottom(sc);
+    if (THREAD_STICK) THREAD_UNSEEN = false;
+    paintJump();
+  }, { passive: true });
+  // Scrolling up by even a notch lets go at once, before the 32px margin is crossed.
+  sc.addEventListener('wheel', (e) => { if (e.deltaY < 0) { THREAD_JUMPING = false; if (THREAD_STICK) { THREAD_STICK = false; paintJump(); } } }, { passive: true });
+  sc.addEventListener('keydown', (e) => { if (['ArrowUp', 'PageUp', 'Home'].includes(e.key)) { THREAD_STICK = false; paintJump(); } });
+  // Content that grows after it is added (the typewriter, markdown rendering, images
+  // loading, a step opening) keeps the view at the bottom while stuck.
+  const th = $('thread');
+  let lastH = th ? th.scrollHeight : 0;
+  if (th && window.ResizeObserver) new ResizeObserver(() => {
+    const h = th.scrollHeight, grew = h > lastH + 1;
+    lastH = h;
+    if (THREAD_STICK) followThread();
+    else if (grew) { THREAD_UNSEEN = true; paintJump(); }   // new output below where you are reading
+  }).observe(th);
+  if (window.ResizeObserver) new ResizeObserver(() => { if (THREAD_STICK) followThread(); }).observe(sc);
+  $('jumpLatest').onclick = () => {
+    THREAD_STICK = true; THREAD_UNSEEN = false; paintJump();
+    THREAD_JUMPING = true;
+    sc.scrollTo({ top: sc.scrollHeight, behavior: 'smooth' });
+  };
+})();
+
 // --- simple blocks ---
-function addMsg(text){ const m = el('div','md'); m.innerHTML = renderVTE(text||''); const r = RR(); if(r){ r.appendChild(m); m.scrollIntoView({block:'end'}); } return m; }
+function addMsg(text){ const m = el('div','md'); m.innerHTML = renderVTE(text||''); const r = RR(); if(r){ r.appendChild(m); followThread(); } return m; }
 function addUser(text, attachParts){
   const u = el('div','user');
   if (attachParts && attachParts.length) {
@@ -1695,7 +1840,7 @@ function addUser(text, attachParts){
     }
   }
   const t = el('div'); t.textContent = text || ''; u.appendChild(t);
-  const r = RR(); if(r){ r.appendChild(u); u.scrollIntoView({block:'end'}); }
+  const r = RR(); if(r){ r.appendChild(u); followThread(true); }
   return u;
 }
 function setStatus(t){ const v = RT(); if(!v) return; setActivity(v, t.charAt(0).toUpperCase() + t.slice(1).replace(/\u2026$/, '')); }
@@ -1706,7 +1851,7 @@ function newStreamBlock(){
   const v = RT(); if(!v) return null;
   v.pending = ''; v.pi = 0; v.shown = '';
   const m = el('div','md'); m.className = 'md live'; m.dataset.raw='';
-  v.curStream = m; v.root.appendChild(m); m.scrollIntoView({block:'end'});
+  v.curStream = m; v.root.appendChild(m); followThread();
   startTyping(v);
   return m;
 }
@@ -1726,7 +1871,7 @@ function paintTyped(v){
   const cur = document.createElement('span');
   cur.className = 'cursor';
   v.curStream.appendChild(cur);
-  v.curStream.scrollIntoView({block:'end'});
+  followThread();
 }
 function startTyping(v){
   if(v.typeTimer) return;
@@ -1760,6 +1905,7 @@ function kindName(name){
   if (name==='grep') return 'GREP';
   if (name==='shell') return /Windows/i.test(navigator.userAgent) ? 'CMD' : 'SHELL';  // it runs cmd.exe on Windows, /bin/sh elsewhere
   if (name==='todo') return 'TODO';
+  if (name==='ask_user' || name==='ask_confirm') return 'ASK';
   if (name==='memory') return 'MEMORY';
   if (name==='rag') return 'RAG';
   if (name==='worktree') return 'GIT';
@@ -1781,6 +1927,12 @@ function kindName(name){
 function kindSt(name){ return (name==='write'||name==='edit') ? 'write' : 'read'; }
 function cmdFor(name, args){
   if (!args) return '';
+  if (name === 'ask_user') return String(args.question || '').replace(/\s+/g, ' ');
+  if (name === 'ask_confirm') return String(args.message || '').replace(/\s+/g, ' ');
+  if (name === 'todo') {
+    const items = Array.isArray(args.items) ? args.items : (Array.isArray(args.todos) ? args.todos : null);
+    return items ? 'plan \u00b7 ' + items.length + (items.length === 1 ? ' item' : ' items') : String(args.action || 'plan');
+  }
   if (name==='shell') return args.command || '';
   if (name==='patch') return args.path || 'patch';
   if (name==='memory') return String(args.action || '') + (args.query ? ' ' + args.query : (Array.isArray(args.facts) && args.facts.length ? ' (' + args.facts.length + ')' : ''));
@@ -1865,6 +2017,10 @@ function summariseResult(name, raw, ok){
   }
   if (o && typeof o === 'object') {
     const n = (x) => Number(x).toLocaleString();
+    if (Array.isArray(o.todos)) {
+      const done = o.todos.filter((t) => t && t.done).length;
+      return done + ' of ' + o.todos.length + ' done';
+    }
     if (o.verification && o.verification.verified === 'failed') return 'written · does not parse';
     if (o.lines !== undefined) {
       // Say which slice came back, not just a total — a range read that silently
@@ -2002,6 +2158,7 @@ function stepSummary(counts, stats){
   else if (web && !reads && !finds) { head = 'Searched the web'; used.web = 1; }
   else if (reads || finds) { head = 'Explored the project'; }
   else if (st.denied) { head = st.denied === 1 ? 'You denied a request' : 'You denied ' + st.denied + ' requests'; used.d = 1; }
+  else if (st.blocked) { head = 'Auto mode held back ' + plural(st.blocked, 'action', 'actions'); used.b = 1; }
   else head = 'Worked through ' + plural(Object.values(c).reduce((a, b) => a + b, 0), 'step', 'steps');
   const meta = [];
   if (reads) meta.push(plural(reads, 'file read', 'files read'));
@@ -2011,6 +2168,7 @@ function stepSummary(counts, stats){
   if (subs && !used.s) meta.push(plural(subs, 'sub-agent run', 'sub-agent runs'));
   if (st.verdict) meta.push(st.verdict);
   if (st.denied && !used.d) meta.push(st.denied + ' denied');
+  if (st.blocked && !used.b) meta.push(st.blocked + ' held back by Auto');
   return { head, meta, failed: st.failed || 0 };
 }
 function startRunCard(){
@@ -2026,7 +2184,7 @@ function startRunCard(){
   head.setAttribute('role', 'button');
   const body = el('div','runbody');
   wrap.appendChild(head); wrap.appendChild(body);
-  v.root.appendChild(wrap); wrap.scrollIntoView({block:'end'});
+  v.root.appendChild(wrap); followThread();
   // The Forge prototype collapses a batch of actions to ONE line — a human label
   // plus a compact delta ("Ran tests — 1 failure, then fixed · 41 passed") — and you
   // open it only when you want the detail. Rendering every row expanded turns an
@@ -2085,8 +2243,12 @@ function addToolRow(name, args, instant){
 /** The counts and the time beside the step's name. */
 function paintMeta(card){
   const sm = stepSummary(card.counts, card.stats);
+  // While it runs the header shows the current action, so the files written so far
+  // belong in the counts (once it is done, "Changed N files" becomes the name).
+  const c = card.counts || {}, wrote = (c.WRITE || 0) + (c.EDIT || 0) + (c.PATCH || 0) + (c.FS || 0);
+  if (card.running && wrote) sm.meta.unshift(wrote + (wrote === 1 ? ' file changed' : ' files changed'));
   card.meta.innerHTML = sm.meta.map(esc).join(' \u00b7 ') + (sm.failed ? (sm.meta.length ? ' \u00b7 ' : '') + '<span class="bad">' + sm.failed + ' failed</span>' : '');
-  const end = card.t1 || (card.running ? Date.now() : 0);
+  const end = card.running ? Date.now() : (card.t1 || 0);
   // Under a second is not worth a number.
   card.delta.textContent = card.t0 && end && end - card.t0 >= 1000 ? fmtElapsed(end - card.t0) : '';
 }
@@ -2134,9 +2296,10 @@ function setToolResult(rec, ok, resultText){
   // strip above the composer; this delta sticks to what the tools actually report.
   const st = rec.card.stats || (rec.card.stats = {});
   // A refused request did not run: it is not a command run, and not a failure either.
-  const denied = !ok && /permission denied/i.test(String(resultText || ''));
+  const blocked = !ok && /blocked by Auto mode/.test(String(resultText || ''));
+  const denied = !ok && (blocked || /permission denied/i.test(String(resultText || '')));
   if (denied) {
-    st.denied = (st.denied || 0) + 1;
+    if (blocked) st.blocked = (st.blocked || 0) + 1; else st.denied = (st.denied || 0) + 1;
     const k = kindName(rec.name || '');
     if (rec.card.counts[k]) rec.card.counts[k]--;
   } else if (!ok) st.failed = (st.failed || 0) + 1;
@@ -2176,11 +2339,52 @@ function finalizeRunCard(){
 }
 
 // --- todos (per-view) ---
+/**
+ * The plan, pinned to the top of the message box: always in view while the thread
+ * scrolls, like Codex's. Open while there is work left; one line -- the count and the
+ * step it is on -- when collapsed or finished.
+ */
+function paintPlanTray(){
+  const v = actView(), tab = $('planTab'); if (!tab) return;
+  const list = v && Array.isArray(v.todos) ? v.todos.filter(Boolean) : [];
+  if (!list.length) { tab.hidden = true; return; }
+  tab.hidden = false;
+  const n = list.length;
+  const done = list.filter((t) => t.done).length;
+  const complete = done === n;
+  let cur = list.findIndex((t) => t.active && !t.done);
+  if (cur < 0) cur = list.findIndex((t) => !t.done);
+  const open = !!v.planOpen;
+  tab.classList.toggle('open', open);
+  tab.classList.toggle('complete', complete);
+  $('planHead').setAttribute('aria-expanded', String(open));
+  $('planHead').title = open ? 'Hide the plan' : 'Show the plan';
+  $('planArc').setAttribute('stroke-dashoffset', String(43.98 * (1 - done / n)));
+  $('planCount').textContent = done + '/' + n;
+  $('planNow').textContent = complete ? 'Plan complete' : (cur >= 0 ? list[cur].text : '');
+  $('planList').innerHTML = '<div class="pt-dh"><b>Plan</b><span>' + done + ' of ' + n + ' done</span></div>'
+    + list.map((t, i) => '<div class="pt-step ' + (t.done ? 'is-done' : (!complete && i === cur ? 'is-now' : 'is-todo')) + '" role="listitem">'
+      + '<span class="pt-dot"></span><span>' + esc(t.text || '') + '</span></div>').join('');
+}
+$('planHead').onclick = (e) => { e.stopPropagation(); const v = actView(); if (!v) return; v.planOpen = !v.planOpen; paintPlanTray(); };
+// The drawer tucks away on a click elsewhere or Esc, like the menus.
+document.addEventListener('click', (e) => {
+  const v = actView();
+  if (v && v.planOpen && !(e.target.closest && e.target.closest('#planTab'))) { v.planOpen = false; paintPlanTray(); }
+});
+document.addEventListener('keydown', (e) => {
+  const v = actView();
+  if (e.key === 'Escape' && v && v.planOpen && !v.perm) { v.planOpen = false; paintPlanTray(); }
+});
 function renderTodos(todos){
   const v = RT(); if(!v) return;
-  let box = v.todosEl; if(!box){ box = el('div','msg mono'); v.todosEl = box; v.root.appendChild(box); }
-  box.textContent = 'todos:\n' + todos.map((t,i)=>((t.done?'[x]':'[ ]') + ' ' + t.text)).join('\n');
-  box.scrollIntoView({block:'end'});
+  // A new plan (different steps) opens the tray again; progress on the same plan keeps
+  // whatever you chose.
+  const key = (todos || []).map((t) => t && t.text).join('\n');
+  if (key !== v.planKey) { v.planKey = key; }
+  v.todos = todos || [];
+  v.planLive = true;   // this run is working through it
+  if (v === actView()) paintPlanTray();
 }
 
 // screens
@@ -2612,6 +2816,7 @@ async function setModel(id){
   SESS_PRICE = modelPriceFor(id);
   refreshChips();
   pkFoot(id);
+  paintShelf();
 }
 
 function initModelPicker(){
@@ -2689,7 +2894,10 @@ async function openSession(id){
     for (const m of full.messages) {
       if (m && m.role === 'tool' && m.tool_call_id) results.set(m.tool_call_id, typeof m.content === 'string' ? m.content : JSON.stringify(m.content));
     }
+    let prevMsg = null;
+    const unfinished = (x) => !!x && (x.role === 'tool' || (x.role === 'assistant' && Array.isArray(x.tool_calls) && x.tool_calls.length > 0));
     for (const m of full.messages) {
+      const before = prevMsg; prevMsg = m;
       if (m.role === 'user') {
         // Some user-role messages were written by the app, not the person: the
         // compaction recap and a turn's screenshots. Drawn as bubbles, they showed the
@@ -2709,6 +2917,7 @@ async function openSession(id){
           continue;
         }
         finalizeRunCard();
+        if (unfinished(before)) v.root.appendChild(el('div', 'fold', 'this run ended before it finished'));
         if (typeof m.content === 'string') addUser(m.content);
         else { // multimodal content array {text, image_url}
           const text = (m.content||[]).filter(p=>p&&p.type==='text').map(p=>p.text).join(' ');
@@ -2736,8 +2945,13 @@ async function openSession(id){
       }
     }
     finalizeRunCard();
+    // The app closed (or crashed) mid-run: the last thing on record is a tool call or
+    // its result, with no answer after it. Say so rather than letting the thread just stop.
+    const lastMsg = full.messages[full.messages.length - 1];
+    if (unfinished(lastMsg)) v.root.appendChild(el('div', 'fold', 'this run ended before it finished'));
     v.ctxFill = full.context || null;
-    if (full.todos && full.todos.length) { const box = el('div','msg mono'); v.todosEl = box; v.root.appendChild(box); box.textContent = 'todos:\n' + full.todos.map((t,i)=>((t.done?'[x]':'[ ]') + ' ' + t.text)).join('\n'); }
+    v.todos = Array.isArray(full.todos) ? full.todos : [];
+    v.planKey = v.todos.map((t) => t && t.text).join('\n');
     T = prevT;
   }
   // ---- self-heal on EVERY open (stuck-state fix) ----
@@ -2990,7 +3204,7 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
         box.classList.toggle('open', !open);
       };
       v._think = { box, head, chev, ttl, body, text: '', t0: Date.now() };
-      const r = flowRoot(v); if (r) { r.appendChild(box); box.scrollIntoView({ block: 'end' }); }
+      const r = flowRoot(v); if (r) { r.appendChild(box); followThread(); }
     }
     // Accumulate the chain so it is READABLE when opened, but never render it
     // inline — an unbounded stream of reasoning in the transcript is the thing the
@@ -3031,7 +3245,7 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     img.style.cssText = 'max-width:100%;max-height:520px;border-radius:10px;border:1px solid var(--edge2);display:block;margin:6px 0;background:#0e0f14';
     img.src = event.dataUrl;
     wrap.appendChild(cap); wrap.appendChild(img);
-    const r = flowRoot(v); if (r) { r.appendChild(wrap); wrap.scrollIntoView({ block: 'end' }); }
+    const r = flowRoot(v); if (r) { r.appendChild(wrap); followThread(); }
   } else if (event.type === 'sub') {
     // ---- delegated runs: one ledger per fan-out, one row per worker ----
     //
@@ -3058,7 +3272,7 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
       table.appendChild(thead); table.appendChild(tbody);
       box.appendChild(cap); box.appendChild(table);
       rr.appendChild(box);
-      box.scrollIntoView({ block: 'end' });
+      followThread();
       L = v._ledger = { box, cap, tbody, rows: new Map(), timer: 0 };
     }
 
@@ -3226,7 +3440,7 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     body.style.cssText = 'padding:8px 10px;font-size:13px;color:var(--dim);white-space:pre-wrap;max-height:220px;overflow:auto';
     body.textContent = trunc(String(d.text || ''), 4000);
     box.appendChild(head); box.appendChild(body);
-    const rr = RR(); if (rr) { rr.appendChild(box); box.scrollIntoView({ block: 'end' }); }
+    const rr = RR(); if (rr) { rr.appendChild(box); followThread(); }
   } else if (event.type === 'previewable') {
     // Detect -> offer -> remember. The agent wrote something viewable; say so and let
     // the user decide once per project, rather than seizing the screen on every
@@ -3274,7 +3488,7 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
         row.appendChild(b1); row.appendChild(b2);
         box.appendChild(row);
       }
-      const rr = RR(); if (rr) { rr.appendChild(box); box.scrollIntoView({ block: 'end' }); }
+      const rr = RR(); if (rr) { rr.appendChild(box); followThread(); }
     })();
   } else if (event.type === 'artifact') {
     // artifact_publish emitted this and nothing listened, so publishing a reviewable
@@ -3291,7 +3505,7 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
       .filter(Boolean).join(' · ');
     box.appendChild(t); box.appendChild(meta);
     if (a.summary) { const sEl = document.createElement('div'); sEl.style.cssText = 'font-size:13px;color:var(--dim);margin-top:5px'; sEl.textContent = a.summary; box.appendChild(sEl); }
-    const rr = RR(); if (rr) { rr.appendChild(box); box.scrollIntoView({ block: 'end' }); }
+    const rr = RR(); if (rr) { rr.appendChild(box); followThread(); }
   } else if (event.type === 'awaiting_agents') {
     setStatus('waiting for ' + event.count + ' background agent' + (event.count === 1 ? '' : 's') + '…');
   } else if (event.type === 'agent_finished') {
@@ -3303,7 +3517,7 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     line.textContent = 'background agent finished (' + (event.stopReason || 'done') + ')'
       + (n ? ' — ' + n + ' file' + (n === 1 ? '' : 's') + ' changed' : '')
       + (bad ? ' · ' + bad + ' need attention' : '');
-    const rr = RR(); if (rr) { rr.appendChild(line); line.scrollIntoView({ block: 'end' }); }
+    const rr = RR(); if (rr) { rr.appendChild(line); followThread(); }
   } else if (event.type === 'budget') {
     // live spend readout against the cap
     const bar = $('sessStatBudgetWrap'), val = $('sessStatBudget');
@@ -3327,7 +3541,7 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     hint.style.cssText = 'font-size:12px;color:var(--faint);margin-top:6px';
     hint.textContent = 'Raise SPEND LIMIT PER RUN in Settings, then send "continue".';
     box.appendChild(txt); box.appendChild(hint);
-    const rr = RR(); if (rr) { rr.appendChild(box); box.scrollIntoView({ block: 'end' }); }
+    const rr = RR(); if (rr) { rr.appendChild(box); followThread(); }
     v.busy = false; v.activity = '';
     v.runKeys.delete(runKey);
     if (sid === activeId) { $('runDot').style.display = 'none'; updateSendState(); paintShelf(); }
@@ -3353,7 +3567,7 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
       if (p) { p.value = 'continue'; send(); }
     };
     box.appendChild(txt); box.appendChild(go);
-    const rr = RR(); if (rr) { rr.appendChild(box); box.scrollIntoView({ block: 'end' }); }
+    const rr = RR(); if (rr) { rr.appendChild(box); followThread(); }
     v.busy = false; v.activity = '';
     v.runKeys.delete(runKey);
     if (sid === activeId) { $('runDot').style.display = 'none'; updateSendState(); paintShelf(); }
@@ -3402,7 +3616,32 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     const cancel = el('button', 'uq-cancel', 'Dismiss (no answer)');
     cancel.onclick = () => { try { window.voxai.agentAnswer(event.inputId, ''); } catch {} box.style.display = 'none'; };
     box.appendChild(cancel);
-    const rq = RR(); if (rq) { rq.appendChild(box); box.scrollIntoView({ block: 'end' }); }
+    // Once answered, the question stays in the thread as one line with the answer,
+    // instead of vanishing and leaving no trace of what was decided.
+    const settle = (label) => {
+      const line = el('div', 'uq-done');
+      line.innerHTML = '<span class="uq-q"></span><span class="uq-a"></span>';
+      line.firstChild.textContent = event.question || '';
+      line.lastChild.textContent = label ? 'You chose: ' + label : 'No answer';
+      box.replaceWith(line);
+      setActivity(v, 'Working');
+    };
+    box.addEventListener('click', (e) => {
+      const b = e.target.closest && e.target.closest('button'); if (!b) return;
+      const inp = box.querySelector('#uqText');
+      settle(b.classList.contains('uq-cancel') ? '' : (b.dataset.v !== undefined && !inp ? b.textContent : (inp ? inp.value : b.textContent)));
+    }, true);
+    const uqIn = box.querySelector('#uqText');
+    if (uqIn) uqIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') settle(uqIn.value); }, true);
+    setActivity(v, 'Waiting for your answer');
+    const rq = RR(); if (rq) { rq.appendChild(box); followThread(); }
+  } else if (event.type === 'warning' && event.code === 'cache-miss') {
+    if (!v._cacheNoted) {
+      v._cacheNoted = true;
+      const line = el('div', 'fold', 'prompt cache missed \u00b7 this turn was billed at the full input price');
+      line.title = event.message || '';
+      const r = RR(); if (r) { r.appendChild(line); followThread(); }
+    }
   } else if (event.type === 'warning') {
     // Stall-hardening (goose post-mortem): surface compaction/cache warnings
     // directly in the thread so the user is told BEFORE a request hangs.
@@ -3410,7 +3649,11 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     const severe = ['context-over-hard-limit', 'budget-unenforceable'].includes(event.code);
     const box = el('div', 'msg warn' + (severe ? ' severe' : ''));
     box.textContent = event.message || (event.code || 'warning');
-    const r = RR(); if (r) { r.appendChild(box); box.scrollIntoView({ block: 'end' }); }
+    const r = RR(); if (r) { r.appendChild(box); followThread(); }
+  } else if (event.type === 'auto_check') {
+    // Auto mode checking an action: say so on the shelf; a block shows on the tool row.
+    if (event.phase === 'start') setActivity(v, 'Checking it is safe');
+    else setActivity(v, event.decision === 'allow' ? 'Working' : 'Thinking');
   } else if (event.type === 'context') {
     // How full the conversation is, for the meter by Send and the heads-up on the shelf.
     v.ctxFill = { tokens: Number(event.tokens) || 0, limit: Number(event.limit) || 0, threshold: Number(event.threshold) || 0.8 };
@@ -3420,7 +3663,7 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     box.textContent = 'summarising earlier turns\u2026';
     box.dataset.compactBusy = '1';
     setActivity(v, 'Summarising earlier turns');
-    const r = RR(); if (r) { r.appendChild(box); box.scrollIntoView({ block: 'end' }); }
+    const r = RR(); if (r) { r.appendChild(box); followThread(); }
   } else if (event.type === 'compacted') {
     // Codex/Claude-style visible confirmation with the summary remainder.
     const r = RR();
@@ -3439,12 +3682,12 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     if (event.reason === 'hard-overrun') txt += ' \u00b7 forced at the hard limit';
     box.textContent = txt;
     box.title = (event.dropped > 0 ? fmtNum(event.dropped) + ' messages summarised; the last ' + (event.keptRecent || 0) + ' kept in full.' : '');
-    if (r) { r.appendChild(box); box.scrollIntoView({ block: 'end' }); }
+    if (r) { r.appendChild(box); followThread(); }
   } else if (event.type === 'condensed') {
     const r = RR();
     const box = el('div', 'msg compact subtle');
     box.textContent = 'Condensed ' + fmtNum(event.count) + ' older tool outputs to one-line traces to protect context.';
-    if (r) { r.appendChild(box); box.scrollIntoView({ block: 'end' }); }
+    if (r) { r.appendChild(box); followThread(); }
   }
   T = null;
 });
@@ -3473,6 +3716,7 @@ function paintAsk(){
     $('askSub').textContent = '\u00b7 the agent wants to do this in ' + folderName(v.workdir || v._workdir || '');
     $('askWhat').textContent = p.showDetail ? (p.kind + '\n' + p.target) : (p.target || p.kind);
     $('askAlways').hidden = !p.canAlways;
+    $('askNote').hidden = !p.note; $('askNote').textContent = p.note || '';
     $('askDetail').textContent = p.showDetail ? 'Less' : 'Details';
     // Focus the request, not the Allow button: Enter on a focused button clicks it, and
     // someone mid-sentence when this appears would approve a command they never read.
@@ -3494,6 +3738,8 @@ async function answerAsk(allowed, always){
   if (!p) return;
   v.perm = null;
   clearTimeout(p.timer);
+  // Back to what it was doing, or "Thinking" if the answer was no.
+  setActivity(v, allowed ? (p.kind === 'spawn_agent' || p.kind === 'spawn_parallel' ? 'Working with sub-agents' : (p.before && p.before !== 'Waiting for you' ? p.before : 'Working')) : 'Thinking');
   paintAsk();
   try { await window.voxai.agentPermission(p.permId, !!allowed, !!always); } catch {}
   const pr = $('prompt'); if (pr) pr.focus();
@@ -3533,12 +3779,12 @@ document.addEventListener('paste', (e) => {
   if (!t) return;
   e.preventDefault(); $('prompt').value += t; p.typedAt = Date.now(); paintAskDraft();
 });
-window.voxai.onAgentPermission(({ permId, sessionId, kind, target, canAlways }) => {
+window.voxai.onAgentPermission(({ permId, sessionId, kind, target, canAlways, note }) => {
   const v = sessionId ? viewOf(sessionId) : actView();
   if (!v) return;
   // The main process gives up after two minutes and treats it as a no; so does this.
   const timer = setTimeout(() => { if (v.perm && v.perm.permId === permId) { v.perm = null; if (v === actView()) paintAsk(); } }, 120000);
-  v.perm = { permId, kind, target: String(target || ''), canAlways: !!canAlways, timer, shownAt: Date.now() };
+  v.perm = { permId, kind, target: String(target || ''), canAlways: !!canAlways, timer, shownAt: Date.now(), before: v.activity, note: note || '' };
   setActivity(v, 'Waiting for you');
   if (v === actView()) paintAsk();
   refreshSessionList();
@@ -4252,6 +4498,10 @@ async function send(){
   if (!text) return;
   if (!S.hasOpenRouterKey) { openModal(); T = v; addMsg('Set your OpenRouter API key in ⚙ Settings first — all agent turns bill through it.'); T = null; return; }
   const parts = pendingAttachments(); // image parts (data URLs)
+  if (parts.length && imageProblem()) {
+    const iw = $('shImg'); if (iw) { iw.classList.remove('flash'); void iw.offsetWidth; iw.classList.add('flash'); }
+    return;
+  }
   if (v.busy) {
     // Codex-style follow-up queue: hold it, show Steer/Edit/Cancel, auto-send after the turn.
     if (v.steerIdx != null && v.steerIdx >= 0 && v.steerIdx < v.queue.length && text) {
@@ -4278,8 +4528,8 @@ async function send(){
 }
 
 async function doSend(v, text, parts){
-  T = v; addUser(text, parts); T = null;
-  v.busy = true; v.runT0 = Date.now(); v.activity = 'Thinking';
+  T = v; const bubble = addUser(text, parts); T = null;
+  v.busy = true; v.runT0 = Date.now(); v.activity = 'Thinking'; v.planLive = false;
   $('runDot').style.display = 'block'; updateSendState(); refreshSessionList(); paintShelf();
   try {
     const id = await ensureSession();
@@ -4287,6 +4537,7 @@ async function doSend(v, text, parts){
     const cur = viewOf(activeId);
     cur.busy = true;
     const r = await window.voxai.agentSend(activeId, text, parts);
+    refreshSessionList();   // the first message has just named the session
     cur.runKeys.add(r.runKey);
     updateSendState();
   } catch (err) {
@@ -4296,6 +4547,8 @@ async function doSend(v, text, parts){
     const reason = String((err && err.message) || err)
       .replace(/^Error invoking remote method '[^']*':\s*/, '')
       .replace(/^(Error:\s*)+/, '');
+    // Nothing was sent, so the message is not drawn as sent: it goes back in the box.
+    try { if (bubble) bubble.remove(); } catch {}
     if (cur) { T = cur; clearStatus(); addMsg('Error: ' + reason, true); T = null; cur.busy = false; paintShelf(); }
     // The run never started, so nothing was sent. Hand the message back: a refusal like
     // "this model cannot read images — switch model and send again" is useless if the

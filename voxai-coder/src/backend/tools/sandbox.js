@@ -11,6 +11,10 @@ const ACCESS_LABELS = {
   ask: 'Ask before changes',
   edit: 'Auto-edit files',
   test: 'Auto-edit + tests',
+  // Like Claude Code's auto mode: edits and tests run as in "test", and anything that
+  // would ask goes to a safety check first (agent.js autoCheck). Not on the ladder of
+  // ACCESS_LEVELS: it is a different way of deciding, not a bigger allowance.
+  auto: 'Auto with a safety check',
   full: 'Full access',
 };
 // Old value -> new canonical value (migration for previously-saved settings)
@@ -85,7 +89,45 @@ const DANGEROUS = [
 ];
 
 function levelIndex(access) {
-  return Math.max(0, ACCESS_LEVELS.indexOf(normalizeAccess(access)));
+  const a = normalizeAccess(access);
+  // Auto allows what "test" allows outright; the rest is checked, not auto-approved.
+  if (a === 'auto') return ACCESS_LEVELS.indexOf('test');
+  return Math.max(0, ACCESS_LEVELS.indexOf(a));
+}
+
+/**
+ * Is this shell command only looking? Listing a folder, reading a file, git status --
+ * asking about those every time was the most common prompt in a live run, and they
+ * change nothing. Strict on purpose: every piece of a chain must be on the list, and
+ * redirection, command substitution or anything unknown makes the whole thing ask.
+ */
+const READ_ONLY_CMDS = new Set(['dir', 'ls', 'pwd', 'cd', 'echo', 'type', 'cat', 'head', 'tail', 'more', 'less',
+  'findstr', 'grep', 'rg', 'where', 'which', 'whoami', 'hostname', 'ver', 'tree', 'wc', 'stat', 'file', 'du', 'df', 'date']);
+const READ_ONLY_GIT = new Set(['status', 'log', 'diff', 'show', 'rev-parse', 'ls-files', 'blame', 'describe', 'shortlog', 'reflog']);
+function isReadOnlyCommand(cmd) {
+  const s = String(cmd || '').trim();
+  if (!s) return false;
+  // Redirection, substitution, background jobs, env assignment and escapes are out.
+  if (/[<>`]|\$\(|%[^%\s]+%|(^|\s)&(\s|$)|\^/.test(s)) return false;
+  const parts = s.split(/&&|\|\||;|\|/).map((p) => p.trim()).filter(Boolean);
+  if (!parts.length) return false;
+  return parts.every((p) => {
+    const words = p.split(/\s+/);
+    const w0 = words[0].toLowerCase().replace(/\.exe$/, '');
+    if (w0 === 'git') {
+      const sub = (words[1] || '').toLowerCase();
+      if (sub === 'branch') return words.slice(2).every((x) => /^(-a|-r|-v|-vv|--list|--all|--show-current)$/.test(x));
+      if (sub === 'remote') return words.slice(2).every((x) => x === '-v');
+      if (sub === 'config') return words.slice(2).some((x) => x === '--get' || x === '--list' || x === '-l');
+      return READ_ONLY_GIT.has(sub) && !words.some((x) => /^--output/.test(x));
+    }
+    if (['node', 'npm', 'python', 'python3', 'py', 'pip', 'dotnet', 'java', 'go', 'cargo', 'rustc', 'deno', 'bun'].includes(w0)) {
+      return words.length === 2 && /^(--version|-v|-V|version)$/.test(words[1]) || (w0 === 'npm' && /^(ls|list|outdated|view|root|prefix)$/.test(words[1] || ''));
+    }
+    if (w0 === 'find') return !words.some((x) => /^-(exec|execdir|delete|ok|fprint)/.test(x));
+    if (w0 === 'sort') return !words.some((x) => /^(-o|\/o)$/i.test(x));
+    return READ_ONLY_CMDS.has(w0);
+  });
 }
 
 function checkToolAllowed(toolName, access, extra) {
@@ -150,4 +192,4 @@ function makeSandboxTool({ getAccess }) {
   };
 }
 
-module.exports = { checkToolAllowed, checkShellCommand, worktreeIsolationInfo, makeSandboxTool, ACCESS_LEVELS, ACCESS_LABELS, normalizeAccess, labelFor };
+module.exports = { checkToolAllowed, checkShellCommand, worktreeIsolationInfo, makeSandboxTool, ACCESS_LEVELS, ACCESS_LABELS, normalizeAccess, labelFor, isReadOnlyCommand };

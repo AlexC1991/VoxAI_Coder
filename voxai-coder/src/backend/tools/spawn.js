@@ -86,8 +86,7 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
     }
     if (!runner) return { ok: false, error: 'sub-agent runner unavailable' };
 
-    const roleName = ROLES[task.role] ? task.role : DEFAULT_ROLE;
-    const role = ROLES[roleName];
+    let roleName = ROLES[task.role] ? task.role : DEFAULT_ROLE;
 
     // Resume an existing worker rather than starting cold: its context and its warm
     // provider cache both survive, so a follow-up costs a fraction of a re-spawn.
@@ -101,7 +100,13 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
       if (!resumed) {
         return { ok: false, error: `cannot resume sub-agent "${task.resume}" — no such session. Spawn a new one.` };
       }
+      // A resumed worker keeps the role it was started with. Resuming without naming
+      // one fell back to "build", so a read-only reviewer came back able to write
+      // files -- and did, leaving scratch files in the project. Found in a live run.
+      const orig = /^subagent:(\w+)$/.exec(String(sub.title || ''));
+      if (orig && ROLES[orig[1]]) roleName = orig[1];
     }
+    const role = ROLES[roleName];
     if (!sub) {
       sub = createSession({
         workdir: agentOpts.workdir || 'C:/',
