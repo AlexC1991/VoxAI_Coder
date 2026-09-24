@@ -17,15 +17,27 @@
  */
 const { chatOnce, DEFAULT_HOST } = require('../providers/openrouter');
 
-const ENGINE = 'exa';
-// Exa's per-request fee, used to refuse a search the remaining budget cannot cover.
-// The real charge comes back in usage.cost and is what gets billed to the run.
-const SEARCH_FEE_USD = 0.007;
+// Engines selectable in Settings, with OpenRouter's per-search fee. The fee is used
+// only to refuse a search the remaining budget cannot cover (so it takes the HIGH end
+// where a range is listed); the real charge comes back in usage.cost and is what the
+// run is billed. Native provider search is not offered: most models here lack it.
+const ENGINES = {
+  exa: { fee: 0.007 },
+  parallel: { fee: 0.005 },      // measured $0.0052 on 2026-09-24; $0.001 needs a turbo/fast mode we don't request
+  perplexity: { fee: 0.005 },
+};
+const DEFAULT_ENGINE = 'exa';
+const ENGINE = DEFAULT_ENGINE;   // kept for callers of the old export
+const SEARCH_FEE_USD = ENGINES[DEFAULT_ENGINE].fee;
 const MAX_RESULTS_CAP = 10;          // above 10 OpenRouter bills extra per result
 const SNIPPET_CHARS = 500;
 const TIMEOUT_MS = 45000;
 
 function makeWebSearchTool({ checkPermission, agentOpts = {} }) {
+  const cfg = agentOpts.webSearch || {};
+  const engine = ENGINES[cfg.engine] ? cfg.engine : DEFAULT_ENGINE;
+  const fee = ENGINES[engine].fee;
+  const defaultResults = Math.min(MAX_RESULTS_CAP, Math.max(1, Math.round(Number(cfg.maxResults) || 5)));
   return {
     def: {
       type: 'function',
@@ -33,13 +45,13 @@ function makeWebSearchTool({ checkPermission, agentOpts = {} }) {
         name: 'web_search',
         description: 'Search the web and get back real result URLs with titles and snippets. Use this to FIND '
           + 'sources; then read the ones that matter with web_fetch. Never invent a URL to fetch — search for '
-          + 'it. Each search costs about $0.01 of the run budget, so make queries specific rather than running '
+          + `it. Each search costs about $${fee.toFixed(3)} of the run budget, so make queries specific rather than running `
           + 'many near-duplicates. `include_domains` restricts results to those sites (e.g. ["openai.com"]).',
         parameters: {
           type: 'object',
           properties: {
             query: { type: 'string', description: 'What to search for. Specific beats broad.' },
-            max_results: { type: 'integer', description: `How many results, 1-${MAX_RESULTS_CAP}. Default 5.` },
+            max_results: { type: 'integer', description: `How many results, 1-${MAX_RESULTS_CAP}. Default ${defaultResults}.` },
             include_domains: { type: 'array', items: { type: 'string' }, description: 'Only return results from these domains.' },
           },
           required: ['query'],
@@ -51,24 +63,25 @@ function makeWebSearchTool({ checkPermission, agentOpts = {} }) {
     async run({ query, max_results, include_domains }, ctx) {
       const q = String(query || '').trim();
       if (!q) throw new Error('web_search needs a query');
+      if (cfg.enabled === false) throw new Error('web search is turned off in Settings — use web_fetch on URLs you already have');
       if (!agentOpts.apiKey) throw new Error('web_search needs an OpenRouter key — add one in Settings');
 
       // A search the run cannot pay for is refused BEFORE it is made. An unset budget
       // means the embedder never wired one (tests, tools used standalone).
       const raw = agentOpts.budgetRemaining;
-      if (raw !== undefined && raw !== null && raw !== '' && Number(raw) < SEARCH_FEE_USD * 2) {
+      if (raw !== undefined && raw !== null && raw !== '' && Number(raw) < fee * 2) {
         throw new Error(`not enough run budget left for a search ($${Number(raw).toFixed(4)} remaining). `
           + 'Work from what you already have, or tell the user the budget is exhausted.');
       }
 
       await checkPermission('web-search', q);
 
-      const n = Math.min(MAX_RESULTS_CAP, Math.max(1, Math.round(Number(max_results) || 5)));
+      const n = Math.min(MAX_RESULTS_CAP, Math.max(1, Math.round(Number(max_results) || defaultResults)));
       const domains = Array.isArray(include_domains)
         ? include_domains.map((d) => String(d).trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '')).filter(Boolean).slice(0, 10)
         : [];
 
-      const plugin = { id: 'web', engine: ENGINE, max_results: n };
+      const plugin = { id: 'web', engine, max_results: n };
       if (domains.length) plugin.include_domains = domains;
 
       const ctl = new AbortController();
@@ -121,9 +134,9 @@ function makeWebSearchTool({ checkPermission, agentOpts = {} }) {
             + 'to guessing URLs.',
         };
       }
-      return { query: q, engine: ENGINE, results, cost_usd: cost };
+      return { query: q, engine, results, cost_usd: cost };
     },
   };
 }
 
-module.exports = { makeWebSearchTool, SEARCH_FEE_USD, ENGINE };
+module.exports = { makeWebSearchTool, SEARCH_FEE_USD, ENGINE, ENGINES, DEFAULT_ENGINE };

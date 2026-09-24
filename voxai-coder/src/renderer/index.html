@@ -620,6 +620,13 @@ tests"). Scroll the row instead of breaking words:
     <div class="hint">Cap on tool-turns per sub-agent before it must answer. (VOX_SUBAGENT_MAX_TURNS)</div></div>
   <div class="field"><label>SUB-AGENT TIMEOUT (s) <span style="opacity:.6">(default 300)</span></label><input id="fSubTimeout" type="number" min="10" max="3600" step="10" placeholder="300" />
     <div class="hint">Wall-clock timeout per sub-agent. Kill long-runners. (VOX_SUBAGENT_TIMEOUT_MS)</div></div>
+  <div style="margin-top:6px;padding:3px 0;color:var(--gold);font-weight:700;font-size:12.5px;font-family:'Sometype Mono',monospace">WEB SEARCH</div>
+  <div class="field"><label>WEB SEARCH <span style="opacity:.6">(default on)</span></label><select id="fWebSearch"><option value="on">On — the agent can search the web for sources</option><option value="off">Off — it can only read URLs it already has</option></select>
+    <div class="hint">Each search is billed by OpenRouter on top of model tokens, and counts against the run's spend limit. Sub-agents follow this setting too.</div></div>
+  <div class="field"><label>SEARCH ENGINE <span style="opacity:.6">(default Exa)</span></label><select id="fWebEngine"><option value="exa">Exa — about $0.007 per search</option><option value="parallel">Parallel — about $0.005 per search</option><option value="perplexity">Perplexity — about $0.005 per search</option></select>
+    <div class="hint">OpenRouter's per-search fee for each engine. The exact charge comes back with every search and shows in the run's cost.</div></div>
+  <div class="field"><label>RESULTS PER SEARCH <span style="opacity:.6">(default 5, max 10)</span></label><input id="fWebResults" type="number" min="1" max="10" step="1" placeholder="5" />
+    <div class="hint">How many results the agent gets back when it doesn't ask for a number. OpenRouter charges extra per result above 10.</div></div>
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn ghost" id="btnClose">Close</button><button class="btn" id="btnSave">Save</button></div>
 </div></div>
 
@@ -2686,6 +2693,10 @@ function prefillAdvanced(){
   if ($('fSubModel')) $('fSubModel').value = sm;
   if ($('fSubMaxTurns')) $('fSubMaxTurns').value = smt;
   if ($('fSubTimeout')) $('fSubTimeout').value = sto;
+  // web search
+  if ($('fWebSearch')) $('fWebSearch').value = s.webSearchEnabled === false ? 'off' : 'on';
+  if ($('fWebEngine')) $('fWebEngine').value = s.webSearchEngine || 'exa';
+  if ($('fWebResults')) $('fWebResults').value = String(s.webSearchMaxResults || 5);
 }
 function closeModal(){ $('modalBg').classList.remove('show'); }
 $('btnSettings').onclick = openModal;
@@ -2743,6 +2754,9 @@ $('btnSave').onclick = async () => {
   if ($('fSubModel').value) patch.subagentModel = $('fSubModel').value.trim();
   if ($('fSubMaxTurns').value) patch.subagentMaxTurns = String(Math.round(Number($('fSubMaxTurns').value)));
   if ($('fSubTimeout').value) patch.subagentTimeoutMs = String(Math.round(Number($('fSubTimeout').value) * 1000));
+  if ($('fWebSearch')) patch.webSearchEnabled = $('fWebSearch').value !== 'off';
+  if ($('fWebEngine')) patch.webSearchEngine = $('fWebEngine').value;
+  if ($('fWebResults') && $('fWebResults').value) patch.webSearchMaxResults = String(Math.min(10, Math.max(1, Math.round(Number($('fWebResults').value) || 5))));
   try {
     S = await window.voxai.saveSettings(patch);
     $('keyState').textContent = S.hasOpenRouterKey ? ('saved · key ' + S.keyStore) : 'saved (no key)';

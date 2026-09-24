@@ -82,6 +82,11 @@ function getSettings(redacted = true) {
     subagentModel: raw.subagentModel || process.env.VOX_SUBAGENT_MODEL || '',
     subagentMaxTurns: raw.subagentMaxTurns || process.env.VOX_SUBAGENT_MAX_TURNS || '25',
     subagentTimeoutMs: String(subagentTimeoutToMs(raw.subagentTimeoutMs || process.env.VOX_SUBAGENT_TIMEOUT_MS)),
+    // Web search. Stored values are checked, so a hand-edited file cannot select an
+    // engine OpenRouter does not have or ask for a result count it bills extra for.
+    webSearchEnabled: raw.webSearchEnabled !== false && raw.webSearchEnabled !== 'false',
+    webSearchEngine: ['exa', 'parallel', 'perplexity'].includes(raw.webSearchEngine) ? raw.webSearchEngine : 'exa',
+    webSearchMaxResults: Math.min(10, Math.max(1, Math.round(Number(raw.webSearchMaxResults) || 5))),
     hasOpenRouterKey: !!(raw.openrouterKey && raw.openrouterKey.enc),
     openrouterKey: redacted ? undefined : decryptSecret(raw.openrouterKey),
     keyStore: (raw.openrouterKey && raw.openrouterKey.store) || 'none',
@@ -594,6 +599,7 @@ app.whenReady().then(() => {
           contextLimit: s.contextLimit, compactThreshold: s.compactThreshold,
           toolResultMaxChars: s.toolResultMaxChars, hardFraction: s.hardFraction,
           subagentModel: s.subagentModel, subagentMaxTurns: s.subagentMaxTurns, subagentTimeoutMs: s.subagentTimeoutMs,
+          webSearch: { enabled: s.webSearchEnabled, engine: s.webSearchEngine, maxResults: s.webSearchMaxResults },
           isSubAgent: false,
         })) {
           if (ev.type === 'done' || ev.type === 'error' || ev.type === 'cancelled' || ev.type === 'limit_reached' || ev.type === 'budget_reached') break;
@@ -688,6 +694,7 @@ app.whenReady().then(() => {
           // Whether screenshots are handed over as images or described as unseen.
           modelVision: modelVision(sess.model || s.openrouterModel),
           subagentModel: s.subagentModel, subagentMaxTurns: s.subagentMaxTurns, subagentTimeoutMs: s.subagentTimeoutMs,
+          webSearch: { enabled: s.webSearchEnabled, engine: s.webSearchEngine, maxResults: s.webSearchMaxResults },
           onLiveEvent: (le) => { const c = chatWebContents(); c && c.send('agent:event', { sessionId, runKey, event: le }); },
           userData: userData(), live,
           onOpenUrl: (url) => { try { atlasOpenUrl(url); } catch {} },

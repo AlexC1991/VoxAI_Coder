@@ -452,6 +452,74 @@ function loadWith(file, stubs) {
     check('the shell row is not labelled BASH on Windows', !HTML.includes("if (name==='shell') return 'BASH';"), 'BASH');
   }
 
+  // ------------------------------------------------------------------ [AZ]
+  console.log('\n[AZ] web search settings');
+  {
+    // Settings panel: the three controls exist, are filled when it opens, and are saved.
+    check('Settings has a web search on/off', HTML.includes('<select id="fWebSearch">') && HTML.includes('value="off">Off'), 'missing');
+    check('...an engine picker with prices', ['exa', 'parallel', 'perplexity'].every((e) => HTML.includes(`<option value="${e}">`)) && /Exa — about \$0\.007 per search/.test(HTML), 'missing');
+    check('...and a results-per-search field', HTML.includes('id="fWebResults" type="number" min="1" max="10"'), 'missing');
+    check('the fields are filled when Settings opens', /prefillAdvanced[\s\S]*fWebSearch'\)\.value = s\.webSearchEnabled === false \? 'off' : 'on'/.test(HTML), 'blank on open');
+    check('they are saved', HTML.includes("patch.webSearchEnabled = $('fWebSearch').value !== 'off'") && HTML.includes('patch.webSearchEngine =') && HTML.includes('patch.webSearchMaxResults ='), 'not saved');
+
+    // main.js checks stored values, and passes them to BOTH places that start a run.
+    check('stored values are validated', MAIN.includes("['exa', 'parallel', 'perplexity'].includes(raw.webSearchEngine)") && MAIN.includes('webSearchMaxResults: Math.min(10, Math.max(1,'), 'trusted blindly');
+    check('both run paths get the setting', (MAIN.match(/webSearch: \{ enabled: s\.webSearchEnabled, engine: s\.webSearchEngine, maxResults: s\.webSearchMaxResults \}/g) || []).length === 2, 'one path ignores it');
+
+    // The tool uses the chosen engine, its fee and the default count.
+    const { makeWebSearchTool, ENGINES } = require(path.join(ROOT, 'src/backend/tools/web_search.js'));
+    let sent = null;
+    global.fetch = async (_u, opts) => { sent = JSON.parse(opts.body); return { ok: true, status: 200, text: async () => JSON.stringify({ choices: [{ message: { content: 'done', annotations: [] } }], usage: { cost: 0.001 } }) }; };
+    const par = makeWebSearchTool({ checkPermission: async () => {}, agentOpts: { apiKey: 'k', model: 'm', webSearch: { enabled: true, engine: 'parallel', maxResults: 3 } } });
+    await par.run({ query: 'x' }, {});
+    check('the chosen engine is used', sent.plugins[0].engine === 'parallel', sent.plugins[0]);
+    check('the default result count is used', sent.plugins[0].max_results === 3, sent.plugins[0].max_results);
+    check("the description quotes that engine's fee", /about \$0\.005 of the run budget/.test(par.def.function.description), par.def.function.description.slice(0, 160));
+    check('an unknown engine falls back to Exa', (await (async () => { const t = makeWebSearchTool({ checkPermission: async () => {}, agentOpts: { apiKey: 'k', model: 'm', webSearch: { engine: 'bogus' } } }); await t.run({ query: 'x' }, {}); return sent.plugins[0].engine; })()) === 'exa', sent.plugins[0].engine);
+    check('every engine has a fee', Object.values(ENGINES).every((e) => e.fee > 0), ENGINES);
+    let offErr = '';
+    try { await makeWebSearchTool({ checkPermission: async () => {}, agentOpts: { apiKey: 'k', model: 'm', webSearch: { enabled: false } } }).run({ query: 'x' }, {}); } catch (e) { offErr = e.message; }
+    check('a call while off is refused', /turned off in Settings/.test(offErr), offErr);
+
+    // End to end: with search OFF the model is not offered the tool, and the prompt does
+    // not tell it to use one. With it ON, both are present.
+    for (const enabled of [false, true]) {
+      const bodies = fakeOpenRouter(() => say('ok'));
+      await drain(runAgent({ session: { id: 'az' + enabled, workdir: WD, messages: [] }, userText: 'hi', apiKey: 'k', model: 'm', access: 'full', askPermission: async () => true, maxTurns: 2, webSearch: { enabled, engine: 'exa', maxResults: 5 } }));
+      const names = (bodies[0].tools || []).map((t) => t.function.name);
+      const sys = bodies[0].messages[0].content;
+      const sysText = typeof sys === 'string' ? sys : JSON.stringify(sys);
+      if (enabled) {
+        check('on: the model is offered web_search', names.includes('web_search'), names);
+        check('on: the prompt names the research workflow', sysText.includes('web_search to find sources'), sysText.slice(0, 80));
+      } else {
+        check('off: the model is not offered web_search', !names.includes('web_search') && names.includes('web_fetch'), names);
+        check('off: the prompt says search is off', sysText.includes('Web search is turned off') && !sysText.includes('web_search to find sources'), 'still mentions it');
+      }
+    }
+    check('workers follow the setting', SPAWN_SRC.includes('webSearch: agentOpts.webSearch || null,'), 'workers ignore it');
+
+    // Found live: a model that searched earlier in the session calls web_search again
+    // after it is turned off. It must be refused (no fee) and told the real reason.
+    {
+      let searched = false;
+      let k = 0;
+      global.fetch = async (_u, opts) => {
+        const body = JSON.parse(opts.body);
+        if (body.plugins) { searched = true; return { ok: true, status: 200, text: async () => '{}' }; }
+        k++;
+        const chunks = k === 1 ? call('w9', 'web_search', { query: 'x' }) : say('ok');
+        const enc = new TextEncoder();
+        return { ok: true, text: async () => '', body: new ReadableStream({ start(c) { for (const ch of chunks) c.enqueue(enc.encode('data: ' + JSON.stringify(ch) + '\n\n')); c.enqueue(enc.encode('data: [DONE]\n\n')); c.close(); } }) };
+      };
+      const offSession = { id: 'azoff', workdir: WD, messages: [] };
+      await drain(runAgent({ session: offSession, userText: 'search', apiKey: 'k', model: 'm', access: 'full', askPermission: async () => true, maxTurns: 3, webSearch: { enabled: false } }));
+      const reply = offSession.messages.find((m) => m.role === 'tool');
+      check('off: a web_search call from memory does not search', !searched, 'searched anyway');
+      check('off: the model is told search is turned off', reply && /turned off in Settings/.test(reply.content), reply && reply.content);
+    }
+  }
+
   // ------------------------------------------------------------------ [AW]
   console.log('\n[AW] no control characters in source');
   {

@@ -162,6 +162,8 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
         live,
         budgetUsd: budgetShare,
         priceIn: agentOpts.priceIn || 0,
+        // Workers follow the parent's web-search setting (off means off for them too).
+        webSearch: agentOpts.webSearch || null,
         // The parent's vision flag describes the PARENT's model. A worker on a
         // different model inherits nothing -- unknown, so screenshots get described
         // rather than sent to something that may not read them.

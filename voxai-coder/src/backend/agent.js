@@ -246,7 +246,7 @@ function fileUrl(absPath) {
 const PLATFORM_LINE = process.platform === 'win32'
   ? 'Windows — the shell tool runs cmd.exe, not bash (see its description)'
   : (process.platform === 'darwin' ? 'macOS, /bin/sh' : 'Linux, /bin/sh');
-const SYSTEM = (workdir, access, planMode = false, durable = '') =>
+const SYSTEM = (workdir, access, planMode = false, durable = '', webSearchOn = true) =>
   `You are Vox, the coding agent inside VoxAI Coder, a desktop coding app. ` +
   `Workdir: ${workdir}. All file paths are relative to it; never escape it. ` +
   // Static per machine, so it does not disturb the cached prefix.
@@ -257,7 +257,9 @@ const SYSTEM = (workdir, access, planMode = false, durable = '') =>
   `Patch small changes with patch (exact old→new) instead of full-file write. ` +
   `Store durable conventions/decisions with memory ("add" action) so future sessions remember them. ` +
   `For large files (>12k chars) use rag to retrieve relevant chunks before editing. ` +
-  `For research outside the repo: web_search to find sources, web_fetch to read them. Never guess a URL, ` +
+  (webSearchOn
+    ? `For research outside the repo: web_search to find sources, web_fetch to read them. Never guess a URL, `
+    : `Web search is turned off: use web_fetch only on URLs you already have (from the user or from a page's links). Never guess a URL, `) +
   `and only cite or describe pages you actually fetched — if a source could not be reached, say so. ` +
   `write/edit/patch syntax-check the file automatically and return the result. If one comes back ` +
   `"was written, but it does not parse", the change IS already on disk — do not re-apply it; read the ` +
@@ -315,6 +317,8 @@ async function* runAgent(opts) {
     // Can this model read images? true / false from the catalogue; null = unknown.
     // Decides whether a screenshot is handed over as a real image or described.
     modelVision = null,
+    // { enabled, engine, maxResults } from Settings. null = defaults (on, exa, 5).
+    webSearch = null,
   } = opts;
   let access = normalizeAccess(opts.access || 'test');
 
@@ -385,7 +389,10 @@ async function* runAgent(opts) {
   // Read once per run and reuse for every turn. It MUST be identical across turns of
   // a run or it would move the cache boundary and defeat the whole point.
   const durable = await loadDurableContext(session.workdir);
-  const systemPrompt = SYSTEM(session.workdir, access, planMode, durable);
+  // Search off means the tool is not offered at all, and the prompt must not tell the
+  // model to use it -- an instruction naming a missing tool invites made-up calls.
+  const webSearchOn = !(webSearch && webSearch.enabled === false);
+  const systemPrompt = SYSTEM(session.workdir, access, planMode, durable, webSearchOn);
   const estimatedBefore = estimateSessionTokens(session, systemPrompt);
   // User-visible compaction notices (like Codex/Claude Code): tell the UI before
   // and after we fold older turns, so compaction is never silent.
@@ -508,15 +515,16 @@ async function* runAgent(opts) {
         defaultSubModel: subagentModel, defaultSubMaxTurns: subagentMaxTurns, defaultSubTimeoutMs: subagentTimeoutMs,
         // Sub-agents spend the PARENT's remaining allowance, never a fresh one.
         // Rebuilt each turn so a fan-out later in the run sees the depleted figure.
-        budgetRemaining: Math.max(0, budget - spent), priceIn, priceOut, modelVision },
+        budgetRemaining: Math.max(0, budget - spent), priceIn, priceOut, modelVision, webSearch },
       getSettings: () => ({ access }),
       getAccess: () => access,
       showInApp: onOpenUrl,
       attachAtlas: onAttachAtlas,
     });
-    const toolList = Array.isArray(allowTools) && allowTools.length
+    const toolList = (Array.isArray(allowTools) && allowTools.length
       ? builtTools.filter((t) => allowTools.includes(t.def.function.name))
-      : builtTools;
+      : builtTools
+    ).filter((t) => webSearchOn || t.def.function.name !== 'web_search');
 
     // A turn boundary. Without it the UI had no signal that one inference ended and
     // the next began: a model that calls tools for six turns straight, emitting no
@@ -646,8 +654,14 @@ async function* runAgent(opts) {
       }
       const impl = toolList.find((t) => t.def.function.name === tc.name);
       if (!impl) {
-        session.messages.push({ role: 'tool', tool_call_id: id, content: `unknown tool: ${tc.name}` });
-        yield { type: 'tool_end', id, name: tc.name, ok: false, result: 'unknown tool' };
+        // A model that used web_search earlier in the session will try it again after
+        // search is switched off. "unknown tool" left it guessing why; say the real
+        // reason so it can tell the user.
+        const why = tc.name === 'web_search' && !webSearchOn
+          ? 'web_search is turned off in Settings. Use web_fetch on URLs you already have, or tell the user search is off.'
+          : `unknown tool: ${tc.name}`;
+        session.messages.push({ role: 'tool', tool_call_id: id, content: why });
+        yield { type: 'tool_end', id, name: tc.name, ok: false, result: why };
         continue;
       }
       // Loop detection. A model that repeats the same call with the same arguments
