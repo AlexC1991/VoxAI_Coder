@@ -28,6 +28,9 @@ const isDev = process.argv.includes('--dev');
 // app: "voxai-coder" from source, "VoxAI Coder" once packaged -- so the installed app
 // opened with no sessions and no key. Must run before anything reads userData.
 app.setPath('userData', path.join(app.getPath('appData'), 'voxai-coder'));
+// The same identity as the installed build (build.appId), so Windows groups the
+// taskbar button under the VoxAI icon rather than Electron's.
+if (process.platform === 'win32') app.setAppUserModelId('ai.vox.coder');
 
 // ---------------------------------------------------------------- settings ---
 const SETTINGS_PATH = path.join(app.getPath('userData'), 'voxai-settings.json');
@@ -146,6 +149,9 @@ function createWindow() {
     minWidth: 1100, minHeight: 700,
     backgroundColor: '#0e0e10',
     title: 'VoxAI Coder',
+    // The VoxAI mark in the taskbar and Alt-Tab, not Electron's. The installed app also
+    // carries it in the .exe (build.win.icon in package.json).
+    icon: path.join(__dirname, '..', '..', 'resources', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     // The UI draws its own title bar (Forge-style, with in-UI window buttons),
     // so the platform frame is removed — the app is not a shell over a web page.
     frame: false,

@@ -8,7 +8,8 @@
     "dev": "electron . --dev",
     "test": "node test/regression-protocol.js && node test/regression-tools.js && node test/regression-renderer.js && node test/regression-sessions.js && node test/regression-refit.js",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder"
+    "dist": "electron-builder",
+    "icon": "electron scripts/make-icon.js"
   },
   "author": "VoxAI",
   "license": "MIT",
@@ -28,6 +29,7 @@
       "package.json"
     ],
     "win": {
+      "icon": "resources/icon.ico",
       "target": [
         "nsis",
         "portable"

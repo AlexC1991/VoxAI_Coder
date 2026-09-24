@@ -201,6 +201,18 @@ async function drain(gen) {
     check('menus fit the room above their chip', HTML.includes("m.style.maxHeight = Math.max(160, r.top - 16) + 'px'"), 'can run off the top');
   }
 
+  // ------------------------------------------------------------------ [CE]
+  console.log('\n[CE] the app carries its own icon');
+  {
+    const PKG = JSON.parse(read('package.json'));
+    check('the build uses the VoxAI icon', PKG.build && PKG.build.win && PKG.build.win.icon === 'resources/icon.ico', PKG.build && PKG.build.win);
+    const ico = fs.readFileSync(path.join(ROOT, 'resources/icon.ico'));
+    const n = ico.readUInt16LE(4);
+    const sizes = [...Array(n)].map((_, i) => ico.readUInt8(6 + i * 16) || 256);
+    check('the .ico holds 16 to 256 px', ico.readUInt16LE(2) === 1 && sizes.includes(16) && sizes.includes(256), sizes);
+    check('the window shows it too (taskbar from npm start)', /icon: path\.join\(__dirname, '\.\.', '\.\.', 'resources'/.test(read('src/main/main.js')), 'no window icon');
+  }
+
   try { fs.rmSync(WD, { recursive: true, force: true }); } catch {}
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
