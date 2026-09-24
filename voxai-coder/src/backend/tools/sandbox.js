@@ -107,9 +107,13 @@ const READ_ONLY_GIT = new Set(['status', 'log', 'diff', 'show', 'rev-parse', 'ls
 function isReadOnlyCommand(cmd) {
   const s = String(cmd || '').trim();
   if (!s) return false;
-  // Redirection, substitution, background jobs, env assignment and escapes are out.
-  if (/[<>`]|\$\(|%[^%\s]+%|(^|\s)&(\s|$)|\^/.test(s)) return false;
-  const parts = s.split(/&&|\|\||;|\|/).map((p) => p.trim()).filter(Boolean);
+  // Silencing or merging error output writes nothing anywhere: 2>NUL, >/dev/null, 2>&1.
+  // Models add these to almost every look-around command, which kept them asking.
+  const quiet = s.replace(/\s*\d?>\s*(nul|\/dev\/null)(?=\s|$|[&|;])/gi, ' ').replace(/\s*2>&1/g, ' ');
+  // Any other redirection, substitution, variable expansion or escape is out.
+  if (/[<>`]|\$\(|%[^%\s]+%|\^/.test(quiet)) return false;
+  // A lone & is "then" in cmd.exe (and a background job in sh -- still only looking).
+  const parts = quiet.split(/&&|\|\||;|\||&/).map((p) => p.trim()).filter(Boolean);
   if (!parts.length) return false;
   return parts.every((p) => {
     const words = p.split(/\s+/);

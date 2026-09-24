@@ -1132,7 +1132,7 @@ let T = null;                 // target view for the current render op
 
 function viewOf(id){
   let v = viewStore.get(id);
-  if(!v){ v = { id, root: el('div','col'), curStream:null, curRun:null, latestTool:null, busy:false, runKeys:new Set(), statusEl:null, todosEl:null, pending:'', pi:0, shown:'', typeTimer:null, statusTimer:null, queue:[] }; viewStore.set(id,v); }
+  if(!v){ v = { id, root: el('div','col'), curStream:null, curRun:null, latestTool:null, busy:false, runKeys:new Set(), statusEl:null, todosEl:null, pending:'', pi:0, shown:'', typeTimer:null, statusTimer:null, queue:[] }; viewStore.set(id,v); try { if (THREAD_RO) THREAD_RO.observe(v.root); } catch {} }
   return v;
 }
 function actView(){ return activeId ? viewStore.get(activeId) : null; }
@@ -1177,6 +1177,7 @@ function renderQueue(v){
   // view used to insert its own tray above the box and never take it out again, so a
   // queue from one session stayed on screen after switching to another.
   if (!v || v !== actView()) return;
+  keepFollowing();   // the queue opening or closing changes the box's height
   const qb = $('qrows'); if (!qb) return;
   v.queueEl = qb;
   qb.innerHTML = '';
@@ -1340,6 +1341,7 @@ function paintShelf(){
   const any = [...$('shelf').children].some((c) => !c.hidden && !c.classList.contains('sh-sp'));
   $('shelf').hidden = !any;
   paintPlanTray();
+  keepFollowing();
 }
 
 /**
@@ -1774,6 +1776,7 @@ function paintActive(){
 // output meant being dragged back down several times a second. Now: at the bottom it
 // follows; scroll up and it lets go until you are back at the newest line.
 let THREAD_STICK = true;
+let THREAD_RO = null;        // watches every session's content for growth (see wireThreadFollow)
 let THREAD_UNSEEN = false;   // new output arrived while you were reading above it
 let THREAD_OURS = null;      // where our own last scroll left it, to tell it from yours
 let THREAD_JUMPING = false;  // the smooth "Jump to latest" is under way
@@ -1786,6 +1789,16 @@ function followThread(force){
     if (sc.scrollHeight - sc.scrollTop - sc.clientHeight > 1) { sc.scrollTop = sc.scrollHeight; THREAD_OURS = sc.scrollTop; }
   } else THREAD_UNSEEN = true;
   paintJump();
+}
+/**
+ * The message box just changed height (an approval, the shelf, the queue): if you are
+ * following the thread, make sure it is still at the newest line once that has laid
+ * out. The resize watchers normally do this; seen live, a change landing in the same
+ * frame as new output could leave the view short by the height of the change.
+ */
+function keepFollowing(){
+  if (!THREAD_STICK) return;
+  requestAnimationFrame(() => { if (THREAD_STICK) followThread(); });
 }
 function paintJump(){
   const b = $('jumpLatest'); if (!b) return;
@@ -1809,14 +1822,22 @@ function paintJump(){
   sc.addEventListener('keydown', (e) => { if (['ArrowUp', 'PageUp', 'Home'].includes(e.key)) { THREAD_STICK = false; paintJump(); } });
   // Content that grows after it is added (the typewriter, markdown rendering, images
   // loading, a step opening) keeps the view at the bottom while stuck.
-  const th = $('thread');
-  let lastH = th ? th.scrollHeight : 0;
-  if (th && window.ResizeObserver) new ResizeObserver(() => {
-    const h = th.scrollHeight, grew = h > lastH + 1;
-    lastH = h;
-    if (THREAD_STICK) followThread();
-    else if (grew) { THREAD_UNSEEN = true; paintJump(); }   // new output below where you are reading
-  }).observe(th);
+  // Watch each session's own content (its .col), not #thread: #thread is stretched to
+  // the window and never changes size, so growth inside it -- the finished answer being
+  // formatted, a step opening -- went unnoticed and the view stopped short of the end.
+  // Found in a live run: 174px of the answer left under the message box.
+  const lastH = new WeakMap();
+  if (window.ResizeObserver) THREAD_RO = new ResizeObserver((entries) => {
+    const v = actView();
+    for (const en of entries) {
+      if (!v || en.target !== v.root) continue;
+      const h = en.target.scrollHeight, grew = h > (lastH.get(en.target) || 0) + 1;
+      lastH.set(en.target, h);
+      if (THREAD_STICK) followThread();
+      else if (grew) { THREAD_UNSEEN = true; paintJump(); }   // new output below where you are reading
+    }
+  });
+  viewStore.forEach((v) => { if (THREAD_RO && v.root) THREAD_RO.observe(v.root); });
   if (window.ResizeObserver) new ResizeObserver(() => { if (THREAD_STICK) followThread(); }).observe(sc);
   $('jumpLatest').onclick = () => {
     THREAD_STICK = true; THREAD_UNSEEN = false; paintJump();
@@ -3724,6 +3745,7 @@ function paintAsk(){
     paintAskDraft();
   }
   updateSendState();
+  keepFollowing();
 }
 /** What you typed while the request was showing: kept as your draft, and said so. */
 function paintAskDraft(){

@@ -84,8 +84,8 @@ async function drain(gen) {
     const ro = await runShell('ask', 'dir', true);
     check('a read-only command runs without asking, even at Ask first', ro.asked.length === 0 && ro.end && ro.end.ok === true, ro.asked);
     const { isReadOnlyCommand } = require(path.join(ROOT, 'src/backend/tools/sandbox.js'));
-    const readOnly = ['dir /b', 'git status', 'git log --oneline -5', 'type README.md | findstr todo', 'node --version'];
-    const changes = ['ls > out.txt', 'del a.txt', 'git push', 'git branch -D x', 'cat a && rm b', 'dir /b && node todo.js list', 'npm install'];
+    const readOnly = ['dir /b', 'git status', 'git log --oneline -5', 'type README.md | findstr todo', 'node --version', 'dir /a /b && git status --short 2>NUL & echo --- & git rev-parse --is-inside-work-tree 2>NUL', 'git status 2>&1 | findstr /i fatal & echo done'];
+    const changes = ['ls > out.txt', 'del a.txt', 'git push', 'git branch -D x', 'cat a && rm b', 'dir /b && node todo.js list', 'npm install', 'dir /b & del x.txt', 'git status > log.txt', 'rm -rf x 2>NUL'];
     check('read-only commands are recognised', readOnly.every(isReadOnlyCommand), readOnly.filter((c) => !isReadOnlyCommand(c)));
     check('anything that changes something is not', !changes.some(isReadOnlyCommand), changes.filter(isReadOnlyCommand));
 
@@ -276,6 +276,7 @@ async function drain(gen) {
     const HTML = read('src/renderer/index.html');
     check('no forced scroll-into-view left in the thread', (HTML.match(/scrollIntoView\(\{\s*block:\s*'end'/g) || []).length === 0, 'still forcing');
     check('scrolling up lets go; the bottom re-attaches', HTML.includes('THREAD_STICK = threadAtBottom(sc);') && /deltaY < 0\) \{ THREAD_JUMPING = false; if \(THREAD_STICK\)/.test(HTML), 'always follows');
+    check('growth is watched on each session\'s content, not the fixed #thread frame', HTML.includes('THREAD_RO.observe(v.root)') && !/new ResizeObserver\([^)]*\)\.observe\(th\)/.test(HTML), 'watches a frame that never resizes');
     check('Jump to latest lights up when output grows below', HTML.includes('else if (grew) { THREAD_UNSEEN = true; paintJump(); }'), 'no signal');
     // The plan: pinned to the message box (always in view), Codex-style, not in the thread.
     check('the plan is a tab on the box edge with a drawer (design B)', /<div class="plan-tab" id="planTab" hidden>\s*<div class="pt-drawer" id="planList"/.test(HTML) && HTML.includes('function paintPlanTray()') && !HTML.includes("'todos:\\n'"), 'not the pull tab');
