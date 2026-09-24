@@ -18,11 +18,16 @@ const fs = require('fs');
 const os = require('os');
 
 const { runAgent } = require('../backend/agent');
-const { chatOnce } = require('../backend/providers/openrouter');
+const { chatOnce, normalizeReasoning } = require('../backend/providers/openrouter');
 const store = require('../backend/sessions');
-const { compactSession } = require('../backend/compact');
+const { compactSession, estimateSessionTokens } = require('../backend/compact');
 
 const isDev = process.argv.includes('--dev');
+
+// One data folder for `npm start` and the installed app. Electron names it after the
+// app: "voxai-coder" from source, "VoxAI Coder" once packaged -- so the installed app
+// opened with no sessions and no key. Must run before anything reads userData.
+app.setPath('userData', path.join(app.getPath('appData'), 'voxai-coder'));
 
 // ---------------------------------------------------------------- settings ---
 const SETTINGS_PATH = path.join(app.getPath('userData'), 'voxai-settings.json');
@@ -61,7 +66,7 @@ function getSettings(redacted = true) {
   return {
     openrouterHost: raw.openrouterHost || 'https://openrouter.ai',
     openrouterModel: raw.openrouterModel || 'anthropic/claude-sonnet-4.5',
-    reasoningEffort: raw.reasoningEffort || 'balanced',
+    reasoningEffort: normalizeReasoning(raw.reasoningEffort),
     access: raw.access ? (require('../backend/tools/sandbox').normalizeAccess(raw.access)) : 'test',
     planMode: raw.planMode === true || raw.planMode === 'true',
     workingDir: raw.workingDir || os.homedir(),
@@ -245,6 +250,16 @@ function subagentTimeoutToMs(raw) {
   if (!Number.isFinite(n) || n <= 0) return 300000;
   const ms = n < 1000 ? n * 1000 : n;
   return Math.min(3600000, Math.max(10000, Math.round(ms)));
+}
+
+/**
+ * The model's catalogue `reasoning` entry: the entry, null when the catalogue lists the
+ * model without one (it cannot reason), undefined when the model is not in the cache.
+ */
+function modelReasoning(modelId) {
+  const cap = modelCapCache.byId.get(modelId);
+  if (!cap) return undefined;
+  return cap.reasoningSpec || null;
 }
 
 /** true / false from the catalogue; null when the catalogue has not said. */
@@ -528,7 +543,15 @@ app.whenReady().then(() => {
   ipcMain.handle('sessions:open', async (_e, id) => {
     const sess = await getLive(id);
     // Fix 1: surface persisted usage ledger back to the UI
-    return { id: sess.id, title: sess.title, workdir: sess.workdir, model: sess.model, messages: sess.messages, todos: sess.todos, usage: sess.usage, stats: sess.stats };
+    // How full it is, for the meter by Send. The same estimate the run uses, less the
+    // system prompt the run adds; the first live `context` event corrects it.
+    const s = getSettings(false);
+    const context = {
+      tokens: estimateSessionTokens(sess, ''),
+      limit: Number(s.contextLimit) > 0 ? Number(s.contextLimit) : 200000,
+      threshold: Number(s.compactThreshold) > 0 ? Number(s.compactThreshold) : 0.8,
+    };
+    return { id: sess.id, title: sess.title, workdir: sess.workdir, model: sess.model, messages: sess.messages, todos: sess.todos, usage: sess.usage, stats: sess.stats, context };
   });
   ipcMain.handle('sessions:delete', async (_e, id) => {
     live.delete(id);
@@ -569,7 +592,7 @@ app.whenReady().then(() => {
 
   // Sub-agents: list persisted runs + manually trigger one (UI panel)
   ipcMain.handle('subagents:list', async () => {
-    try { return await store.listSessions(userData(), 200); } catch { return []; }
+    try { return await store.listSessions(userData(), 200, { subs: true }); } catch { return []; }
   });
   ipcMain.handle('subagents:spawn', async (_e, { task, model, maxTurns, timeoutMs }) => {
     const s = getSettings(false);
@@ -583,6 +606,7 @@ app.whenReady().then(() => {
       workdir,
       model: (model && String(model).trim()) || s.subagentModel || s.openrouterModel,
       title: 'subagent',
+      parentId: (sess && sess.id) || null,
     });
     const ctl = new AbortController();
     (async () => {
@@ -590,7 +614,7 @@ app.whenReady().then(() => {
         for await (const ev of runAgent({
           session: sub, userText: String(task),
           budgetUsd: Number(s.runBudgetUsd) > 0 ? Number(s.runBudgetUsd) : 1,
-          priceIn: modelPrice(sub.model).in, priceOut: modelPrice(sub.model).out, modelVision: modelVision(sub.model),
+          priceIn: modelPrice(sub.model).in, priceOut: modelPrice(sub.model).out, modelVision: modelVision(sub.model), reasoningSpec: modelReasoning(sub.model),
           apiKey: s.openrouterKey, host: s.openrouterHost, model: sub.model,
           reasoningEffort: s.reasoningEffort, access: s.access,
           maxTurns: Number(maxTurns) > 0 ? Number(maxTurns) : (Number(s.subagentMaxTurns) > 0 ? Number(s.subagentMaxTurns) : 25),
@@ -693,6 +717,8 @@ app.whenReady().then(() => {
           priceOut: modelPrice(sess.model || s.openrouterModel).out,
           // Whether screenshots are handed over as images or described as unseen.
           modelVision: modelVision(sess.model || s.openrouterModel),
+          // Which thinking levels this model takes, so the chip's choice means something.
+          reasoningSpec: modelReasoning(sess.model || s.openrouterModel),
           subagentModel: s.subagentModel, subagentMaxTurns: s.subagentMaxTurns, subagentTimeoutMs: s.subagentTimeoutMs,
           webSearch: { enabled: s.webSearchEnabled, engine: s.webSearchEngine, maxResults: s.webSearchMaxResults },
           onLiveEvent: (le) => { const c = chatWebContents(); c && c.send('agent:event', { sessionId, runKey, event: le }); },
@@ -755,6 +781,12 @@ app.whenReady().then(() => {
       type: 'compacted', dropped: comp.dropped, keptRecent: comp.keptRecent,
       estimatedBefore: comp.estimatedBefore, estimatedAfter: comp.estimatedAfter,
       reason: 'forced', fitsHardLimit: comp.fitsHardLimit
+    } });
+    const st = getSettings(false);
+    c && c.send('agent:event', { sessionId, runKey: 'manual', event: {
+      type: 'context', tokens: estimateSessionTokens(sess, ''),
+      limit: Number(st.contextLimit) > 0 ? Number(st.contextLimit) : 200000,
+      threshold: Number(st.compactThreshold) > 0 ? Number(st.compactThreshold) : 0.8,
     } });
     return { ok: true, compacted: !!comp.compacted };
   });
@@ -952,6 +984,14 @@ ipcMain.handle('openrouter:generations', async (_e, { limit = 40, cursor } = {})
           tools: params.has('tools'),
           structuredOutputs: params.has('structured_outputs') || params.has('response_format'),
           reasoning: params.has('reasoning') || params.has('reasoning_effort'),
+          // The levels it accepts and its default, straight from the catalogue. The
+          // reasoning menu is built from this, so it needs no list of model names.
+          reasoningSpec: m.reasoning && typeof m.reasoning === 'object' ? {
+            supported_efforts: Array.isArray(m.reasoning.supported_efforts) ? m.reasoning.supported_efforts : [],
+            default_effort: m.reasoning.default_effort || null,
+            default_enabled: m.reasoning.default_enabled !== false,
+            mandatory: m.reasoning.mandatory === true,
+          } : null,
           // Image input is a MODALITY, not a parameter, so supported_parameters never
           // mentions it. null = the catalogue did not say, which is not the same as no.
           vision: m.architecture && Array.isArray(m.architecture.input_modalities)

@@ -107,6 +107,7 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
         workdir: agentOpts.workdir || 'C:/',
         model: task.model || agentOpts.defaultSubModel || agentOpts.model,
         title: `subagent:${roleName}`,
+        parentId: agentOpts.sessionId || null,
       });
     }
 
@@ -149,6 +150,10 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
         host: agentOpts.host,
         model: task.model || sub.model || agentOpts.defaultSubModel || agentOpts.model,
         reasoningEffort: agentOpts.reasoningEffort,
+        // The catalogue entry describes the parent's model; a worker on another model
+        // gets "unknown", which sends nothing rather than a level it may not take.
+        reasoningSpec: (task.model || sub.model || agentOpts.defaultSubModel || agentOpts.model) === agentOpts.model
+          ? agentOpts.reasoningSpec : undefined,
         // A read-only role is enforced by the TOOL SURFACE, and its access level is
         // pinned low so nothing mutating could be auto-approved even if it leaked in.
         access: role.access || agentOpts.access || 'full',

@@ -430,7 +430,7 @@ function loadWith(file, stubs) {
 
     // The model picker only changed the global default; runs use the session's model.
     check('switching model switches the open session', MAIN.includes("ipcMain.handle('sessions:setModel'") && read('src/preload/preload.js').includes('sessionsSetModel') && /async function setModel[\s\S]{0,500}sessionsSetModel\(activeId, id\)/.test(HTML), 'chip-only switch');
-    check('the chip names the model the next send will use', HTML.includes('function activeModel()') && /function refreshChips\(\)\{ \$\('chipModelVal'\)\.textContent=activeModel\(\)/.test(HTML), 'shows the global default');
+    check('the chip names the model the next send will use', HTML.includes('function activeModel()') && /function refreshChips\(\)\{\s*\$\('chipModelVal'\)\.textContent = modelLabel\(activeModel\(\)\)/.test(HTML), 'shows the global default');
     check('the chip follows session switches', /function paintActive\(\)\{[\s\S]{0,300}refreshChips\(\)/.test(HTML), 'stale chip');
     check('a loaded session remembers its model', HTML.includes("v.model = full.model || '';"), 'model dropped');
 
@@ -456,8 +456,8 @@ function loadWith(file, stubs) {
   console.log('\n[AZ] web search settings');
   {
     // Settings panel: the three controls exist, are filled when it opens, and are saved.
-    check('Settings has a web search on/off', HTML.includes('<select id="fWebSearch">') && HTML.includes('value="off">Off'), 'missing');
-    check('...an engine picker with prices', ['exa', 'parallel', 'perplexity'].every((e) => HTML.includes(`<option value="${e}">`)) && /Exa — about \$0\.007 per search/.test(HTML), 'missing');
+    check('Settings has a web search on/off', HTML.includes('id="wsToggle" role="switch"') && HTML.includes('<input type="hidden" id="fWebSearch" value="on">'), 'missing');
+    check('...an engine picker with prices', ['exa', 'parallel', 'perplexity'].every((e) => HTML.includes(`data-v="${e}"`)) && /data-v="exa">Exa<small>\$0\.007<\/small>/.test(HTML) && /data-v="parallel">Parallel<small>\$0\.005<\/small>/.test(HTML), 'missing');
     check('...and a results-per-search field', HTML.includes('id="fWebResults" type="number" min="1" max="10"'), 'missing');
     check('the fields are filled when Settings opens', /prefillAdvanced[\s\S]*fWebSearch'\)\.value = s\.webSearchEnabled === false \? 'off' : 'on'/.test(HTML), 'blank on open');
     check('they are saved', HTML.includes("patch.webSearchEnabled = $('fWebSearch').value !== 'off'") && HTML.includes('patch.webSearchEngine =') && HTML.includes('patch.webSearchMaxResults ='), 'not saved');
@@ -518,6 +518,58 @@ function loadWith(file, stubs) {
       check('off: a web_search call from memory does not search', !searched, 'searched anyway');
       check('off: the model is told search is turned off', reply && /turned off in Settings/.test(reply.content), reply && reply.content);
     }
+  }
+
+  // ------------------------------------------------------------------ [BA]
+  console.log('\n[BA] the refit: one app, not parts bolted together');
+  {
+    const code = (HTML.match(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g) || []).join('\n')
+      .replace(/\/\/[^\n]*/g, '').replace(/\/\*[\s\S]*?\*\//g, '');
+    const titlebar = HTML.slice(HTML.indexOf('<header class="titlebar"'), HTML.indexOf('</header>', HTML.indexOf('<header class="titlebar"')));
+
+    // chrome
+    check('the leftover tab bar is gone', !HTML.includes('<div class="tabs">') && !/^\.tabs\{/m.test(HTML), 'still there');
+    check('Settings is a gear in the title bar', titlebar.includes('id="btnSettings"'), 'not in the title bar');
+    check('the title bar carries project / session', titlebar.includes('id="tbProj"') && titlebar.includes('id="tbTitle"') && code.includes("pj.textContent = wd ? folderName(wd) : ''"), 'no crumb');
+    check('the session title stays as a heading for screen readers', HTML.includes('<h1 class="sr-only" id="sessTitle">'), 'removed');
+    check('header stats are one pill with a detail card', HTML.includes('id="statPill"') && HTML.includes('class="stat-card"') && /\.workstats:hover \.stat-card,\.workhead \.workstats:focus \.stat-card\{display:flex\}/.test(HTML), 'five loose stats');
+    check('the pill can be reached by keyboard', HTML.includes('id="statPill" tabindex="0"'), 'mouse only');
+    check('the branch sits in the header', /<div class="workhead">[\s\S]{0,300}id="cbBranch"/.test(HTML), 'elsewhere');
+    check("summarise doesn't reuse the refresh icon", code.includes("btnCompact: 'compress'"), 'same arrow as refresh');
+
+    // sidebar
+    check('no placeholder identity', !/<span[^>]*>Vox User<\/span>/.test(HTML) && !HTML.includes('class="usercard"'), 'still there');
+    check('no empty Sessions heading', !HTML.includes('<div class="projhead">SESSIONS</div>') && !code.includes("'PROJECTS'"), 'still there');
+    check('one status row replaces three cards', HTML.includes('id="sideStatus"') && !HTML.includes('class="usage"') && !HTML.includes('id="backendBox"'), 'cards remain');
+    check('the model is not repeated in the sidebar', !HTML.includes('id="modelTag"') && !code.includes("$('modelTag')"), 'shown twice');
+    check('sessions show how long ago', code.includes('function relTime(') && code.includes("b.querySelector('time').textContent = relTime(s.updatedAt)"), 'no times');
+    check('only a working session gets a dot', code.includes("(busy ? '<span class=\"dot busy\"></span>' : '')"), 'every row dotted');
+
+    // rename: prompt() does not exist in Electron
+    check('rename happens in place', code.includes('function renameInPlace(s)') && code.includes('renameInPlace(s);'), 'no inline rename');
+    check('nothing calls prompt()', !/\bprompt\(/.test(code), 'prompt() is a no-op in Electron');
+
+    // context strip + message box
+    check('the strip is about changes only', !HTML.includes('id="cbRepo"') && /<div class="ctxbar" id="ctxBar"[\s\S]{0,400}id="cbDiff"/.test(HTML), 'repeats folder/branch');
+    check('+0 −0 is never shown', code.includes("(c.added ? '<span class=\"add\">+'") && code.includes("(c.removed ? '<span class=\"del\">"), 'zero counts shown');
+    check('only a strip with changes opens', code.includes("cb.classList.contains('can-open')"), 'opens an empty list');
+    check('Send lives at the end of the control row', /<div class="composer-row">[\s\S]*id="btnSend"[\s\S]*?<\/div>/.test(HTML) && !HTML.includes('composer-main'), 'beside the textarea');
+    check('the message box grows with its text', /\.box #prompt\{[^}]*field-sizing:content[^}]*max-height:40vh/.test(HTML), 'fixed height');
+    check('the footer is the keys, not backend notes', HTML.includes('<div class="composer-keys" id="cmpKeys">') && !HTML.includes('agent = vox backend (tools)'), 'dev notes');
+    check('an empty box never has a live Send', code.includes('btn.disabled = !hasText && !queued;'), 'live on the start screen');
+
+    // settings
+    check('Settings is a sheet with five sections', ['account', 'spend', 'web', 'subs', 'ctx'].every((k) => HTML.includes('data-set="' + k + '"')) && HTML.includes('class="sheet"'), 'one column');
+    check('hidden sections really hide', HTML.includes('.set-page[hidden]{display:none}'), 'display:flex beats [hidden]');
+    check('the do-nothing Cache TTL field is gone', !HTML.includes('fCacheTtl'), 'still there');
+    check('changes save as they are made', code.includes('queueSettingsSave();') && code.includes('function saveSettingsNow(withKeys)'), 'Save button only');
+    check('...but never the keys', code.includes("if (!t || t.id === 'fKey' || t.id === 'fMgmtKey') return;") && /if \(withKeys\) \{\s*if \(\$\('fKey'\)\.value\)/.test(code), 'half-typed keys saved');
+    check('a stored key leaves the field', code.includes("$('fKey').value = ''; $('fMgmtKey').value = '';"), 'secret left in the field');
+    check('clearing the sub-agent model saves', code.includes("patch.subagentModel = $('fSubModel').value.trim();"), 'cannot reset');
+    check('steppers stay inside their limits', code.includes('function clampNum(inp)'), 'unbounded');
+    check('the status row opens Account', code.includes("st.onclick = () => openModal('account')"), 'dead row');
+    check('usage history is a labelled button', !code.includes("btnUsage: 'gear'"), 'label replaced by an icon');
+    check('the misleading balance bar is gone', !HTML.includes('bal-bar'), 'bar shows used share');
   }
 
   // ------------------------------------------------------------------ [AW]

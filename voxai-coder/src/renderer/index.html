@@ -11,6 +11,8 @@
   --deep:#08080a; --bg:#0e0e10; --panel:#121215; --panel2:#17171b; --sel:#1f1f24;
   --edge:#232327; --edge2:#2e2e34;
   --ink:#e4e2df; --mut:#b3b0ab; --dim:#85817b; --faint:#6a6762;
+  /* small secondary text inside menus and the message box: readable, still quieter than --mut */
+  --sub:#9d9891;
   --gold:#c8a961; --goldedge:#463f30; --add:#93b884; --del:#cf7a66;
   --pp-ease-ms:240ms;
 }
@@ -35,9 +37,13 @@ button{font-family:inherit} ::selection{background:rgba(200,169,97,.26)}
 .titlebar{height:36px;flex:none;display:flex;align-items:center;gap:10px;padding:0 8px 0 12px;background:var(--deep);border-bottom:1px solid var(--edge);-webkit-app-region:drag;user-select:none}
 .titlebar .tb-mark{width:16px;height:16px;display:flex;align-items:center;justify-content:center;color:var(--gold)}
 .titlebar .tb-name{font-weight:900;font-size:14.5px;letter-spacing:.04em;color:var(--ink);white-space:nowrap}
-.titlebar .tb-ver{font-family:"Sometype Mono",monospace;font-size:12px;color:var(--faint)}
-.titlebar .tb-divider{width:1px;height:16px;flex:none;background:var(--edge);margin:0 2px}
-.titlebar .tb-title{flex:0 1 auto;font-family:"Sometype Mono",monospace;font-size:12.5px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.titlebar .tb-crumb{display:flex;align-items:center;gap:8px;min-width:0;font-size:13px;color:var(--dim)}
+.titlebar .tb-sep{color:var(--edge2);flex:none}
+.titlebar .tb-proj{flex:none;white-space:nowrap}
+.titlebar .tb-btn{width:32px;height:28px;flex:none;display:grid;place-items:center;border:0;border-radius:6px;background:transparent;color:var(--dim);cursor:pointer;margin-right:4px}
+.titlebar .tb-btn:hover{background:var(--sel);color:var(--gold)}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+.titlebar .tb-title{flex:0 1 auto;font-size:13px;color:var(--mut);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .titlebar .tb-spacer{flex:1}
 .titlebar :is(button){-webkit-app-region:no-drag}
 .window-buttons{display:flex;gap:2px}
@@ -49,15 +55,23 @@ button{font-family:inherit} ::selection{background:rgba(200,169,97,.26)}
 .titlebar.maximized .window-buttons .ico-restore{display:block}
 
 .main{flex:1;min-height:0;display:flex}
-.side{width:292px;flex:none;border-right:1px solid var(--edge);background:var(--panel);display:flex;flex-direction:column;padding:10px}
-.newsess{display:flex;align-items:center;gap:8px;border:1px solid var(--goldedge);border-radius:7px;background:transparent;cursor:pointer;padding:8px 11px;color:var(--gold);font-weight:700;font-size:14px}
-.newsess:hover{background:rgba(200,169,97,.08)} .newsess kbd{margin-left:auto;font-size:12px;color:var(--faint);font-family:"Sometype Mono",monospace}
-.search{margin-top:8px;display:flex;align-items:center;gap:8px;border:1px solid var(--edge);border-radius:7px;padding:7px 10px;color:var(--faint);font-size:13px}
-.search input{flex:1;background:transparent;border:0;outline:0;color:var(--ink);font-size:13px}
-.projhead{font-weight:700;font-size:12px;letter-spacing:.16em;color:var(--faint);padding:10px 4px 6px}
-.sesslist{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:2px}
-.sess{display:flex;align-items:center;gap:8px;border:0;border-radius:6px;background:transparent;cursor:pointer;padding:7px 8px;width:100%;text-align:left;color:var(--mut);font-size:13.5px}
-.sess:hover{background:var(--sel)} .sess.active{background:var(--sel);color:var(--ink)}
+/* ---- sidebar: new session, search, the project tree, one status row ----
+   It used to end in three stacked boxes: a placeholder "Vox User / Pro" identity, a
+   model + balance card, and a backend debug line. The model lives in the composer,
+   where it changes; what is left is one quiet row. */
+.side{width:264px;flex:none;border-right:1px solid var(--edge);background:var(--panel);display:flex;flex-direction:column;padding:12px 10px 8px;gap:8px}
+.newsess{display:flex;align-items:center;gap:8px;border:1px solid var(--goldedge);border-radius:8px;background:rgba(200,169,97,.06);cursor:pointer;padding:9px 12px;color:var(--gold);font-weight:600;font-size:13.5px;font-family:inherit}
+.newsess:hover{background:rgba(200,169,97,.12)} .newsess kbd{margin-left:auto;font-size:11.5px;color:var(--faint);font-family:"Sometype Mono",monospace}
+.search{display:flex;align-items:center;gap:8px;border-radius:8px;padding:7px 11px;background:var(--bg);color:var(--faint);font-size:13px}
+.search:focus-within{box-shadow:inset 0 0 0 1px var(--goldedge)}
+.search input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--ink);font-size:13px;font-family:inherit}
+.sesslist{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column;gap:1px;margin-top:4px}
+.sesslist .empty{font-size:12.5px;color:var(--faint);padding:8px}
+.sess{display:flex;align-items:center;gap:8px;border:0;border-radius:6px;background:transparent;cursor:pointer;padding:6px 8px;width:100%;text-align:left;color:var(--dim);font-size:13px;font-family:inherit}
+.sess:hover{background:var(--panel2);color:var(--mut)} .sess.active{background:var(--sel);color:var(--ink)}
+.sess .s-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sess-rename{flex:1;min-width:0;background:var(--bg);border:1px solid var(--goldedge);border-radius:5px;color:var(--ink);font-family:inherit;font-size:13px;padding:2px 6px;outline:0}
+.sess time{flex:none;font-family:"Sometype Mono",monospace;font-size:11px;color:var(--faint)}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--faint);flex:none}
 .dot.run{background:var(--add);animation:pulse 1.6s infinite} .dot.block{background:var(--gold)}
 /* busy: animated wheel */
@@ -65,11 +79,13 @@ button{font-family:inherit} ::selection{background:rgba(200,169,97,.26)}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* finished-ready: gold dot with soft glow */
 .dot.done{background:var(--gold);box-shadow:0 0 5px var(--goldedge)}
-.usage{margin-top:10px;border:1px solid var(--edge2);border-radius:7px;padding:9px 11px}
-.usage .bar{height:6px;background:var(--panel2);border-radius:3px;overflow:hidden;margin:7px 0}
-.usage .bar i{display:block;height:100%;background:var(--gold)}
-.backend{margin-top:8px;border:1px solid var(--edge2);border-radius:7px;padding:8px 10px;font-family:"Sometype Mono",monospace;font-size:12px;color:var(--dim);display:flex;flex-direction:column;gap:6px}
-.backend .ok{color:var(--add)} .backend .bad{color:var(--del)}
+.side-foot{display:flex;align-items:center;gap:8px;border:0;border-top:1px solid var(--edge);background:transparent;cursor:pointer;padding:10px 8px 4px;font-size:12.5px;color:var(--dim);font-family:inherit;text-align:left}
+.side-foot:hover .sf-label,.side-foot:hover .sf-bal{color:var(--ink)}
+.side-foot:focus-visible{outline:2px solid var(--goldedge);outline-offset:2px;border-radius:6px}
+.sf-dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:none}
+.sf-dot.ok{background:var(--add)} .sf-dot.bad{background:var(--del)}
+.sf-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sf-bal{font-family:"Sometype Mono",monospace;font-size:12px;color:var(--mut);white-space:nowrap}
 .work{flex:1;min-width:0;display:flex;flex-direction:column}
 /* One line, always. A session is titled by its first message, so titles are often long,
    and with the preview open the header is narrow: the title wrapped one word per line,
@@ -79,10 +95,22 @@ button{font-family:inherit} ::selection{background:rgba(200,169,97,.26)}
 .workhead .t{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:60px;flex:0 1 auto}
 .workhead .sub{font-family:"Sometype Mono",monospace;font-size:13px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 8 auto}
 .workhead .pp-toggle,.workhead .dot{flex:none}
-.workhead .workstats{margin-left:auto;display:flex;gap:16px;align-items:center;flex:none}.workhead .stat{display:flex;flex-direction:column;align-items:flex-end;line-height:1.25}.workhead .stat i{font-style:normal;font-size:10px;letter-spacing:.14em;color:var(--faint)}.workhead .stat b{font-family:"Sometype Mono",monospace;font-size:12.5px;color:var(--gold);white-space:nowrap}
+.workhead .wh-sp{flex:1}
+.workhead .wh-branch{flex:none;font-family:"Sometype Mono",monospace;font-size:12px;color:var(--gold);background:rgba(200,169,97,.08);padding:2px 8px;border-radius:5px;white-space:nowrap}
+.workhead .wh-branch.none{color:var(--faint);background:var(--panel2)}
+.workhead .workstats{position:relative;display:flex;align-items:center;gap:10px;flex:none;padding:4px 11px;border-radius:999px;background:var(--panel2);cursor:default;outline:0}
+.workhead .workstats:focus-visible{box-shadow:0 0 0 2px var(--goldedge)}
+.workhead .workstats[hidden]{display:none}
+.workhead .st-cost b{color:var(--gold)}
+.workhead .st-tok{font-family:"Sometype Mono",monospace;font-size:12px;color:var(--faint)}
+.workhead .st-tok b{color:var(--mut);font-weight:500}
+.workhead .st-cost + .st-tok::before{content:"\00b7";margin-right:10px;color:var(--faint)}
+.workhead .stat-card{position:absolute;top:calc(100% + 8px);right:0;min-width:230px;display:none;flex-direction:column;gap:8px;padding:12px 14px;background:var(--panel2);border:1px solid var(--edge2);border-radius:10px;box-shadow:0 18px 40px -12px rgba(0,0,0,.7);z-index:30}
+.workhead .workstats:hover .stat-card,.workhead .workstats:focus .stat-card{display:flex}
+.workhead .stat-card .stat{flex-direction:row;justify-content:space-between;align-items:baseline;gap:16px}
+.workhead .stat-card .stat i{font-size:12px;letter-spacing:0;color:var(--dim)}.workhead .stat{display:flex;align-items:baseline;gap:4px;line-height:1.3}.workhead .stat i{font-style:normal;font-size:10px;letter-spacing:.14em;color:var(--faint)}.workhead .stat b{font-family:"Sometype Mono",monospace;font-size:12.5px;color:var(--gold);white-space:nowrap}
 .scroll{flex:1;min-height:0;overflow:auto;display:flex;justify-content:center;padding:26px 24px 0}
 .col{width:100%;max-width:760px;display:flex;flex-direction:column;gap:20px;padding-bottom:20px}
-.user{max-width:78%;background:var(--panel2);border:1px solid var(--edge);border-radius:9px;padding:10px 13px;font-size:15px;line-height:1.6}
 .msg{font-size:15.5px;line-height:1.72;text-wrap:pretty;white-space:pre-wrap}
 .msg.mono{font-family:"Sometype Mono",monospace;font-size:13.5px;color:var(--mut);background:var(--deep);border:1px solid var(--edge);border-radius:8px;padding:9px 11px}
 /* A warning is advice, not a failure. Red is reserved for things that actually
@@ -93,44 +121,39 @@ button{font-family:inherit} ::selection{background:rgba(200,169,97,.26)}
 .msg.compact.busy{color:var(--gold)}
 .msg.compact.busy::after{content:"…";animation:blink 1s step-end infinite}
 .msg.compact.subtle{color:var(--faint);background:transparent;border:1px solid var(--edge);border-radius:8px;padding:6px 10px}
-.runhead{display:flex;align-items:center;gap:8px;color:var(--gold);font-family:"Sometype Mono",monospace;font-size:14px;padding:2px 0}
-.runhead .delta{color:var(--faint)}
 .statusline{display:flex;align-items:center;gap:9px;font-family:"Sometype Mono",monospace;font-size:14px;color:var(--mut)}
 .statusline .cursor{width:7px;height:14px;background:var(--gold);animation:blink 1s step-end infinite}
-.composer-zone{flex:none;display:flex;justify-content:center;padding:12px 24px 18px}
+.composer-zone{flex:none;display:flex;justify-content:center;padding:8px 24px 14px}
 .composer{width:100%;max-width:760px;display:flex;flex-direction:column;gap:6px}
-.perm{border:1px solid var(--goldedge);border-radius:8px;background:var(--panel);padding:8px 11px;display:flex;align-items:center;gap:9px;font-size:14px}
-.perm b{color:var(--gold)} .perm code{font-family:"Sometype Mono",monospace;color:var(--dim);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .btn{border:1px solid var(--gold);border-radius:6px;background:transparent;color:var(--gold);cursor:pointer;font-weight:700;font-size:14px;padding:5px 11px}
 .btn:hover{background:var(--gold);color:#0e0e10}
 .btn.ghost{border-color:var(--edge2);color:var(--dim)} .btn.ghost:hover{background:var(--sel);color:var(--ink)}
-.box{border:1px solid var(--edge2);border-radius:10px;background:var(--panel);display:flex;flex-direction:column}
-.composer-main{display:flex;align-items:flex-start;gap:10px;padding:13px 13px 10px}.composer-main textarea{flex:1;background:transparent;border:0;outline:0;resize:none;color:var(--ink);font-family:'Chivo',sans-serif;font-size:15.5px;line-height:1.5;min-height:24px}
+/* ---- the message box ----
+   Text on top, one row of controls, Send at the end of that row. The box grows with
+   what you type (it was fixed at two lines, so long prompts scrolled inside it) and
+   shows focus with its border instead of every piece carrying its own outline. */
+.box{border:1px solid var(--edge2);border-radius:14px;background:var(--panel);display:flex;flex-direction:column;transition:border-color .15s,box-shadow .15s}
+.box:focus-within{border-color:var(--goldedge);box-shadow:0 0 0 3px rgba(200,169,97,.05)}
+.box #prompt{display:block;width:100%;box-sizing:border-box;background:transparent;border:0;outline:0;resize:none;color:var(--ink);font-family:Chivo,sans-serif;font-size:15px;line-height:1.55;padding:13px 16px 4px;field-sizing:content;min-height:46px;max-height:40vh;overflow-y:auto}
 /* With the preview open the chat column gets narrow, and the chips were wrapping
    mid-word ("Auto-
 edit + 
 tests"). Scroll the row instead of breaking words:
    a control that has to be read across three lines is worse than one you nudge. */
-.composer-row{display:flex;align-items:center;gap:4px;padding:0 12px 11px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+.composer-row{display:flex;align-items:center;gap:2px;padding:2px 8px 8px 10px;flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none}
+.composer-row .cr-sp{flex:1;min-width:8px}
+.composer-row .send{flex:none}
 .composer-row::-webkit-scrollbar{height:0}
 .composer-row .chip{flex:none;white-space:nowrap}
 .composer-row .cmpbtn{flex:none}
-.chip{display:flex;align-items:center;gap:5px;border:0;background:transparent;cursor:pointer;padding:3px 4px;color:var(--dim);font-family:'Chivo',sans-serif;font-weight:400;font-size:14px;position:relative}
-.chip:hover{color:var(--gold)} .chip b{font-weight:400}
-.chip .menu{position:absolute;bottom:26px;left:-4px;min-width:170px;border:1px solid var(--edge2);border-radius:8px;background:var(--panel2);padding:4px;z-index:5;display:none;flex-direction:column;max-height:300px;overflow:auto}
-.chip.open .menu{display:flex}
-.chip .menu button{display:flex;gap:8px;align-items:center;border:0;border-radius:6px;background:transparent;color:var(--mut);cursor:pointer;padding:7px 9px;text-align:left;font-size:13.5px}
-.chip .menu button:hover,.chip .menu button.sel{background:var(--sel);color:var(--ink)}
-.send{width:34px;height:34px;flex:none;border:1px solid var(--goldedge);border-radius:9px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--gold);transition:background .12s,color .12s,border-color .12s,opacity .12s}
-.send:hover:not(:disabled){background:var(--gold);color:#0e0e10;border-color:var(--gold)}
-.send:disabled{opacity:.35;cursor:default}
+.send{width:32px;height:32px;flex:none;border:1px solid var(--gold);border-radius:9px;background:var(--gold);cursor:pointer;display:flex;align-items:center;justify-content:center;color:#0e0e10;transition:background .12s,color .12s,border-color .12s,opacity .12s}
+.send:hover:not(:disabled){background:#d8bb74;border-color:#d8bb74}
+.send:disabled{background:var(--panel2);border-color:var(--edge2);color:var(--faint);cursor:default}
 .send.stop{border-color:var(--del);color:var(--del)}
 .send.stop:hover:not(:disabled){background:var(--del);color:#0e0e10;border-color:var(--del)}
 .send .ico-stop{display:none}
 .send.stop .ico-send{display:none}
 .send.stop .ico-stop{display:block}
-.composer-main{display:flex;align-items:flex-end;gap:10px;padding:13px 13px 10px}
-.composer-main textarea{flex:1;background:transparent;border:0;outline:0;resize:none;color:var(--ink);font-family:'Chivo',sans-serif;font-size:15.5px;line-height:1.5;min-height:24px;padding:3px 0}
 /* launcher + diff + modal */
 .launch{flex:1;overflow:auto;display:flex;justify-content:center;padding:40px 24px}
 .hero{text-align:center;display:flex;flex-direction:column;gap:9px;align-items:center}
@@ -149,6 +172,77 @@ tests"). Scroll the row instead of breaking words:
 .ln-add{color:var(--add)} .ln-del{color:var(--del)} .ln-ctx{color:var(--dim)}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50}
 .modal-bg.show{display:flex}
+/* ---- Settings: a sheet with sections ----
+   It was one 560px column of 17 fields: API keys next to "hard limit fraction",
+   all-caps labels, env-var names in every hint, a disabled field that did nothing,
+   and a Save button to remember. Now: five sections, plain labels, the right control
+   for each value, and changes saved as they are made (keys excepted). */
+.sheet{width:920px;max-width:94vw;height:640px;max-height:88vh;display:grid;grid-template-columns:212px minmax(0,1fr);background:var(--panel);border:1px solid var(--edge2);border-radius:14px;overflow:hidden;box-shadow:0 40px 80px -20px rgba(0,0,0,.75)}
+.set-nav{background:var(--bg);border-right:1px solid var(--edge);padding:18px 10px 14px;display:flex;flex-direction:column;gap:2px}
+.set-nav h2{margin:0 0 12px;padding:0 10px;font-size:17px;font-weight:700}
+.set-nav button{display:flex;align-items:center;gap:10px;text-align:left;font-family:Chivo,sans-serif;font-weight:500;font-size:13.5px;color:var(--dim);background:none;border:0;border-radius:7px;padding:8px 10px;cursor:pointer}
+.set-nav button svg{width:16px;height:16px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round;flex:none}
+.set-nav button:hover{color:var(--ink);background:var(--panel)}
+.set-nav button[aria-current="page"]{background:var(--sel);color:var(--ink)}
+.set-nav button[aria-current="page"] svg{color:var(--gold)}
+.set-foot{margin-top:auto;padding:0 10px;font-size:11.5px;color:var(--faint);line-height:1.5}
+.set-main{position:relative;display:flex;flex-direction:column;min-height:0;min-width:0}
+.set-x{position:absolute;top:14px;right:14px;width:30px;height:30px;border:0;border-radius:7px;background:transparent;color:var(--faint);font-size:14px;cursor:pointer;z-index:2}
+.set-x:hover{background:var(--sel);color:var(--ink)}
+.set-page{display:flex;flex-direction:column;min-height:0;flex:1}
+.set-page[hidden]{display:none}
+.set-top{padding:20px 60px 14px 26px}
+.set-top h3{margin:0;font-size:19px;font-weight:700;letter-spacing:-.01em}
+.set-top p{margin:4px 0 0;font-size:13px;color:var(--dim);max-width:60ch;line-height:1.5}
+.set-scroll{flex:1;min-height:0;overflow:auto;padding:0 26px 18px;display:flex;flex-direction:column;gap:14px}
+.set-group{border:1px solid var(--edge);border-radius:10px;background:var(--bg);flex:none}
+.set-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:18px;align-items:center;padding:14px 16px;border-top:1px solid var(--edge)}
+.set-row:first-child{border-top:0}
+.set-row.wide{grid-template-columns:minmax(0,1fr) minmax(250px,330px)}
+.set-row.off .set-txt,.set-row.off .set-ctl{opacity:.4;pointer-events:none}
+.set-lbl{font-size:14px;font-weight:600;color:var(--ink)}
+.set-lbl .opt{font-weight:400;font-size:11.5px;color:var(--faint);margin-left:6px}
+.set-desc{font-size:12.5px;color:var(--dim);margin-top:2px;max-width:48ch;line-height:1.5}
+.set-ctl{display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:0}
+.set-state{font-family:"Sometype Mono",monospace;font-size:11.5px;color:var(--faint);align-self:flex-start}
+.set-actions{display:flex;align-items:center;gap:12px;padding:10px 16px 12px;border-top:1px solid var(--edge)}
+.set-hint{font-size:12px;color:var(--faint);margin-right:auto}
+.set-note{margin:0;font-size:12px;color:var(--faint);line-height:1.6}
+.set-note code{font-family:"Sometype Mono",monospace;font-size:11.5px;color:var(--dim)}
+.set-status{display:flex;justify-content:flex-end;align-items:center;padding:0 26px;border-top:1px solid var(--edge);font-size:12.5px;height:38px;flex:none}
+#setSaved{color:var(--add);opacity:0;transition:opacity .25s}
+#setSaved.show{opacity:1} #setSaved.err{color:var(--del)}
+.keyrow{display:flex;gap:8px;width:100%}
+.keyrow input,.set-ctl .txt{flex:1;min-width:0;background:var(--panel2);border:1px solid var(--edge2);border-radius:7px;color:var(--ink);padding:7px 10px;font-family:"Sometype Mono",monospace;font-size:12.5px;outline:0}
+.set-ctl .txt{flex:none;width:260px}
+.keyrow input:focus,.set-ctl .txt:focus,.num:focus-within{border-color:var(--goldedge)}
+.num{display:inline-flex;align-items:center;background:var(--panel2);border:1px solid var(--edge2);border-radius:8px}
+.num input{width:80px;background:transparent;border:0;outline:0;color:var(--ink);text-align:right;font-family:"Sometype Mono",monospace;font-weight:600;font-size:13px;padding:6px 2px;-moz-appearance:textfield;font-variant-numeric:tabular-nums}
+.num input::-webkit-outer-spin-button,.num input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
+.num-u{font-family:"Sometype Mono",monospace;font-size:11.5px;color:var(--faint);padding:0 2px 0 5px}
+.num-b{width:30px;height:32px;border:0;background:none;color:var(--dim);font-size:16px;cursor:pointer;border-radius:8px}
+.num-b:hover{color:var(--ink)}
+.tog{width:40px;height:22px;border-radius:999px;border:0;background:var(--edge2);position:relative;cursor:pointer;flex:none;transition:background .15s}
+.tog::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--mut);transition:transform .15s,background .15s}
+.tog[aria-checked="true"]{background:rgba(200,169,97,.35)}
+.tog[aria-checked="true"]::after{transform:translateX(18px);background:var(--gold)}
+.seg{display:inline-flex;background:var(--panel2);border-radius:8px;padding:3px;gap:2px}
+.seg button{border:0;background:none;border-radius:6px;padding:5px 12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;font-family:Chivo,sans-serif;font-weight:600;font-size:12.5px;color:var(--dim)}
+.seg button small{font-family:"Sometype Mono",monospace;font-size:10.5px;color:var(--faint);font-weight:400}
+.seg button:hover{color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--sel);color:var(--ink)}
+.seg button[aria-pressed="true"] small{color:var(--gold)}
+.presets{display:flex;gap:6px}
+.presets button{font-family:"Sometype Mono",monospace;font-size:12px;color:var(--dim);background:var(--panel2);border:0;padding:6px 10px;border-radius:6px;cursor:pointer}
+.presets button:hover{color:var(--ink)}
+.presets button.on{color:var(--gold);box-shadow:inset 0 0 0 1px var(--goldedge)}
+.rng{display:flex;align-items:center;gap:12px}
+.rng input{width:170px;accent-color:var(--gold)}
+.rng output{font-family:"Sometype Mono",monospace;font-weight:600;font-size:13px;min-width:44px;text-align:right;color:var(--ink)}
+.bal{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
+.bal b{font-family:"Sometype Mono",monospace;font-weight:600;font-size:18px;color:var(--ink)}
+.sheet :is(button,input):focus-visible{outline:2px solid var(--goldedge);outline-offset:2px}
+
 .modal{width:560px;max-width:92vw;max-height:86vh;overflow:auto;background:var(--panel);border:1px solid var(--edge2);border-radius:10px;padding:18px}
 .modal h2{margin:0 0 4px;font-size:18px} .modal p.sub{margin:0 0 14px;color:var(--dim);font-size:13.5px}
 .field{margin-bottom:12px} .field label{display:block;font-size:12px;letter-spacing:.12em;color:var(--faint);margin-bottom:5px;font-weight:700}
@@ -157,13 +251,8 @@ tests"). Scroll the row instead of breaking words:
 .log{background:#000;border:1px solid var(--edge);border-radius:6px;padding:8px;font-family:"Sometype Mono",monospace;font-size:11.5px;color:var(--dim);height:140px;overflow:auto;white-space:pre-wrap}
 .hint{font-size:12.5px;color:var(--faint);line-height:1.6}
 
-.tabs{display:flex;align-items:center;gap:2px;padding:8px 14px 0;border-bottom:1px solid var(--edge)}.tab{border:0;border-bottom:2px solid transparent;background:transparent;cursor:pointer;padding:8px 12px;font-size:13.5px;color:var(--mut)}.tab:hover{color:var(--ink)}.tab.active{color:var(--ink);border-bottom-color:var(--gold)}.tab.gold{color:var(--gold)}.tab.gold:hover{background:rgba(200,169,97,.12)}.tabs .sp{flex:1}
-.tabs{flex:none}
-.usercard{margin-top:8px;border:1px solid var(--edge2);border-radius:7px;padding:8px 10px;display:flex;align-items:center;gap:8px;font-size:13px;color:var(--mut)}.usercard .avatar{width:24px;height:24px;border-radius:50%;background:var(--goldedge);color:var(--gold);display:flex;align-items:center;justify-content:center;font-weight:900;font-size:12px}.usercard .uname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.usercard .plan{font-family:"Sometype Mono",monospace;font-size:11px;color:var(--gold);border:1px solid var(--goldedge);border-radius:4px;padding:1px 6px}
-.usage-row{display:flex;align-items:center;justify-content:space-between}.usage-row b{font-size:12px;letter-spacing:.08em;color:var(--mut)}.usage .mono{font-family:"Sometype Mono",monospace;font-size:12px;color:var(--gold);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px;margin-left:8px}.credits{font-family:"Sometype Mono",monospace;font-size:13px;color:var(--ink);margin:7px 0 2px}.fine{font-family:"Sometype Mono",monospace;font-size:11px;color:var(--faint);margin-top:5px}.mini{border:0;background:transparent;color:var(--dim);cursor:pointer;font-size:13px;padding:2px 4px;border-radius:4px}.mini:hover{color:var(--gold)}
-.ms{padding:6px 6px 4px;border-bottom:1px solid var(--edge)}.ms input{width:100%;background:var(--deep);border:1px solid var(--edge2);border-radius:6px;color:var(--ink);padding:6px 9px;font-size:12.5px;font-family:"Sometype Mono",monospace;outline:0}.ms input:focus{border-color:var(--goldedge)}.mlist{max-height:280px;overflow:auto;display:flex;flex-direction:column;padding:4px}.mlist .grp{font-size:10px;letter-spacing:.18em;color:var(--faint);padding:8px 8px 3px;font-weight:700}.mlist button{display:flex;align-items:center;gap:8px;border:0;border-radius:6px;background:transparent;color:var(--mut);cursor:pointer;padding:6px 8px;text-align:left;font-size:13px;width:100%}.mlist button:hover,.mlist button.sel{background:var(--sel);color:var(--ink)}.mlist button.sel b{color:var(--gold)}.mlist button b{font-weight:700;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.mlist button small{margin-left:auto;flex:none;font-family:"Sometype Mono",monospace;font-size:10.5px;color:var(--faint)}.mlist-foot{padding:5px 8px;border-top:1px solid var(--edge);font-family:"Sometype Mono",monospace;font-size:11px;color:var(--faint);text-align:center}
+.fine{font-family:"Sometype Mono",monospace;font-size:11px;color:var(--faint);margin-top:5px}.mini{border:0;background:transparent;color:var(--dim);cursor:pointer;font-size:13px;padding:2px 4px;border-radius:4px}.mini:hover{color:var(--gold)}
 
-.md{font-size:15.5px;line-height:1.72;text-wrap:pretty;overflow-wrap:break-word}
 .md p{margin:.5em 0}
 .md h1,.md h2,.md h3,.md h4{font-weight:700;margin:.7em 0 .35em;color:var(--ink)}
 .md h1{font-size:19px}.md h2{font-size:17px}.md h3{font-size:15.5px}.md h4{font-size:14px}
@@ -177,20 +266,10 @@ tests"). Scroll the row instead of breaking words:
 .md ul{margin:.4em 0;padding-left:1.3em}
 .md li{margin:.15em 0}
 .md .cursor{display:inline-block;width:7px;height:14px;background:var(--gold);animation:blink 1s step-end infinite;vertical-align:-2px}
-.run{margin:6px 0 2px}
-.runhead{display:flex;align-items:center;gap:10px;cursor:pointer;color:var(--gold);font-family:"Sometype Mono",monospace;font-size:15px;user-select:none;padding:3px 0}
-.runhead:hover{color:#dcc084}
-.runhead .chev{color:var(--faint);flex:none;width:14px;transition:transform .12s}
-.modelabel{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rundelta{color:var(--faint);margin-left:auto;flex:none;font-size:13px}
-.runbody{margin:2px 0 10px 22px;display:flex;flex-direction:column;gap:1px}
-.ctxbar{display:flex;align-items:center;gap:10px;padding:5px 10px;margin-bottom:6px;border:1px solid var(--edge);border-radius:7px;background:var(--deep);font-family:"Sometype Mono",monospace;font-size:12px;color:var(--mut);flex-wrap:wrap}
-.pvbar .pv-tag{color:var(--gold);letter-spacing:.1em;text-transform:uppercase;font-size:10.5px}
-.pvbar .pv-url{color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
-.pvbar .pv-tools{margin-left:auto;display:flex;gap:2px}
-.ctxbar{cursor:pointer}
-.ctxbar .cb-chev{color:var(--faint);display:inline-flex;align-items:center}
-.difflist{max-height:220px;overflow:auto;border:1px solid var(--edge);border-bottom:none;border-radius:7px 7px 0 0;background:var(--deep);font-family:"Sometype Mono",monospace;font-size:12px}
+/* ---- the context strip: what has changed, right above where you type ----
+   It repeated the folder (already in the title bar) and the branch (now in the
+   header), in a bordered box of its own. Now it is a plain line about changes. */
+.difflist{max-height:220px;overflow:auto;border:1px solid var(--edge);border-radius:10px;background:var(--bg);font-family:"Sometype Mono",monospace;font-size:12px;margin-bottom:2px}
 .difflist .df{display:flex;align-items:center;gap:9px;padding:4px 10px;border-bottom:1px solid var(--edge)}
 .difflist .df:last-child{border-bottom:none}
 .difflist .df:hover{background:var(--panel2)}
@@ -203,13 +282,6 @@ tests"). Scroll the row instead of breaking words:
 .difflist .df-n .a{color:var(--add)}
 .difflist .df-n .d{color:var(--del);margin-left:6px}
 .difflist .df-more{padding:5px 10px;color:var(--faint)}
-.ctxbar .cb-repo{color:var(--ink);font-weight:700}
-.ctxbar .cb-branch{color:var(--gold)}
-.ctxbar .cb-branch::before{content:'on ';opacity:.55;color:var(--faint)}
-.ctxbar .cb-diff .add{color:var(--add)}
-.ctxbar .cb-diff .del{color:var(--del)}
-.ctxbar .cb-touched{color:var(--faint)}
-.ctxbar .mini{margin-left:auto}
 /* ---- reasoning: the margin rail (study T1) ----
    Thinking is a passing state, not a record, so it gets NO border, NO fill and NO
    radius -- a hairline in the gutter and dimmed italic text. It used to be the same
@@ -245,10 +317,9 @@ tests"). Scroll the row instead of breaking words:
 .toolrow.has-detail .top .cmd::after{content:' \203A';color:var(--faint);font-size:11px}
 .toolrow.open .top .cmd::after{content:' \02C5';color:var(--gold)}
 .toolout{font-family:"Sometype Mono",monospace;font-size:13px;line-height:1.65;padding:2px 0 4px;color:var(--dim);white-space:pre-wrap}
-.attach-tray{display:flex;flex-wrap:wrap;gap:8px;padding:8px 12px 0}.attach-thumb{position:relative;width:56px;height:56px;border:1px solid var(--edge2);border-radius:7px;overflow:hidden;flex:none}.attach-thumb img{width:100%;height:100%;object-fit:cover;display:block}.attach-thumb .rm{position:absolute;top:-4px;right:-4px;width:16px;height:16px;border-radius:50%;border:1px solid var(--goldedge);background:var(--panel2);color:var(--gold);font-size:10px;line-height:14px;text-align:center;cursor:pointer}.cmpbtn{width:26px;height:26px;flex:none;border:0;border-radius:6px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--dim)}.cmpbtn:hover,.cmpbtn.active{background:var(--sel);color:var(--ink)}.vdiv{width:1px;height:16px;background:var(--edge)}.cmpbtn.rec{color:var(--del);border-color:var(--del);animation:pulse 1s infinite}
+.cmpbtn{width:26px;height:26px;flex:none;border:0;border-radius:6px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--dim)}.cmpbtn:hover,.cmpbtn.active{background:var(--sel);color:var(--ink)}.vdiv{width:1px;height:16px;background:var(--edge)}.cmpbtn.rec{color:var(--del);border-color:var(--del);animation:pulse 1s infinite}
 .usage-summary{display:flex;gap:10px;flex-wrap:wrap}.us-box{flex:1;min-width:110px;border:1px solid var(--edge2);border-radius:8px;padding:10px 12px;background:var(--panel2)}.us-k{font-size:11px;letter-spacing:.14em;color:var(--faint);font-weight:700}.us-v{font-size:19px;font-family:"Sometype Mono",monospace;color:var(--gold);margin-top:4px}.ug-row{display:flex;align-items:center;gap:10px;border:1px solid var(--edge);border-radius:8px;padding:8px 11px;margin-bottom:7px;background:var(--panel)}.ug-row .m{font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ug-row .tk{font-family:"Sometype Mono",monospace;font-size:12px;color:var(--dim);white-space:nowrap}.ug-row .cost{margin-left:auto;font-family:"Sometype Mono",monospace;font-size:13px;color:var(--add);white-space:nowrap}.ug-row .t{font-family:"Sometype Mono",monospace;font-size:11.5px;color:var(--faint);white-space:nowrap}.usage-hint{font-size:12.5px;color:var(--faint);line-height:1.6}
 .md table{border-collapse:collapse;width:100%;margin:.6em 0;font-size:13.5px}.md table th,.md table td{border:1px solid var(--edge2);padding:6px 9px;text-align:left;vertical-align:top}.md table thead th{background:var(--panel2);color:var(--gold);font-weight:700;font-family:"Sometype Mono",monospace;font-size:12px;letter-spacing:.05em}.md table tbody tr:nth-child(even){background:var(--panel)}.md blockquote{margin:.6em 0;padding:2px 0 2px 13px;border-left:3px solid var(--goldedge);color:var(--mut);font-style:italic}
-.proj-folder{display:flex;align-items:center;gap:8px;padding:7px 8px;color:var(--gold);font-size:13px;font-weight:700;font-family:"Sometype Mono",monospace;cursor:pointer;border:0;background:transparent;width:100%;text-align:left;border-radius:6px}.proj-folder:hover{background:var(--sel);color:#dcc084}.proj-folder .pf-mark{width:16px;flex:none;color:var(--gold);font-size:13px;font-weight:700;font-family:'Sometype Mono',monospace;text-align:center}.sesswrap{display:flex;flex-direction:column;padding-left:18px;margin-bottom:4px}.sesswrap .sess{font-size:13px;padding:6px 8px}.proj-folder .pf-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.proj-folder .pf-count{margin-left:auto;flex:none;color:var(--faint);font-size:12px}
 #sessMenu button{display:flex;width:100%;border:0;background:transparent;color:var(--mut);cursor:pointer;padding:7px 10px;text-align:left;font-size:13px;border-radius:5px;font-family:inherit}#sessMenu button:hover{background:var(--sel);color:var(--ink)}#sessMenu button[data-act="delete"]:hover{color:var(--del)}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 .md{animation:fadeIn .3s ease}
@@ -256,55 +327,20 @@ tests"). Scroll the row instead of breaking words:
 .statusline{transition:opacity .2s}
 
 @keyframes runIn{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
-.run{animation:runIn .22s ease}
 @keyframes rowIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
 .toolrow{animation:rowIn .24s ease}
 .statusline{animation:fadeIn .18s ease}
-.runhead .modelabel.running::after{content:'▍';margin-left:3px;animation:blink .7s step-end infinite;color:var(--gold)}
 .md .typewrap{white-space:pre-wrap;overflow-wrap:break-word}
 .md .cursor{display:inline-block;width:7px;height:1em;min-height:7px;background:var(--gold);margin-left:1px;vertical-align:-1px;animation:blink 1s step-end infinite}
 @keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
 /* ---- message queue (Codex-style tray) ---- */
-.queue{display:flex;flex-direction:column;gap:6px;margin-bottom:8px;border:1px solid var(--edge2);border-radius:10px;background:rgba(200,169,97,.05);padding:8px 10px}
-.queue .q-head{display:flex;align-items:center;gap:6px;margin-bottom:2px}
-.queue .q-title{font-family:"Sometype Mono",monospace;font-size:11px;letter-spacing:.1em;color:var(--gold);font-weight:700;text-transform:uppercase}
-.queue .q-count{font-family:"Sometype Mono",monospace;font-size:10px;color:var(--faint);background:var(--panel2);border-radius:8px;padding:1px 6px}
-.queue .q-head .q-clear{flex:none;border:0;background:transparent;color:var(--dim);cursor:pointer;font-size:11px;padding:2px 7px;border-radius:5px;margin-left:auto;font-family:Chivo,sans-serif}
-.queue .q-head .q-clear:hover{color:var(--del)}
-.queue .q-list{display:flex;flex-direction:column;gap:5px}
-.queue .q-pill{display:flex;align-items:center;gap:6px;border:1px solid var(--edge2);border-radius:8px;padding:5px 8px;background:var(--panel2);box-shadow:0 1px 2px rgba(0,0,0,.18)}
-.queue .q-grip{
-  flex:none;display:flex;align-items:center;justify-content:center;width:14px;height:20px;
-  color:var(--edge2);cursor:grab;border:0;background:transparent;padding:0;border-radius:4px;
-}
-.queue .q-grip:hover{color:var(--dim)}
-.queue .q-grip:active{cursor:grabbing;color:var(--gold)}
-.queue .q-grip:focus-visible{outline:1px solid var(--goldedge);outline-offset:1px;color:var(--gold)}
 /* The row being carried. Kept visible rather than hidden so the list does not
    appear to lose an item mid-drag. */
-.queue .q-pill.dragging{opacity:.45;border-color:var(--goldedge)}
 /* Where it will land. A line between rows, not a highlight ON a row -- a
    highlighted row reads as "drop INTO this", which is not what happens. */
-.queue .q-pill.drop-before{box-shadow:0 -2px 0 -0.5px var(--gold)}
-.queue .q-pill.drop-after{box-shadow:0 2px 0 -0.5px var(--gold)}
-.queue .q-list.reordering .q-text{user-select:none}
-.queue .q-idx{width:17px;height:17px;flex:none;border-radius:50%;background:var(--sel);color:var(--gold);font-family:"Sometype Mono",monospace;font-size:10px;display:flex;align-items:center;justify-content:center}
-.queue .q-text{font-family:Chivo,sans-serif;font-size:13px;color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;flex:1}
-.queue .q-steer{display:flex;align-items:center;gap:4px;min-width:0;flex:0 1 auto;padding:1px 5px;background:rgba(200,169,97,.12);border-radius:5px;color:var(--gold);font-size:11.5px;font-style:italic;white-space:nowrap}
-.queue .q-steer-x{border:0;background:transparent;color:var(--faint);cursor:pointer;font-size:12px;padding:0 2px;flex:none}
-.queue .q-steer-x:hover{color:var(--del)}
-.queue .q-act{border:1px solid var(--edge2);background:var(--panel);color:var(--mut);cursor:pointer;font-size:11px;line-height:1;padding:3px 8px;border-radius:6px;flex:none;font-family:'Sometype Mono',monospace;letter-spacing:.02em}
-.queue .q-act:hover{color:var(--gold);border-color:var(--goldedge)}
-.queue .q-act.q-cancel:hover{color:var(--del);border-color:var(--del);background:rgba(207,122,102,.08)}
-.queue .q-act.q-steer-btn{color:var(--gold);border-color:var(--goldedge)}
-.queue .q-act.q-edit:hover{color:var(--ink);border-color:var(--edge)}
-.steer-hint{display:flex;align-items:center;gap:8px;padding:6px 11px;margin-bottom:8px;border:1px solid var(--goldedge);border-radius:8px;color:var(--gold);font-size:12.5px;background:rgba(200,169,97,.06)}
-.steer-hint b{color:var(--mut)}
-.steer-hint button{border:0;background:transparent;color:var(--faint);cursor:pointer;font-size:12px;margin-left:auto}
-.steer-hint button:hover{color:var(--ink)}
 /* ---- preview panel (right) ---- */
-.pp-toggle{flex:none;width:30px;height:26px;border:1px solid var(--edge2);border-radius:6px;background:transparent;color:var(--dim);cursor:pointer;margin-left:10px;font-size:14px;display:flex;align-items:center;justify-content:center}
-.pp-toggle:hover,.pp-toggle.on{color:var(--gold);border-color:var(--goldedge)}
+.pp-toggle{flex:none;width:30px;height:28px;border:0;border-radius:6px;background:transparent;color:var(--dim);cursor:pointer;margin-left:2px;font-size:14px;display:flex;align-items:center;justify-content:center}
+.pp-toggle:hover{background:var(--sel);color:var(--ink)} .pp-toggle.on{background:var(--sel);color:var(--gold)}
 /* The panel opens and closes by easing its width, not by appearing. A keyframe
    fade could not do it: the real browser view is slotted into the panel body and is
    NOT part of the page's compositing, so the hole has to be a real, measurable
@@ -419,6 +455,227 @@ tests"). Scroll the row instead of breaking words:
 .pp-doc{font-family:"Sometype Mono",monospace;font-size:13px;line-height:1.65;color:var(--mut);white-space:pre-wrap}
 /* app relative for absolute panel */
 .app{position:relative}
+
+/* ===================== conversation refit (approved 2026-09-25) ===================== */
+/* thread rhythm: answers read as prose, not as a stack of announcements */
+.md{font-size:15px;line-height:1.65;text-wrap:pretty;overflow-wrap:break-word}
+.user{align-self:flex-end;max-width:80%;background:var(--panel2);border:0;border-radius:14px 14px 4px 14px;padding:10px 14px;font-size:14.5px;line-height:1.55}
+.col{gap:16px}
+.fold{display:flex;align-items:center;gap:12px;font:12px "Sometype Mono",monospace;color:var(--sub)}
+.fold::before,.fold::after{content:"";flex:1;height:1px;background:var(--edge)}
+
+/* a step: one stretch of tool work, folded to what it DID */
+.run{display:flex;flex-direction:column;animation:runIn .22s ease}
+.runhead{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--mut);cursor:pointer;user-select:none;min-width:0}
+.runhead:hover .modelabel{color:#fff}
+.runhead .chev{width:12px;flex:none;color:var(--sub);font-size:10px;transition:transform .15s;display:inline-block}
+.run.open > .runhead .chev{transform:rotate(90deg)}
+.modelabel{font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:0}
+.run.running .modelabel::after{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--gold);margin-left:8px;vertical-align:2px;animation:blink 1s step-end infinite}
+.runmeta{font:12px "Sometype Mono",monospace;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.runmeta .bad{color:var(--del)}
+.rundelta{margin-left:auto;flex:none;font:12px "Sometype Mono",monospace;color:var(--sub)}
+.runbody{margin:10px 0 2px 5px;padding-left:17px;border-left:1px solid var(--edge2);display:flex;flex-direction:column;gap:6px}
+.runbody .say{font-size:13.5px;color:var(--dim);line-height:1.5}
+.runbody .say p{margin:0}
+.runbody .think{margin:0}
+.toolrow .top{gap:10px}
+.kindb{font:500 12px "Sometype Mono",monospace;letter-spacing:0;min-width:44px;background:none!important;color:var(--sub);text-transform:lowercase}
+.kindb[data-st="write"]{color:var(--gold)}
+.kindb[data-st="err"]{color:var(--del)}
+.cmd{font-size:12.5px;color:var(--mut);flex:1 1 auto;min-width:0}
+/* a long result summary gives way instead of pushing the thread sideways */
+.res{font-size:12px;flex:0 1 auto;min-width:0;max-width:48%;overflow:hidden;text-overflow:ellipsis}
+.toolrow .top{min-width:0}
+.toolout{font-size:12px;color:var(--sub)}
+
+/* ---- the message box ---- */
+.composer{gap:6px;container-type:inline-size}
+/* The controls row never hides Send: the model name gives way first, then the icons. */
+.composer-row{overflow:visible}
+#chipModel{flex:0 1 auto;min-width:56px}
+#chipModelVal{overflow:hidden;text-overflow:ellipsis;min-width:0}
+@container (max-width:600px){
+  .composer-row .chip .gl,.composer-row .vdiv{display:none}
+  #ctxMeterPct{display:none}
+}
+@container (max-width:470px){
+  .plan-sw{font-size:0;gap:0}
+  #btnMic{display:none}
+}
+.box{overflow:hidden}
+.box #prompt::placeholder{color:var(--sub)}
+.edit[hidden]{display:none}
+.composer-keys{display:flex;gap:14px;font:11px "Sometype Mono",monospace;color:var(--sub);padding:0 8px}
+
+/* the shelf: ONE line attached to the top of the box */
+.shelf{display:flex;flex-wrap:wrap;row-gap:6px;align-items:center;gap:10px;padding:7px 12px 7px 14px;border-bottom:1px solid var(--edge);font-size:12.5px;color:var(--dim);min-height:38px;min-width:0}
+.shelf[hidden]{display:none}
+.sh-sp{flex:1;min-width:6px}
+.sh-work,.sh-warn,.sh-steer{display:flex;align-items:center;gap:8px;min-width:0;white-space:nowrap}
+.sh-work[hidden],.sh-warn[hidden],.sh-steer[hidden]{display:none}
+.sh-work{color:var(--mut)}
+.sh-work .spin{width:12px;height:12px;flex:none;border-radius:50%;background:conic-gradient(var(--gold) 0 90deg,rgba(200,169,97,.18) 90deg 360deg);-webkit-mask:radial-gradient(circle,transparent 52%,#000 54%);mask:radial-gradient(circle,transparent 52%,#000 54%);animation:spin .85s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+.sh-work #shWorkTxt{overflow:hidden;text-overflow:ellipsis}
+.sh-work .tm{font:12px "Sometype Mono",monospace;color:var(--sub)}
+.sh-warn{color:var(--gold);white-space:normal;flex:1 1 auto}
+.sh-warn #shWarnTxt{flex:1;min-width:0}
+.sh-lnk{border:0;background:none;color:var(--gold);font:600 12.5px Chivo,sans-serif;cursor:pointer;padding:2px 4px;border-radius:5px;flex:none}
+.sh-lnk:hover{background:rgba(200,169,97,.1)}
+.sh-steer{color:var(--gold)}
+.sh-steer b{color:var(--mut);font-weight:400;overflow:hidden;text-overflow:ellipsis;max-width:260px}
+.sh-steer button{border:0;background:none;color:var(--sub);cursor:pointer;font:12px Chivo,sans-serif;padding:2px 6px;border-radius:5px}
+.sh-steer button:hover{color:var(--ink);background:var(--sel)}
+.attach-tray{display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden}
+.attach-tray[hidden]{display:none}
+.attach-thumb{position:relative;display:flex;align-items:center;gap:7px;min-width:0;color:var(--mut)}
+.attach-thumb img{width:26px;height:26px;border-radius:5px;object-fit:cover;display:block;flex:none;border:1px solid var(--edge2)}
+.attach-thumb .an{font-size:12.5px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.attach-thumb .rm{border:0;background:none;color:var(--sub);cursor:pointer;font-size:12px;padding:0 3px;border-radius:4px}
+.attach-thumb .rm:hover{color:var(--del)}
+.ctxbar{display:flex;align-items:center;gap:8px;font:12px "Sometype Mono",monospace;color:var(--dim);cursor:default;min-width:0;flex:0 1 auto;margin-left:auto}
+.ctxbar[hidden]{display:none}
+.ctxbar.can-open{cursor:pointer}
+.ctxbar.can-open:hover .cb-diff b{color:var(--ink)}
+.ctxbar .cb-chev{color:var(--sub);display:inline-flex;align-items:center;width:11px}
+.ctxbar:not(.can-open) .cb-chev{visibility:hidden}
+.ctxbar .cb-diff{display:flex;align-items:baseline;gap:8px;white-space:nowrap}
+.ctxbar .cb-diff b{font-weight:500;color:var(--mut)}
+.ctxbar .cb-diff .add{color:var(--add)}
+.ctxbar .cb-diff .del{color:var(--del)}
+.ctxbar .cb-touched{color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.ctxbar .mini{flex:none;color:var(--sub)}
+
+/* queued messages, opened on top of the box */
+.qrows{display:flex;flex-direction:column;border-bottom:1px solid var(--edge)}
+.qrows[hidden]{display:none}
+.qhead{display:flex;align-items:center;gap:8px;padding:8px 12px 3px 14px;font:10.5px "Sometype Mono",monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--sub)}
+.qhead .q-clear{margin-left:auto;border:0;background:none;color:var(--sub);cursor:pointer;font:12px Chivo,sans-serif;letter-spacing:0;text-transform:none;padding:2px 6px;border-radius:5px}
+.qhead .q-clear:hover{color:var(--del);background:var(--sel)}
+.q-pill{display:flex;align-items:center;gap:10px;padding:6px 12px 6px 8px;font-size:13px;color:var(--mut)}
+.q-pill + .q-pill{border-top:1px solid var(--edge)}
+.q-grip{flex:none;display:flex;align-items:center;justify-content:center;width:16px;height:22px;color:var(--sub);cursor:grab;border:0;background:transparent;padding:0;border-radius:4px}
+.q-grip:hover{color:var(--ink)}
+.q-grip:active{cursor:grabbing;color:var(--gold)}
+.q-grip:focus-visible{outline:1px solid var(--goldedge);outline-offset:1px;color:var(--gold)}
+.q-pill.dragging{opacity:.45}
+.q-pill.drop-before{box-shadow:inset 0 2px 0 0 var(--gold)}
+.q-pill.drop-after{box-shadow:inset 0 -2px 0 0 var(--gold)}
+.qrows.reordering .q-text{user-select:none}
+.q-idx{font:11px "Sometype Mono",monospace;color:var(--gold);width:14px;flex:none;text-align:center}
+.q-text{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.q-steer{display:flex;align-items:center;gap:4px;min-width:0;flex:0 1 auto;color:var(--gold);font-size:12px;font-style:italic;white-space:nowrap;overflow:hidden}
+.q-steer-x{border:0;background:transparent;color:var(--sub);cursor:pointer;font-size:12px;padding:0 2px;flex:none}
+.q-steer-x:hover{color:var(--del)}
+.q-act{border:0;background:none;color:var(--dim);cursor:pointer;font:12px Chivo,sans-serif;padding:3px 8px;border-radius:5px;flex:none}
+.q-act:hover{background:var(--sel);color:var(--ink)}
+.q-act.q-cancel:hover{color:var(--del)}
+
+/* an approval replaces the text box */
+.ask{display:flex;flex-direction:column;gap:10px;padding:14px 16px}
+.ask[hidden]{display:none}
+.box.asking{border-color:var(--goldedge);box-shadow:0 0 0 3px rgba(200,169,97,.06)}
+.ask-h{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
+.ask-h b{font-size:14px;font-weight:700;color:var(--ink)}
+.ask-h span{font-size:13px;color:var(--sub)}
+.ask-what{margin:0;font:12.5px "Sometype Mono",monospace;color:var(--mut);background:var(--bg);border:1px solid var(--edge);border-radius:8px;padding:9px 12px;white-space:pre-wrap;word-break:break-word;max-height:30vh;overflow:auto}
+.ask-acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.b{font:600 12.5px Chivo,sans-serif;padding:7px 13px;border-radius:8px;border:1px solid var(--edge2);color:var(--mut);background:var(--panel2);cursor:pointer}
+.b:hover{color:var(--ink);border-color:var(--sub)}
+.b.pri{background:var(--gold);color:#0e0e10;border-color:var(--gold)}
+.b.pri:hover{background:#d8bb74;border-color:#d8bb74;color:#0e0e10}
+.b.lnk{background:none;border-color:transparent;color:var(--dim)}
+.b.lnk:hover{color:var(--ink);background:var(--sel)}
+.b kbd{font:10.5px "Sometype Mono",monospace;opacity:.7;margin-left:6px}
+
+/* controls row */
+.chip{display:flex;align-items:center;gap:6px;border:0;background:transparent;cursor:pointer;padding:5px 8px;border-radius:7px;color:var(--mut);font:400 13px Chivo,sans-serif;white-space:nowrap}
+.chip b{font-weight:400}
+.chip .cv{color:var(--sub);flex:none}
+.chip .gl{color:var(--sub);flex:none}
+.chip:hover,.chip.open{background:var(--sel);color:var(--ink)}
+.chip.open .gl{color:var(--gold)}
+.chip[hidden]{display:none}
+.plan-sw{display:flex;align-items:center;gap:7px;padding:5px 8px;border:0;background:none;border-radius:7px;font:13px Chivo,sans-serif;color:var(--mut);cursor:pointer;flex:none}
+.plan-sw:hover{background:var(--sel);color:var(--ink)}
+.plan-sw i{width:26px;height:15px;border-radius:999px;background:var(--edge2);position:relative;transition:background .15s;flex:none}
+.plan-sw i::after{content:"";position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:50%;background:var(--mut);transition:left .15s,background .15s}
+.plan-sw[aria-checked="true"]{color:var(--ink)}
+.plan-sw[aria-checked="true"] i{background:var(--gold)}
+.plan-sw[aria-checked="true"] i::after{left:13px;background:#0e0e10}
+.ctxm{display:flex;align-items:center;gap:6px;padding:0 6px;font:11.5px "Sometype Mono",monospace;color:var(--sub);flex:none;cursor:default}
+.ctxm[hidden]{display:none}
+.ctxm svg{transform:rotate(-90deg)}
+.ctxm .trk{fill:none;stroke:var(--edge2);stroke-width:3}
+.ctxm .val{fill:none;stroke:var(--dim);stroke-width:3;stroke-linecap:round;transition:stroke-dashoffset .3s,stroke .3s}
+.ctxm.warn{color:var(--gold)}
+.ctxm.warn .val{stroke:var(--gold)}
+
+/* ---- the three pickers: one menu shell ---- */
+.menu{position:fixed;display:none;flex-direction:column;white-space:normal;background:var(--panel2);border:1px solid var(--edge2);border-radius:10px;box-shadow:0 28px 60px -24px rgba(0,0,0,.85),0 0 0 1px rgba(0,0,0,.2);overflow:hidden;z-index:40;cursor:default;color:var(--mut);text-align:left}
+.chip.open .menu{display:flex}
+.menu.op{width:232px}
+.menu.pk{width:320px;max-width:calc(100vw - 32px)}
+.pk-search{display:flex;align-items:center;gap:8px;padding:0 12px;height:36px;border-bottom:1px solid var(--edge);color:var(--sub);flex:none}
+.pk-search input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--ink);font:13px Chivo,sans-serif}
+.pk-search input::placeholder{color:var(--sub)}
+/* a steady height while you move between views, but never taller than the room above the chip */
+.pk-body{display:block;height:272px;flex:0 1 auto;min-height:90px;overflow:auto;padding:4px}
+.op-body{display:block;padding:3px 4px 4px}
+.mp-label{display:flex;justify-content:space-between;align-items:baseline;padding:8px 10px 3px;font-size:11.5px;font-weight:500;color:var(--sub)}
+.mp-label span + span{font:400 11.5px "Sometype Mono",monospace}
+.mp-row{display:flex;align-items:center;gap:8px;height:30px;padding:0 8px;border-radius:6px;cursor:pointer;font-size:13px;color:var(--mut)}
+.op .mp-row{height:28px}
+.mp-row:hover,.mp-row.hot{background:var(--sel);color:var(--ink)}
+.mp-row.sel{color:var(--ink)}
+.mp-row .ck{width:12px;flex:none;color:var(--gold);font-size:11px;text-align:center}
+.mp-row .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mp-row .pr{font:11.5px "Sometype Mono",monospace;color:var(--sub);white-space:nowrap;font-variant-numeric:tabular-nums}
+.mp-row .ct{font:12px "Sometype Mono",monospace;color:var(--sub)}
+.mp-row .go{color:var(--sub);font-size:15px;line-height:1;margin-left:2px}
+.mp-row.fixed{cursor:default}
+.mp-back{display:flex;align-items:center;gap:8px;height:30px;padding:0 8px;margin-bottom:2px;border-radius:6px;cursor:pointer;font-weight:600;font-size:13px;color:var(--ink)}
+.mp-back:hover{background:var(--sel)}
+.mp-back span{color:var(--sub);font-weight:400}
+.mp-back i{font-style:normal;color:var(--sub);font-weight:400;font-size:16px;line-height:1}
+.mp-sep{height:1px;background:var(--edge);margin:4px 4px}
+.mp-empty{padding:26px 10px;text-align:center;font-size:13px;color:var(--sub)}
+.pk-foot{display:flex;flex-direction:column;gap:1px;border-top:1px solid var(--edge);padding:7px 12px 8px;min-height:44px;flex:none}
+.pk-foot .fid{font:11.5px "Sometype Mono",monospace;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pk-foot .facts{font-size:11.5px;color:var(--sub)}
+.op-note{border-top:1px solid var(--edge);padding:7px 10px 8px;font-size:12px;line-height:1.4;color:var(--sub)}
+.op-none{padding:10px 10px 12px;font-size:12.5px;color:var(--sub);line-height:1.5}
+
+/* ---- sidebar: projects as groups you open and close in place ---- */
+.sesslist{gap:3px}
+.sesslist .empty{font-size:12.5px;color:var(--sub);padding:8px}
+.proj{display:flex;flex-direction:column;border-radius:9px;transition:background .2s,box-shadow .2s}
+.proj.open{background:rgba(255,255,255,.018);box-shadow:inset 0 0 0 1px var(--edge)}
+.proj-h{display:flex;align-items:center;gap:8px;height:34px;padding:0 6px 0 8px;border-radius:8px;color:var(--mut);font-size:13.5px;font-weight:600;cursor:pointer;user-select:none;position:relative}
+.proj-h:hover{background:var(--panel2);color:var(--ink)}
+.proj-h:focus-visible{outline:2px solid var(--goldedge);outline-offset:-2px}
+.proj-h .chev{width:10px;flex:none;color:var(--sub);font-size:10px;text-align:center;transition:transform .22s cubic-bezier(.22,.61,.36,1)}
+.proj.open .proj-h .chev{transform:rotate(90deg)}
+.proj-h .fic{flex:none;color:var(--sub)}
+.proj.current .proj-h{color:var(--ink)}
+.proj.current .proj-h .fic{color:var(--gold)}
+.proj-h .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.proj-h .ct{flex:none;font:400 11.5px "Sometype Mono",monospace;color:var(--sub)}
+.proj-add{flex:none;display:none;align-items:center;justify-content:center;width:22px;height:22px;border:0;border-radius:6px;background:none;color:var(--sub);cursor:pointer}
+.proj-h:hover .proj-add,.proj-h:focus-within .proj-add{display:flex}
+.proj-h:hover .ct{display:none}
+.proj-add:hover{background:var(--sel);color:var(--gold)}
+.proj-b{display:grid;grid-template-rows:0fr;transition:grid-template-rows .24s cubic-bezier(.22,.61,.36,1)}
+.proj.open .proj-b{grid-template-rows:1fr}
+.proj-in{min-height:0;overflow:hidden;display:flex;flex-direction:column;gap:1px;padding:0 4px 0 20px;position:relative;opacity:0;transition:opacity .18s ease}
+.proj.open .proj-in{opacity:1;padding-bottom:5px}
+.proj-in::before{content:"";position:absolute;left:13px;top:2px;bottom:8px;width:1px;background:var(--edge2)}
+.proj-in .sess{padding:6px 8px}
+.proj-in .sess.active{box-shadow:inset 2px 0 0 var(--gold)}
+.proj-more{align-self:flex-start;border:0;background:none;color:var(--sub);font:12px Chivo,sans-serif;cursor:pointer;padding:4px 8px;border-radius:5px}
+.proj-more:hover{color:var(--ink);background:var(--panel2)}
+@media (prefers-reduced-motion: reduce){ .proj-b,.proj-in,.proj-h .chev{transition:none} }
 </style>
 </head>
 <body>
@@ -432,10 +689,9 @@ tests"). Scroll the row instead of breaking words:
         </svg>
       </span>
       <span class="tb-name">VoxAI&nbsp;Coder</span>
-      <span class="tb-ver">v0.1</span>
-      <span class="tb-divider"></span>
-      <span class="tb-title" id="tbTitle">New session</span>
+      <span class="tb-crumb"><span class="tb-sep" id="tbProjSep" hidden>/</span><span class="tb-proj" id="tbProj"></span><span class="tb-sep">/</span><span class="tb-title" id="tbTitle">New session</span></span>
       <span class="tb-spacer"></span>
+      <button class="tb-btn" id="btnSettings" type="button" title="Settings" aria-label="Settings"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg></button>
       <div class="window-buttons" role="group" aria-label="Window controls">
         <button id="btnWinMin" title="Minimise" aria-label="Minimise">
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
@@ -449,82 +705,83 @@ tests"). Scroll the row instead of breaking words:
         </button>
       </div>
     </header>
-    <!-- One screen: the workspace. The Sub-agents and Memory tabs were never in the
-         design and each showed less than the transcript already does — sub-agent runs
-         appear inline with their receipts, and project memory is loaded into the
-         prompt and edited through the memory tool. Settings stays as an action. -->
-    <div class="tabs">
-      <span class="sp"></span>
-      <button class="tab gold ic-lbl" id="btnSettings">Settings</button>
-    </div>
+    <!-- One screen, one bar above it. The tab bar that held Sub-agents and Memory
+         outlived them, holding only a Settings link; Settings is the gear above. -->
   <div class="main">
     <div class="side">
       <button class="newsess" id="btnNew">✎ New session <kbd>Ctrl N</kbd></button>
       <div class="search">⌕ <input id="q" placeholder="Search sessions"></div>
-      <div class="projhead">SESSIONS</div>
       <div class="sesslist" id="sessions"></div>
-      <div class="usercard"><span class="avatar">V</span><span class="uname">Vox User</span><span class="plan">Pro</span></div>
-      <div class="usage">
-        <div class="usage-row"><b>MODEL</b><span id="modelTag" class="mono" title="Current model"></span></div>
-        <div class="usage-row" style="margin-top:9px"><b>OPENROUTER</b><span style="display:flex;gap:2px"><button class="mini ic" id="btnUsage" title="Open usage view"></button><button class="mini" id="usageRefresh" title="Refresh balance & usage">&#x21BB;</button></span></div>
-        <div id="creditsTxt" class="credits">—</div>
-        <div class="bar"><i id="usageBar" style="width:0%" title="usage of purchased credits"></i></div>
-      </div>
-      <div class="backend" id="backendBox">
-        <div>backend: <span id="backendState">starting…</span></div>
-        <div id="backendDetail" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
-      </div>
+      <button class="side-foot" id="sideStatus" type="button" title="Account and balance">
+        <span class="sf-dot" id="backendState"></span>
+        <span class="sf-label" id="backendDetail">Starting…</span>
+        <span class="sf-bal" id="creditsTxt">—</span>
+      </button>
     </div>
     <div class="work" id="screen-work">
-      <div class="workhead"><span class="dot run" id="runDot" style="display:none"></span><span class="t" id="sessTitle">New session</span><span class="sub" id="sessSub"></span><button class="pp-toggle ic" id="ppToggle" title="Toggle preview panel"></button><button class="pp-toggle ic" id="btnCompact" title="Compact context now"></button><span class="workstats"><span class="stat"><i>cost</i><b id="sessStatCost"></b></span><span class="stat"><i>tokens</i><b id="sessStatTok"></b></span><span class="stat" title="cost per 1M tokens"><i>$/1M</i><b id="sessStatRate"></b></span><span class="stat" id="sessStatCacheWrap" style="display:none" title="share of input tokens served from the provider prefix cache"><i>cache</i><b id="sessStatCache"></b></span><span class="stat" id="sessStatBudgetWrap" style="display:none" title="spend against this run's limit"><i>run spend</i><b id="sessStatBudget"></b></span></span></div>
+      <div class="workhead"><span class="dot run" id="runDot" style="display:none"></span><h1 class="sr-only" id="sessTitle">New session</h1><span class="sub" id="sessSub"></span><span class="wh-branch" id="cbBranch" hidden></span><span class="wh-sp"></span><span class="workstats" id="statPill" tabindex="0" hidden><span class="stat st-cost"><b id="sessStatCost"></b></span><span class="stat st-tok"><b id="sessStatTok"></b> tokens</span><span class="stat-card" role="tooltip"><span class="stat"><i>Price per 1M</i><b id="sessStatRate"></b></span><span class="stat" id="sessStatCacheWrap" style="display:none"><i>Served from cache</i><b id="sessStatCache"></b></span><span class="stat" id="sessStatBudgetWrap" style="display:none"><i>This run</i><b id="sessStatBudget"></b></span></span></span><button class="pp-toggle ic" id="btnCompact" title="Summarise older turns now"></button><button class="pp-toggle ic" id="ppToggle" title="Toggle preview panel"></button></div>
       <div class="scroll"><div id="thread" style="width:100%;max-width:760px;display:flex;flex-direction:column;padding-bottom:20px">
         <div class="msg" style="color:var(--dim)">Open a folder, pick an OpenRouter model in ⚙ Settings, and ask for code. The agent runs on your own <b style="color:var(--gold)">vox</b> backend — file edits, shell, tests — billed to your OpenRouter key.</div>
       </div></div>
       <div class="composer-zone"><div class="composer">
-        <div class="ctxbar pvbar" id="pvBar" style="display:none">
-          <span class="pv-tag">preview</span>
-          <span class="pv-url" id="pvUrl"></span>
-          <span class="pv-tools">
-            <button class="mini ic" id="pvBack" title="Back"></button>
-            <button class="mini ic" id="pvFwd" title="Forward"></button>
-            <button class="mini ic" id="pvReload" title="Reload"></button>
-            <button class="mini ic" id="pvClose" title="Close preview"></button>
-          </span>
-        </div>
+        <!-- The changed files open ABOVE the box; everything else that used to stack up
+             here (queue, steering, approvals, attachments, changes) lives inside it. -->
         <div class="difflist" id="diffList" style="display:none"></div>
-        <div class="ctxbar" id="ctxBar" style="display:none">
-          <span class="cb-chev" id="cbChev"></span>
-          <span class="cb-repo" id="cbRepo"></span>
-          <span class="cb-branch" id="cbBranch"></span>
-          <span class="cb-diff" id="cbDiff"></span>
-          <span class="cb-touched" id="cbTouched"></span>
-          <button class="mini ic" id="cbRefresh" title="Refresh workspace status"></button>
-        </div>
-        <div class="perm" id="permBar" style="display:none"><b id="permTitle">Allow?</b>&nbsp;<code id="permCmd"></code><span style="margin-left:auto;display:flex;gap:6px"><button class="btn ghost" id="permDetail" title="Show/hide details">Details</button><button class="btn" id="permAllow">Allow</button><button class="btn ghost" id="permDeny">Deny</button></span></div>
-        <div id="permDetailBox" style="display:none;background:var(--deep);border:1px solid var(--edge);border-radius:6px;padding:8px 10px;font-family:'Sometype Mono',monospace;font-size:12px;color:var(--mut);white-space:pre-wrap;word-break:break-word"></div>
-        <div class="perm" id="permAlways" style="display:none"><span style="color:var(--faint);font-size:12px">Allow this for the whole session?</span><span style="margin-left:auto;display:flex;gap:6px"><button class="btn" id="permAlwaysYes">Allow always</button><button class="btn ghost" id="permAlwaysNo">Just this once</button></span></div>
-          <div class="steer-hint" id="steerHint" style="display:none"><span>Steering queued message</span><button id="steerHintCancel">cancel</button></div>
-<div class="box">
-          <div id="attachTray" class="attach-tray" style="display:none"></div>
-          <div class="composer-main">
-            <textarea id="prompt" placeholder="Ask anything, or type / for commands"></textarea>
+<div class="box" id="cmpBox">
+          <!-- queued messages: open on top of the box, with grip, Steer, Edit and remove -->
+          <div class="qrows" id="qrows" hidden></div>
+          <!-- the shelf: ONE line holding what matters most right now -->
+          <div class="shelf" id="shelf" hidden>
+            <span class="sh-work" id="shWork" hidden><span class="spin"></span><span id="shWorkTxt">Working</span><span class="tm" id="shWorkTm"></span></span>
+            <span class="sh-warn" id="shWarn" hidden><span id="shWarnTxt"></span><button class="sh-lnk" id="shCompact" type="button">Summarise now</button></span>
+            <span class="sh-steer" id="steerHint" hidden>Steering message <b id="steerHintTarget"></b><button id="steerHintCancel" type="button">Cancel</button></span>
+            <div id="attachTray" class="attach-tray" hidden></div>
+            <span class="sh-sp"></span>
+            <div class="ctxbar" id="ctxBar" hidden title="Show the changed files">
+              <span class="cb-chev" id="cbChev"></span>
+              <span class="cb-diff" id="cbDiff"></span>
+              <span class="cb-touched" id="cbTouched"></span>
+              <button class="mini ic" id="cbRefresh" type="button" title="Refresh changes"></button>
+            </div>
+          </div>
+          <!-- an approval takes the place of the text box, where your eyes already are -->
+          <div class="ask" id="askBox" hidden>
+            <div class="ask-h"><b id="askTitle">Run a command?</b><span id="askSub"></span></div>
+            <pre class="ask-what" id="askWhat"></pre>
+            <div class="ask-acts">
+              <button class="b lnk" id="askDetail" type="button">Details</button>
+              <span class="sh-sp"></span>
+              <button class="b" id="askDeny" type="button">Deny<kbd>Esc</kbd></button>
+              <button class="b" id="askAlways" type="button">Always in this session</button>
+              <button class="b pri" id="askAllow" type="button">Allow once<kbd>↵</kbd></button>
+            </div>
+          </div>
+          <div class="edit" id="cmpEdit">
+          <textarea id="prompt" rows="1" placeholder="Ask anything" aria-label="Message"></textarea>
+          <div class="composer-row">
+            <button class="cmpbtn" id="btnAttach" title="Attach image"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
+            <button class="cmpbtn" id="btnMic" title="Voice to text"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 12a7 7 0 0 0 14 0"></path><line x1="12" y1="19" x2="12" y2="21"></line></svg></button>
+            <span class="vdiv"></span>
+            <span class="chip" id="chipModel"><b id="chipModelVal"></b><svg class="cv" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 15 12 9 18 15"></polyline></svg>
+              <span class="menu pk" id="menuModel">
+                <label class="pk-search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><line x1="20" y1="20" x2="16" y2="16"></line></svg><input id="modelSearch" placeholder="Search models" autocomplete="off" aria-label="Search models"></label>
+                <span class="pk-body" id="modelMenuList"></span>
+                <span class="pk-foot" id="modelMenuFoot" aria-live="polite"><span class="fid" id="pkId"></span><span class="facts" id="pkFacts"></span></span>
+              </span></span>
+            <span class="chip" id="chipReason"><svg class="gl" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 12h3l2-5 3 10 2-5h6"></path></svg><b id="chipReasonVal">Model default</b><svg class="cv" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg><span class="menu op" id="menuReason"></span></span>
+            <span class="chip" id="chipAccess"><svg class="gl" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg><b id="chipAccessVal">Ask first</b><svg class="cv" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg><span class="menu op" id="menuAccess"></span></span>
+            <button class="plan-sw" id="chipPlan" type="button" role="switch" aria-checked="false" title="Plan mode: explore first, present a plan, get approval before changing anything"><i></i>Plan</button>
+            <span class="cr-sp"></span>
+            <span class="ctxm" id="ctxMeter" hidden><svg viewBox="0 0 20 20" width="18" height="18"><circle class="trk" cx="10" cy="10" r="7.5"></circle><circle class="val" id="ctxMeterVal" cx="10" cy="10" r="7.5" stroke-dasharray="47.12" stroke-dashoffset="47.12"></circle></svg><span id="ctxMeterPct"></span></span>
             <button class="send" id="btnSend" title="Send" disabled>
   <svg class="ico-send" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="6"></line><polyline points="6 12 12 6 18 12"></polyline></svg>
   <svg class="ico-stop" width="13" height="13" viewBox="0 0 24 24" fill="currentColor"><rect x="5" y="5" width="14" height="14" rx="2"></rect></svg>
 </button>
           </div>
-          <div class="composer-row">
-            <button class="cmpbtn" id="btnAttach" title="Attach image"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
-            <button class="cmpbtn" id="btnMic" title="Voice to text"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 12a7 7 0 0 0 14 0"></path><line x1="12" y1="19" x2="12" y2="21"></line></svg></button>
-            <span class="vdiv"></span>
-            <span class="chip" id="chipModel"><b id="chipModelVal"></b><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg><span class="menu" id="menuModel" style="width:340px"><div class="ms"><input id="modelSearch" placeholder="search all OpenRouter models…" autocomplete="off"></div><div class="mlist" id="modelMenuList"></div><div class="mlist-foot" id="modelMenuFoot"></div></span></span>
-            <span class="chip" id="chipReason"><b id="chipReasonVal">balanced</b><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg><span class="menu" id="menuReason"></span></span>
-            <span class="chip" id="chipAccess"><b id="chipAccessVal">edit + run tests</b><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg><span class="menu" id="menuAccess"></span></span>
-            <span class="chip" id="chipPlan" title="Plan mode: explore first, present a plan, get approval before changing anything"><b id="chipPlanVal">plan off</b><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg><span class="menu" id="menuPlan"></span></span>
           </div>
           <input type="file" id="fileInput" accept="image/*" multiple style="display:none">
         </div>
-        <div class="hint">Enter ↵ send · Shift+Enter newline · agent = vox backend (tools) · switching model re-saves settings</div>
+        <div class="composer-keys" id="cmpKeys"><span>↵ send</span><span>⇧↵ new line</span></div>
       </div></div>
     </div>
     <!-- Resizable Atlas-style split: real browser pane docked beside the chat.
@@ -594,50 +851,82 @@ tests"). Scroll the row instead of breaking words:
   <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn ghost" id="newSessCancel">Cancel</button><button class="btn" id="newSessOk">Start session</button></div>
 </div></div>
 
-<div class="modal-bg" id="modalBg"><div class="modal">
-  <h2>OpenRouter</h2>
-  <p class="sub">Paste your OpenRouter API key. It is stored in the OS keychain when available and only ever sent to OpenRouter. Your model, thinking and access are chosen in the composer below.</p>
-  <div class="field"><label>OPENROUTER API KEY</label><div class="row"><input id="fKey" type="password" placeholder="sk-or-v1-…" autocomplete="off"><button class="btn" id="btnTest">Test</button></div>
-    <div class="hint" id="keyState">not set</div></div>
-  <div class="field"><label>MANAGEMENT API KEY <span style="opacity:.6">(optional — shows account balance + full usage)</span></label><div class="row"><input id="fMgmtKey" type="password" placeholder="sk-or-v1-…" autocomplete="off"><button class="btn" id="btnTestMgmt">Test</button></div>
-    <div class="hint" id="mgmtKeyState">not set — account balance hidden</div></div>
-  <div class="field"><label>COMPACT THRESHOLD <span style="opacity:.6">(0.5–0.95 of context, default 0.8)</span></label><input id="fCompact" type="number" min="0.5" max="0.95" step="0.05" placeholder="0.8" />
-    <div class="hint">When the session estimate passes this fraction of the model context, old turns are folded into a free local summary. (VOX_COMPACT_THRESHOLD)</div></div>
-  <div class="field"><label>CONTEXT LIMIT (tokens) <span style="opacity:.6">(default 200000 — not the alias's 1.31M)</span></label><input id="fContextLimit" type="number" min="16000" max="2000000" step="8000" placeholder="200000" />
-    <div class="hint">Compaction fires at THRESHOLD × this. Kept well below the provider alias so requests never get huge. (VOX_CONTEXT_LIMIT)</div></div>
-  <div class="field"><label>SPEND LIMIT PER RUN (USD) <span style="opacity:.6">(hard stop — sub-agents draw from the same allowance)</span></label><input id="fRunBudget" type="number" min="0.01" max="100" step="0.25" placeholder="1.00" />
+<div class="modal-bg" id="modalBg"><div class="sheet" role="dialog" aria-modal="true" aria-labelledby="setTitle">
+  <nav class="set-nav" aria-label="Settings sections">
+    <h2 id="setTitle">Settings</h2>
+    <button type="button" data-set="account" aria-current="page"><svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M15 8l2 2"/></svg>Account</button>
+    <button type="button" data-set="spend"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.8 0-3 .9-3 2.1 0 2.9 6 1.4 6 4.3 0 1.2-1.2 2.1-3 2.1-1.4 0-2.6-.6-3-1.6M12 6v2M12 16v2"/></svg>Spending</button>
+    <button type="button" data-set="web"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16" y2="16"/></svg>Web search</button>
+    <button type="button" data-set="subs"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="14" width="7" height="7" rx="1.5"/></svg>Sub-agents</button>
+    <button type="button" data-set="ctx"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/></svg>Context</button>
+    <div class="set-foot">Changes save as you make them.<br>VoxAI Coder 0.1</div>
+  </nav>
+  <div class="set-main">
+    <button type="button" class="set-x" id="btnClose" aria-label="Close settings">✕</button>
+    <section class="set-page" data-set="account">
+      <header class="set-top"><h3>Account</h3><p>Your OpenRouter keys. Stored in the OS keychain when available and only ever sent to OpenRouter.</p></header>
+      <div class="set-scroll">
+        <div class="set-group"><div class="set-row wide"><div class="set-txt"><div class="set-lbl">OpenRouter key</div><div class="set-desc">Every model call and web search is billed to this key.</div></div><div class="set-ctl"><div class="keyrow"><input id="fKey" type="password" placeholder="sk-or-v1-…" autocomplete="off" aria-label="OpenRouter key"><button class="btn ghost" id="btnTest" type="button">Test</button></div><div class="set-state" id="keyState">not set</div></div></div><div class="set-row wide"><div class="set-txt"><div class="set-lbl">Management key <span class="opt">optional</span></div><div class="set-desc">Adds your full account usage history. Not needed to run the agent.</div></div><div class="set-ctl"><div class="keyrow"><input id="fMgmtKey" type="password" placeholder="sk-or-v1-…" autocomplete="off" aria-label="Management key"><button class="btn ghost" id="btnTestMgmt" type="button">Test</button></div><div class="set-state" id="mgmtKeyState">not set</div></div></div><div class="set-actions"><span class="set-hint">Keys are saved only when you press Save keys.</span><button class="btn" id="btnSave" type="button">Save keys</button></div></div>
+        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Balance</div><div class="set-desc">Read from OpenRouter when the app starts and after each run.</div></div><div class="set-ctl"><div class="bal"><b id="acctBalance">—</b></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Usage history</div><div class="set-desc">Per-model spend on this key.</div></div><div class="set-ctl"><button class="btn ghost" id="btnUsage" type="button">Open usage</button></div></div></div>
+      </div>
+    </section>
+
+    <section class="set-page" data-set="spend" hidden>
+      <header class="set-top"><h3>Spending</h3><p>A hard stop for each run, so a loop or a big fan-out can’t drain the account.</p></header>
+      <div class="set-scroll">
+        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Limit per run</div><div class="set-desc">The run stops when it reaches this. Sub-agents and web searches draw from the same allowance.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease limit per run">−</button><input id="fRunBudget" type="number" min="0.25" max="100" step="0.25" placeholder="1.00" aria-label="limit per run"><span class="num-u">USD</span><button type="button" class="num-b" data-num="1" aria-label="Increase limit per run">+</button></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Quick picks</div><div class="set-desc">Typical runs on a DeepSeek Flash model cost under a cent.</div></div><div class="set-ctl"><div class="presets" id="budgetPresets"><button type="button" data-v="0.25">$0.25</button><button type="button" data-v="1.00">$1</button><button type="button" data-v="5.00">$5</button></div></div></div></div>
+      </div>
+    </section>
+
+    <section class="set-page" data-set="web" hidden>
+      <header class="set-top"><h3>Web search</h3><p>Lets the agent find sources instead of guessing URLs. Each search is billed on top of model tokens.</p></header>
+      <div class="set-scroll">
+        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Search the web</div><div class="set-desc">Off means the agent can only read pages it already has links to. Sub-agents follow this too.</div></div><div class="set-ctl"><button type="button" class="tog" id="wsToggle" role="switch" aria-checked="true" aria-label="Search the web"></button><input type="hidden" id="fWebSearch" value="on"></div></div><div class="set-row ws-dep"><div class="set-txt"><div class="set-lbl">Engine</div><div class="set-desc">OpenRouter’s fee for each search on that engine.</div></div><div class="set-ctl"><div class="seg" id="wsEngine" role="group" aria-label="Search engine"><button type="button" data-v="exa">Exa<small>$0.007</small></button><button type="button" data-v="parallel">Parallel<small>$0.005</small></button><button type="button" data-v="perplexity">Perplexity<small>$0.005</small></button></div><input type="hidden" id="fWebEngine" value="exa"></div></div><div class="set-row ws-dep"><div class="set-txt"><div class="set-lbl">Results per search</div><div class="set-desc">What the agent gets back when it doesn’t ask for a number. Above 10, OpenRouter charges extra per result.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease results per search">−</button><input id="fWebResults" type="number" min="1" max="10" step="1" placeholder="5" aria-label="results per search"><button type="button" class="num-b" data-num="1" aria-label="Increase results per search">+</button></div></div></div></div>
+      </div>
+    </section>
+
+    <section class="set-page" data-set="subs" hidden>
+      <header class="set-top"><h3>Sub-agents</h3><p>Workers the agent can hand self-contained jobs to. They report back and share the run’s spending limit.</p></header>
+      <div class="set-scroll">
+        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Model</div><div class="set-desc">A cheaper model makes fan-outs cheaper. Leave empty to use the session’s model.</div></div><div class="set-ctl"><input id="fSubModel" class="txt" placeholder="Same as the session" autocomplete="off" aria-label="Sub-agent model"></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Turns before answering</div><div class="set-desc">How many tool steps a worker may take before it must report.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease turns before answering">−</button><input id="fSubMaxTurns" type="number" min="1" max="100" step="5" placeholder="25" aria-label="turns before answering"><span class="num-u">turns</span><button type="button" class="num-b" data-num="1" aria-label="Increase turns before answering">+</button></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Time limit</div><div class="set-desc">A worker still running after this is stopped and returns what it has.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease time limit">−</button><input id="fSubTimeout" type="number" min="10" max="3600" step="30" placeholder="300" aria-label="time limit"><span class="num-u">sec</span><button type="button" class="num-b" data-num="1" aria-label="Increase time limit">+</button></div></div></div></div>
+      </div>
+    </section>
+
+    <section class="set-page" data-set="ctx" hidden>
+      <header class="set-top"><h3>Context</h3><p>How much of the conversation is sent with each request. The defaults suit almost everyone.</p></header>
+      <div class="set-scroll">
+        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Context size</div><div class="set-desc">Kept well under the model’s maximum so requests stay fast and cheap.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease context size">−</button><input id="fContextLimit" type="number" min="16000" max="2000000" step="25000" placeholder="200000" aria-label="context size"><span class="num-u">tokens</span><button type="button" class="num-b" data-num="1" aria-label="Increase context size">+</button></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Summarise older turns at</div><div class="set-desc">When the conversation fills this much of the context, early turns are folded into a summary.</div></div><div class="set-ctl"><div class="rng"><input type="range" id="fCompact" min="0.5" max="0.95" step="0.05" value="0.8" aria-label="Summarise older turns at"><output for="fCompact"></output></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Always summarise at</div><div class="set-desc">A safety net: past this, summarising is forced before the next request is sent.</div></div><div class="set-ctl"><div class="rng"><input type="range" id="fHardFraction" min="0.5" max="0.99" step="0.01" value="0.9" aria-label="Always summarise at"><output for="fHardFraction"></output></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Longest tool output kept</div><div class="set-desc">Longer results keep their start and end, with the middle marked as cut.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease longest tool output kept">−</button><input id="fToolResultMax" type="number" min="500" max="60000" step="500" placeholder="8000" aria-label="longest tool output kept"><span class="num-u">chars</span><button type="button" class="num-b" data-num="1" aria-label="Increase longest tool output kept">+</button></div></div></div></div>
+        <p class="set-note">Each of these can also be set before launch with an environment variable: <code>VOX_CONTEXT_LIMIT</code>, <code>VOX_COMPACT_THRESHOLD</code>, <code>VOX_HARD_LIMIT_FRACTION</code>, <code>VOX_TOOL_RESULT_MAX_CHARS</code>.</p>
+      </div>
+    </section>
+    <div class="set-status" aria-live="polite"><span id="setSaved"></span></div>
   </div>
-  <div class="field"><label>HARD LIMIT FRACTION <span style="opacity:.6">(default 0.9 — safety net)</span></label><input id="fHardFraction" type="number" min="0.5" max="0.99" step="0.05" placeholder="0.9" />
-    <div class="hint">Above this fraction compaction is forced and the keep-window shrinks until the next request fits. (VOX_HARD_LIMIT_FRACTION)</div></div>
-  <div class="field"><label>MAX TOOL RESULT (characters) <span style="opacity:.6">(default 8000)</span></label><input id="fToolResultMax" type="number" min="500" max="60000" step="500" placeholder="8000" />
-    <div class="hint">Each tool result is trimmed to this size once, as it is written. Head and tail are kept and the gap is labelled. (VOX_TOOL_RESULT_MAX_CHARS)</div></div>
-  <div class="field"><label>CACHE TTL (min) <span style="opacity:.6">(informational — provider-owned)</span></label><input id="fCacheTtl" type="number" min="1" max="180" step="1" placeholder="5" disabled />
-    <div class="hint">OpenRouter owns the prefix cache. We record cache-read % per run; this knob records your intended idle preference. (VOX_CACHE_TTL_MIN)</div></div>
-  <div style="margin-top:6px;padding:3px 0;color:var(--gold);font-weight:700;font-size:12.5px;font-family:'Sometype Mono',monospace">SUB-AGENTS</div>
-  <div class="field"><label>SUB-AGENT MODEL <span style="opacity:.6">(default: same as main)</span></label><div class="row"><input id="fSubModel" placeholder="default (same as main) — e.g. ~deepseek/deepseek-v4-flash-latest" autocomplete="off" style="flex:1"></div>
-    <div class="hint">Model used for spawn_agent if the model doesn't pass one. Cheaper models = cheaper fan-out. (VOX_SUBAGENT_MODEL)</div></div>
-  <div class="field"><label>SUB-AGENT MAX TURNS <span style="opacity:.6">(default 25)</span></label><input id="fSubMaxTurns" type="number" min="1" max="100" step="1" placeholder="25" />
-    <div class="hint">Cap on tool-turns per sub-agent before it must answer. (VOX_SUBAGENT_MAX_TURNS)</div></div>
-  <div class="field"><label>SUB-AGENT TIMEOUT (s) <span style="opacity:.6">(default 300)</span></label><input id="fSubTimeout" type="number" min="10" max="3600" step="10" placeholder="300" />
-    <div class="hint">Wall-clock timeout per sub-agent. Kill long-runners. (VOX_SUBAGENT_TIMEOUT_MS)</div></div>
-  <div style="margin-top:6px;padding:3px 0;color:var(--gold);font-weight:700;font-size:12.5px;font-family:'Sometype Mono',monospace">WEB SEARCH</div>
-  <div class="field"><label>WEB SEARCH <span style="opacity:.6">(default on)</span></label><select id="fWebSearch"><option value="on">On — the agent can search the web for sources</option><option value="off">Off — it can only read URLs it already has</option></select>
-    <div class="hint">Each search is billed by OpenRouter on top of model tokens, and counts against the run's spend limit. Sub-agents follow this setting too.</div></div>
-  <div class="field"><label>SEARCH ENGINE <span style="opacity:.6">(default Exa)</span></label><select id="fWebEngine"><option value="exa">Exa — about $0.007 per search</option><option value="parallel">Parallel — about $0.005 per search</option><option value="perplexity">Perplexity — about $0.005 per search</option></select>
-    <div class="hint">OpenRouter's per-search fee for each engine. The exact charge comes back with every search and shows in the run's cost.</div></div>
-  <div class="field"><label>RESULTS PER SEARCH <span style="opacity:.6">(default 5, max 10)</span></label><input id="fWebResults" type="number" min="1" max="10" step="1" placeholder="5" />
-    <div class="hint">How many results the agent gets back when it doesn't ask for a number. OpenRouter charges extra per result above 10.</div></div>
-  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px"><button class="btn ghost" id="btnClose">Close</button><button class="btn" id="btnSave">Save</button></div>
 </div></div>
 
 <script src="vendor/vte.browser.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
-const MODELS = ['anthropic/claude-sonnet-4.5','anthropic/claude-opus-4.1','openai/gpt-5-codex','qwen/qwen3-coder-30b','anthropic/claude-haiku-4.5','meta/muse-spark-1.3-contributor'];
-const REASONS = ['instant','brief','balanced','deep','exhaustive'];
+// Access levels: short names for the chip, one plain sentence each for the menu.
 const ACCESS = ['ask','edit','test','full'];
-const ACCESS_LABELS = { ask:'Ask before changes', edit:'Auto-edit files', test:'Auto-edit + tests', full:'Full access' };
-const PLANMODE = ['plan off','plan on'];
+const ACCESS_LABELS = { ask:'Ask first', edit:'Edit files', test:'Edit and test', full:'Full access' };
+const ACCESS_NOTES = {
+  ask: 'Reads and searches the project. Asks before any change.',
+  edit: 'Edits files and searches the web. Asks before running commands.',
+  test: 'Also runs tests and checks, like npm test or pytest. Asks before other commands.',
+  full: 'Runs any command without asking. Destructive system commands are still blocked.',
+};
+// OpenRouter's thinking levels, least to most, as the menu names them.
+const EFFORT_ORDER = ['none','minimal','low','medium','high','xhigh','max'];
+const EFFORT_TEXT = {
+  none: ['Off', 'Answers right away. Fastest and cheapest.'],
+  minimal: ['Minimal', 'A moment\u2019s thought before answering.'],
+  low: ['Low', 'Thinks briefly. Good for small edits and questions.'],
+  medium: ['Medium', 'Thinks it through. A good everyday setting.'],
+  high: ['High', 'Works the problem out before acting. Slower.'],
+  xhigh: ['Extra high', 'Longer thinking for hard bugs and design work.'],
+  max: ['Max', 'Thinks as long as the model allows. Slowest.'],
+  on: ['On', 'Thinks before answering.'],
+};
 let S = null; // settings (redacted)
 
 function el(tag, cls, html){ const e=document.createElement(tag); if(cls)e.className=cls; if(html!=null)e.innerHTML=html; return e; }
@@ -671,6 +960,9 @@ const ICON = {
   plus:    '<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>',
   search:  '<circle cx="11" cy="11" r="7"/><line x1="16" y1="16" x2="21" y2="21"/>',
   refresh: '<polyline points="21 4 21 10 15 10"/><path d="M20 14a8 8 0 1 1-2.3-6.3L21 10"/>',
+  // Summarise older turns: arrows folding inward. It used the refresh arrow, the same
+  // shape as the refresh on the strip just below it, for a different action.
+  compress: '<polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/>',
   pin:     '<line x1="12" y1="17" x2="12" y2="22"/><path d="M9 3h6l-1 8 3 3H7l3-3z"/>',
   gear:    '<circle cx="12" cy="12" r="3.2"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M19.1 4.9L17 7M7 17l-2.1 2.1"/>',
   terminal: '<polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>',
@@ -796,7 +1088,8 @@ function RR(){ return RT() ? RT().root : null; }
 // ---- follow-up queue (Codex-style) ----
 $('steerHintCancel').onclick = () => {
   const v = actView(); if (v) v.steerIdx = null;
-  const hint = $('steerHint'); if (hint) hint.style.display = 'none';
+  const hint = $('steerHint'); if (hint) hint.hidden = true;
+  paintShelf();
   updateSendState();
 };
 /**
@@ -826,31 +1119,28 @@ function moveQueued(v, from, to){
 
 function renderQueue(v){
   if (!v) v = actView();
-  if (!v) return;
-  let qb = v.queueEl;
-  if (!qb) {
-    qb = el('div', 'queue');
-    v.queueEl = qb;
-    const box = document.querySelector('.composer .box');
-    if (box && box.parentNode) box.parentNode.insertBefore(qb, box);
-  }
+  // One set of queue rows, in the box, showing the session you are looking at. Each
+  // view used to insert its own tray above the box and never take it out again, so a
+  // queue from one session stayed on screen after switching to another.
+  if (!v || v !== actView()) return;
+  const qb = $('qrows'); if (!qb) return;
+  v.queueEl = qb;
   qb.innerHTML = '';
   const n = v.queue && v.queue.length;
-  if (!n) { qb.style.display = 'none'; return; }
-  qb.style.display = 'flex';
+  if (!n) { qb.hidden = true; return; }
+  qb.hidden = false;
 
-  // tray header: title + count + clear-all (kept in the header, not the pills)
-  const head = el('div', 'q-head');
-  head.appendChild(el('span', 'q-title', 'Queued'));
-  head.appendChild(el('span', 'q-count', n + (n === 1 ? ' message' : ' messages')));
+  const head = el('div', 'qhead');
+  head.appendChild(el('span', '', 'Queued \u00b7 sends when this run finishes'));
   const clearBtn = el('button', 'q-clear', 'Clear all');
+  clearBtn.type = 'button';
   clearBtn.title = 'Cancel all queued messages';
-  clearBtn.onclick = (e) => { e.stopPropagation(); v.queue.length = 0; const hint = $('steerHint'); if (hint) hint.style.display = 'none'; v.steerIdx = null; renderQueue(v); };
+  clearBtn.onclick = (e) => { e.stopPropagation(); v.queue.length = 0; const hint = $('steerHint'); if (hint) hint.hidden = true; v.steerIdx = null; renderQueue(v); paintShelf(); updateSendState(); };
   head.appendChild(clearBtn);
   qb.appendChild(head);
 
   // rows
-  const list = el('div', 'q-list');
+  const list = qb;
   let dragFrom = null;
   v.queue.forEach((item, idx) => {
     const pill = el('div', 'q-pill');
@@ -926,18 +1216,20 @@ function renderQueue(v){
       pill.appendChild(st);
     }
     const steerBtn = el('button', 'q-act q-steer-btn', 'Steer');
+    steerBtn.type = 'button';
     steerBtn.title = 'Steer this queued message (adds an instruction on top)';
     steerBtn.onclick = (e) => { e.stopPropagation(); v.steerIdx = idx; updateSteerHint(v); $('prompt').focus(); };
     const editBtn = el('button', 'q-act q-edit', 'Edit');
+    editBtn.type = 'button';
     editBtn.title = 'Edit this queued message';
     editBtn.onclick = (e) => { e.stopPropagation(); v.queue.splice(idx, 1); clearSteerIdx(v, idx); $('prompt').value = raw; $('prompt').focus(); renderQueue(v); };
-    const cancelBtn = el('button', 'q-act q-cancel', 'Cancel');
+    const cancelBtn = el('button', 'q-act q-cancel', '\u2715');
     cancelBtn.title = 'Remove this queued message';
+    cancelBtn.setAttribute('aria-label', 'Remove queued message ' + (idx + 1));
     cancelBtn.onclick = (e) => { e.stopPropagation(); v.queue.splice(idx, 1); clearSteerIdx(v, idx); renderQueue(v); };
     pill.appendChild(steerBtn); pill.appendChild(editBtn); pill.appendChild(cancelBtn);
     list.appendChild(pill);
   });
-  qb.appendChild(list);
 }
 function clearDropMarks(list){
   // A NodeList has no array methods -- iterate it directly.
@@ -951,18 +1243,107 @@ function focusGrip(v, idx){
   if (grips[idx]) grips[idx].focus();
 }
 function clearSteerIdx(v, idx){
-  if (v.steerIdx === idx) { v.steerIdx = null; const hint = $('steerHint'); if (hint) hint.style.display = 'none'; }
+  if (v.steerIdx === idx) { v.steerIdx = null; const hint = $('steerHint'); if (hint) hint.hidden = true; paintShelf(); }
 }
 function updateSteerHint(v){
   const hint = $('steerHint');
   if (!hint) return;
-  hint.style.display = 'flex';
+  hint.hidden = false;
+  paintShelf();
   const tgt = $('steerHintTarget');
   if (tgt && v.queue && v.queue[v.steerIdx] != null) {
     const raw = String(v.queue[v.steerIdx].text || '');
     tgt.textContent = raw.slice(0, 40) + (raw.length > 40 ? '\u2026' : '');
   }
 }
+
+/**
+ * The shelf: one line at the top of the box. On the left, the one thing that matters
+ * most right now -- which message you are steering, else what the run is doing, else
+ * how full the conversation is. Attachments for the next message sit beside it, and the
+ * changed files on the right. It hides itself when it has nothing to say.
+ */
+function paintShelf(){
+  const v = actView();
+  const steer = $('steerHint'), work = $('shWork'), warn = $('shWarn');
+  const steering = !!(v && v.steerIdx != null && steer && !steer.hidden);
+  if (steer) steer.hidden = !steering;
+  const busy = !!(v && v.busy);
+  if (work) work.hidden = steering || !busy;
+  if (busy) paintWork(v);
+  const w = v ? contextWarning(v.ctxFill) : '';
+  if (warn) { warn.hidden = steering || busy || !w; $('shWarnTxt').textContent = w; }
+  const any = [...$('shelf').children].some((c) => !c.hidden && !c.classList.contains('sh-sp'));
+  $('shelf').hidden = !any;
+}
+
+/** What the run is doing, in words, and for how long. */
+function toolActivity(name, args){
+  const a = args || {};
+  const base = (p) => String(p || '').split(/[\\/]/).filter(Boolean).pop() || '';
+  if (name === 'shell') { const c = String(a.command || '').replace(/\s+/g, ' ').trim(); return c ? 'Running ' + (c.length > 48 ? c.slice(0, 47) + '\u2026' : c) : 'Running a command'; }
+  if (name === 'read') return a.path ? 'Reading ' + base(a.path) : 'Reading files';
+  if (name === 'write' || name === 'edit' || name === 'patch') return a.path ? 'Editing ' + base(a.path) : 'Editing files';
+  if (name === 'grep' || name === 'glob' || name === 'search' || name === 'rag' || name === 'doc_rag') return 'Searching the project';
+  if (name === 'web_search') return 'Searching the web';
+  if (name === 'web_fetch') return 'Reading a web page';
+  if (name === 'spawn_agent' || name === 'spawn_parallel') return 'Working with sub-agents';
+  if (name === 'computer' || name.indexOf('browser_') === 0 || name.indexOf('cu_') === 0) return 'Using the browser';
+  if (name === 'todo') return 'Updating the plan';
+  if (name === 'lsp') return 'Checking types';
+  return 'Working';
+}
+function setActivity(v, label){
+  if (!v) return;
+  v.activity = label;
+  if (v === actView()) paintWork(v);
+}
+function fmtClock(ms){
+  const sec = Math.max(0, Math.floor(ms / 1000));
+  return Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+}
+function paintWork(v){
+  if (!v || v !== actView()) return;
+  const t = $('shWorkTxt'), tm = $('shWorkTm');
+  if (t) t.textContent = v.activity || 'Working';
+  if (tm) tm.textContent = v.runT0 ? '\u00b7 ' + fmtClock(Date.now() - v.runT0) : '';
+}
+setInterval(() => {
+  const v = actView();
+  if (!v || !v.busy) return;
+  paintWork(v);
+  if (v.curRun && v.curRun.running) paintMeta(v.curRun);   // the step's own clock
+}, 1000);
+
+/** The heads-up before older turns are summarised, or '' while there is room. */
+function contextWarning(f){
+  if (!f || !(f.limit > 0)) return '';
+  const pct = Math.round(100 * f.tokens / f.limit);
+  const at = Math.round(100 * (f.threshold || 0.8));
+  if (pct < at - 10) return '';
+  return pct >= at
+    ? 'The conversation is ' + pct + '% full \u2014 older turns will be summarised with your next message.'
+    : 'The conversation is ' + pct + '% full \u2014 older turns are summarised at ' + at + '%.';
+}
+/** The meter by Send: how much of the context the conversation now takes. */
+function paintMeter(){
+  const v = actView(), m = $('ctxMeter'); if (!m) return;
+  const f = v && v.ctxFill;
+  if (!f || !(f.limit > 0) || !(f.tokens > 0)) { m.hidden = true; paintShelf(); return; }
+  const pct = Math.min(100, Math.round(100 * f.tokens / f.limit));
+  const at = Math.round(100 * (f.threshold || 0.8));
+  m.hidden = false;
+  $('ctxMeterVal').setAttribute('stroke-dashoffset', String(47.12 * (1 - pct / 100)));
+  $('ctxMeterPct').textContent = (pct < 1 ? '<1' : pct) + '%';
+  m.classList.toggle('warn', pct >= at - 10);
+  m.title = 'About ' + fmtTok(f.tokens) + ' of ' + fmtTok(f.limit) + ' tokens used. Older turns are summarised at ' + at + '%.';
+  paintShelf();
+}
+function compactNow(){
+  if (!activeId) return;
+  try { window.voxai.agentCompact(activeId); } catch (e) {}
+}
+$('shCompact').onclick = compactNow;
 
 function drainQueue(sid){
   const v = viewOf(sid);
@@ -1185,10 +1566,10 @@ function ppPaint(){
  * missing icon shows as an empty control rather than a mojibake box. */
 (function paintIcons(){
   const MAP = {
-    ppToggle: 'panel', btnCompact: 'refresh', cbRefresh: 'refresh',
+    ppToggle: 'panel', btnCompact: 'compress', cbRefresh: 'refresh',
     pvBack: 'left', pvFwd: 'right', pvReload: 'refresh', pvClose: 'close',
     ppBack: 'left', ppFwd: 'right', ppReload: 'refresh',
-    ppExternal: 'expand', ppPin: 'pin', ppClose: 'close', btnUsage: 'gear',
+    ppExternal: 'expand', ppPin: 'pin', ppClose: 'close',
   };
   const ch = document.getElementById('cbChev');
   if (ch && !ch.querySelector('svg')) ch.innerHTML = icon('right', 11);
@@ -1285,6 +1666,10 @@ function paintActive(){
   try { refreshChips(); } catch {}   // the model chip follows the session you switch to
   const busy = !!(v && v.busy);
   $('runDot').style.display = busy ? 'block' : 'none';
+  // Everything in the box belongs to the session on screen.
+  renderQueue(v);
+  const hint = $('steerHint'); if (hint) hint.hidden = !(v && v.steerIdx != null);
+  paintAsk(); paintMeter(); paintShelf();
   updateSendState();
 }
 
@@ -1306,7 +1691,7 @@ function addUser(text, attachParts){
   const r = RR(); if(r){ r.appendChild(u); u.scrollIntoView({block:'end'}); }
   return u;
 }
-function setStatus(t){ const v = RT(); if(!v) return; let s = v.statusEl; if(!s){ s = el('div','statusline'); v.statusEl = s; v.root.appendChild(s); } s.innerHTML = '<span class="dot run"></span><span></span><span class="cursor"></span>'; s.children[1].textContent = t; s.scrollIntoView({block:'end'}); }
+function setStatus(t){ const v = RT(); if(!v) return; setActivity(v, t.charAt(0).toUpperCase() + t.slice(1).replace(/\u2026$/, '')); }
 function clearStatus(){ const v = RT(); if(v && v.statusEl){ v.statusEl.remove(); v.statusEl = null; } }
 
 // --- streaming (per-view) ---
@@ -1590,14 +1975,48 @@ function sealThinking(v){
   v._think = null;
 }
 
+/**
+ * A step: a stretch of tool work with the narration that went with it, folded to one
+ * line that says what it did -- "Changed 4 files  2 read · 1 command · 9 passed  2m 10s".
+ * It spans turns, so eight "Let me look at..." sentences no longer take a paragraph each.
+ */
+function stepSummary(counts, stats){
+  const c = counts || {}, st = stats || {};
+  const n = (k) => c[k] || 0;
+  const plural = (x, one, many) => x + ' ' + (x === 1 ? one : many);
+  const reads = n('READ'), writes = n('WRITE') + n('EDIT') + n('PATCH') + n('FS');
+  const cmds = n('CMD') + n('SHELL'), finds = n('GREP') + n('TREE') + n('RAG');
+  const web = n('WEB') + n('FIND'), subs = n('SUB') + n('SUBx'), eye = n('EYE');
+  let head, used = {};
+  if (writes) { head = 'Changed ' + plural(writes, 'file', 'files'); used.w = 1; }
+  else if (cmds) { head = 'Ran ' + plural(cmds, 'command', 'commands'); used.c = 1; }
+  else if (subs) { head = 'Worked with sub-agents'; used.s = 1; }
+  else if (eye) { head = 'Used the browser'; used.e = 1; }
+  else if (web && !reads && !finds) { head = 'Searched the web'; used.web = 1; }
+  else if (reads || finds) { head = 'Explored the project'; }
+  else if (st.denied) { head = st.denied === 1 ? 'You denied a request' : 'You denied ' + st.denied + ' requests'; used.d = 1; }
+  else head = 'Worked through ' + plural(Object.values(c).reduce((a, b) => a + b, 0), 'step', 'steps');
+  const meta = [];
+  if (reads) meta.push(plural(reads, 'file read', 'files read'));
+  if (finds) meta.push(plural(finds, 'search', 'searches'));
+  if (cmds && !used.c) meta.push(plural(cmds, 'command', 'commands'));
+  if (web && !used.web) meta.push(plural(web, 'web lookup', 'web lookups'));
+  if (subs && !used.s) meta.push(plural(subs, 'sub-agent run', 'sub-agent runs'));
+  if (st.verdict) meta.push(st.verdict);
+  if (st.denied && !used.d) meta.push(st.denied + ' denied');
+  return { head, meta, failed: st.failed || 0 };
+}
 function startRunCard(){
   const v = RT(); if(!v) return null;
-  const wrap = el('div','run');
+  const wrap = el('div','run running');
   const head = el('div','runhead'); head.className = 'runhead';
-  const chev = el('span','chev'); chev.textContent='+';
-  const label = el('span','modelabel'); label.textContent='Working…';
+  const chev = el('span','chev'); chev.textContent='\u25b8';
+  const label = el('span','modelabel'); label.textContent='Working';
+  const meta = el('span','runmeta');
   const delta = el('span','rundelta');
-  head.appendChild(chev); head.appendChild(label); head.appendChild(delta);
+  head.appendChild(chev); head.appendChild(label); head.appendChild(meta); head.appendChild(delta);
+  head.tabIndex = 0;
+  head.setAttribute('role', 'button');
   const body = el('div','runbody');
   wrap.appendChild(head); wrap.appendChild(body);
   v.root.appendChild(wrap); wrap.scrollIntoView({block:'end'});
@@ -1608,21 +2027,33 @@ function startRunCard(){
   //
   // It stays OPEN while the batch is running so you can watch work happen, then
   // collapses itself once the batch finishes (see paintLabel).
-  const card = { wrap, body, chev, label, delta, counts: {}, open: true, running: true, stats: {} };
+  const card = { wrap, body, chev, label, meta, delta, counts: {}, open: true, running: true, stats: {}, t0: Date.now(), t1: 0 };
   const setOpen = (o) => {
     card.open = o;
-    body.style.display = o ? 'block' : 'none';
-    chev.textContent = o ? '▾' : '▸';
+    body.style.display = o ? 'flex' : 'none';
+    wrap.classList.toggle('open', o);
+    head.setAttribute('aria-expanded', String(o));
   };
   card.setOpen = setOpen;
   setOpen(true);
-  head.style.cursor = 'pointer';
   head.onclick = () => setOpen(!card.open);
+  head.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setOpen(!card.open); } };
   v.curRun = card;
   return card;
 }
+/** Where a step's own things go: inside the open step, else the thread. */
+function flowRoot(v){ return (v && v.curRun && v.curRun.body) || (v && v.root) || null; }
+/** Move a short piece of narration into the step as one of its lines. */
+function foldNarration(card, node){
+  if (!card || !node) return;
+  node.classList.remove('md', 'live');
+  node.classList.add('say');
+  card.body.appendChild(node);
+}
+// Narration longer than this stays in the thread as a paragraph: it is explanation, not a caption.
+const SAY_MAX = 280;
 function ensureRunCard(){ const v = RT(); if(!v) return null; if(!v.curRun) return startRunCard(); return v.curRun; }
-function addToolRow(name, args){
+function addToolRow(name, args, instant){
   const v = RT(); const card = ensureRunCard(); if(!card) return null;
   const kind = kindName(name);
   card.counts[kind] = (card.counts[kind]||0)+1;
@@ -1636,10 +2067,21 @@ function addToolRow(name, args){
   const out = el('div','toolout'); out.style.display='none';
   row.appendChild(top); row.appendChild(out);
   card.body.appendChild(row);
-  card.chev.textContent = card.open ? '−' : '+';
-  card.label.classList.add('running'); card.label.textContent = kind + '…';
-  typeCmd(cmdSp, cmdFor(name,args));
+  // A replayed step has no timing on record; show none rather than "0s".
+  if (instant) card.t0 = 0;
+  card.wrap.classList.toggle('running', !instant);
+  if (!instant) { card.label.textContent = toolActivity(name, args); setActivity(v, toolActivity(name, args)); }
+  paintMeta(card);
+  if (instant) cmdSp.textContent = cmdFor(name,args) || '\u2026'; else typeCmd(cmdSp, cmdFor(name,args));
   return { card, row, out, top, view: v, name };
+}
+/** The counts and the time beside the step's name. */
+function paintMeta(card){
+  const sm = stepSummary(card.counts, card.stats);
+  card.meta.innerHTML = sm.meta.map(esc).join(' \u00b7 ') + (sm.failed ? (sm.meta.length ? ' \u00b7 ' : '') + '<span class="bad">' + sm.failed + ' failed</span>' : '');
+  const end = card.t1 || (card.running ? Date.now() : 0);
+  // Under a second is not worth a number.
+  card.delta.textContent = card.t0 && end && end - card.t0 >= 1000 ? fmtElapsed(end - card.t0) : '';
 }
 function typeCmd(span, text){
   const s = String(text == null ? '' : text);
@@ -1684,45 +2126,30 @@ function setToolResult(rec, ok, resultText){
   // "+1 -0" for a 24-character edit. Real line counts come from git, in the diff
   // strip above the composer; this delta sticks to what the tools actually report.
   const st = rec.card.stats || (rec.card.stats = {});
-  if (!ok) st.failed = (st.failed || 0) + 1;
+  // A refused request did not run: it is not a command run, and not a failure either.
+  const denied = !ok && /permission denied/i.test(String(resultText || ''));
+  if (denied) {
+    st.denied = (st.denied || 0) + 1;
+    const k = kindName(rec.name || '');
+    if (rec.card.counts[k]) rec.card.counts[k]--;
+  } else if (!ok) st.failed = (st.failed || 0) + 1;
   const txt = String(resultText || '');
   const passed = /(\d+)\s+passed/.exec(txt);
   if (passed) st.verdict = passed[1] + ' passed';
   const failed = /(\d+)\s+failed/.exec(txt);
   if (failed && Number(failed[1]) > 0) st.failed = Number(failed[1]);
-  paintLabel(rec.card);
+  rec.card.t1 = Date.now();
+  paintMeta(rec.card);
 }
 function paintLabel(card){
   if(!card) return;
-  card.label.classList.remove('running');
-  const c = card.counts; const parts = [];
-  if (c.THINK) parts.push('Thought it through');
-  if (c.READ) parts.push('Read '+c.READ+((c.READ>1)?' files':' file'));
-  if (c.GREP || c.SEARCH) parts.push('Searched the codebase');
-  if (c.TREE) parts.push('Explored '+c.TREE+((c.TREE>1)?' trees':' tree'));
-  if (c.WRITE) parts.push('Wrote '+c.WRITE+((c.WRITE>1)?' files':' file'));
-  if (c.EDIT || c.PATCH) { const n=(c.EDIT||0)+(c.PATCH||0); parts.push('Edited '+n+((n>1)?' files':' file')); }
-  if (c.BASH) parts.push('Ran '+c.BASH+((c.BASH>1)?' commands':' command'));
-  if (c.CHECK) parts.push('Checked types and lint');
-  if (c.TODO) parts.push('Updated the to-do list');
-  if (c.WEB) parts.push('Fetched from the web');
-  if (c.SUB || c.SUBx) parts.push('Delegated to a sub-agent');
-  if (c.GIT) parts.push('Touched git');
-  if (c.EYE) parts.push('Drove the browser');
-  card.label.textContent = parts.join(' · ') || 'Agent steps';
-
-  // The compact metric the prototype puts beside the label: "+82 − 21",
-  // "41 passed", "12s". It is what makes a collapsed batch still informative.
-  const st = card.stats || {};
-  const bits = [];
-  if (st.verdict) bits.push(st.verdict);
-  if (st.failed) bits.push(st.failed+' failed');
-  if (card.delta) card.delta.textContent = bits.join(' · ');
-  if (st.failed) card.delta.style.color = 'var(--del)';
-
-  // Finished batches fold away. A failure stays open — an error you have to
-  // click to find may as well not be shown.
-  if (card.running === false && card.setOpen) card.setOpen(!!st.failed);
+  card.wrap.classList.toggle('running', !!card.running);
+  const sm = stepSummary(card.counts, card.stats);
+  if (!card.running) card.label.textContent = sm.head;
+  paintMeta(card);
+  // Finished steps fold away. A failure stays open -- an error you have to click to
+  // find may as well not be shown.
+  if (card.running === false && card.setOpen) card.setOpen(!!sm.failed);
 }
 function finalizeRunCard(){
   const v = RT();
@@ -1737,6 +2164,7 @@ function finalizeRunCard(){
     return;
   }
   card.running = false;
+  if (!card.t1) card.t1 = card.t0 ? Date.now() : 0;
   paintLabel(card);
 }
 
@@ -1755,18 +2183,172 @@ $('btnNew').onclick=()=>{ openNewSess(); };
 $('btnOpenFolder').onclick=pickDir; $('btnEmpty').onclick=()=>go('work');
 async function pickDir(){ const d = await window.voxai.openDir(); if(d){ S.workingDir=d; await window.voxai.saveSettings({workingDir:d}); $('sessSub').textContent=d; } }
 
-// chips
-function chip(id, menuId, options, get, set){
-  const c=$(id), m=$(menuId);
-  m.innerHTML=''; options.forEach(o=>{ const b=document.createElement('button'); b.textContent=o; if(o===get())b.classList.add('sel'); b.onclick=(e)=>{e.stopPropagation(); set(o); c.classList.remove('open'); refreshChips();}; m.appendChild(b); });
-  c.onclick=(e)=>{ e.stopPropagation(); if(e.target.closest('.menu'))return; document.querySelectorAll('.chip.open').forEach(x=>{if(x!==c)x.classList.remove('open')}); c.classList.toggle('open'); };
+// ---- the three pickers: one menu shell, opened over the chip that owns it ----
+function placeMenu(c){
+  const m = c && c.querySelector('.menu'); if (!m) return;
+  const r = c.getBoundingClientRect();
+  const w = m.offsetWidth || 256;
+  const left = Math.max(8, Math.min(r.left + r.width / 2 - w / 2, window.innerWidth - w - 8));
+  m.style.left = left + 'px';
+  m.style.bottom = Math.max(8, window.innerHeight - r.top + 8) + 'px';
+  // Never taller than the space above the chip; the model list scrolls instead.
+  m.style.maxHeight = Math.max(160, r.top - 16) + 'px';
 }
+function closeChips(except){ document.querySelectorAll('.chip.open').forEach((x) => { if (x !== except) x.classList.remove('open'); }); }
+function wireChip(id, render){
+  const c = $(id); if (!c) return;
+  c.onclick = (e) => {
+    e.stopPropagation();
+    if (e.target.closest('.menu')) return;
+    const open = !c.classList.contains('open');
+    closeChips(c);
+    c.classList.toggle('open', open);
+    if (open) { render(); placeMenu(c); }
+  };
+}
+window.addEventListener('resize', () => { const c = document.querySelector('.chip.open'); if (c) placeMenu(c); });
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  const c = document.querySelector('.chip.open'); if (!c) return;
+  e.preventDefault(); c.classList.remove('open');
+});
+/** One menu row: tick, name, optional right-hand text. */
+function menuRow(name, on, right){
+  const r = el('div', 'mp-row' + (on ? ' sel hot' : ''));
+  r.appendChild(el('span', 'ck', on ? '\u2713' : ''));
+  const n = el('span', 'nm'); n.textContent = name; r.appendChild(n);
+  if (right != null) { const p = el('span', 'pr'); p.textContent = right; r.appendChild(p); }
+  return r;
+}
+/** A short menu: header, rows, and one sentence under them for the highlighted row. */
+function renderOptionMenu(menu, title, rows, onPick){
+  menu.innerHTML = '';
+  menu.appendChild(el('div', 'mp-label', '<span>' + esc(title) + '</span>'));
+  const body = el('div', 'op-body'); menu.appendChild(body);
+  const note = el('div', 'op-note'); note.setAttribute('aria-live', 'polite'); menu.appendChild(note);
+  let sel = null;
+  rows.forEach((o) => {
+    const r = menuRow(o.name, o.on);
+    if (o.fixed) r.classList.add('fixed');
+    r.onmouseenter = () => { body.querySelectorAll('.hot').forEach((x) => x.classList.remove('hot')); r.classList.add('hot'); note.textContent = o.note || ''; };
+    if (!o.fixed) r.onclick = (e) => { e.stopPropagation(); onPick(o.key); };
+    if (o.on) sel = o;
+    body.appendChild(r);
+  });
+  body.onmouseleave = () => {
+    body.querySelectorAll('.hot').forEach((x) => x.classList.remove('hot'));
+    const i = rows.indexOf(sel); if (i >= 0) body.children[i].classList.add('hot');
+    note.textContent = sel ? sel.note || '' : '';
+  };
+  note.textContent = sel ? sel.note || '' : (rows[0] && rows[0].note) || '';
+  note.hidden = !note.textContent;
+  return { body, note };
+}
+
 // The model chip names the model the NEXT SEND will use: the open session's own model.
 // It used to always show the global default, so after opening an older session it could
 // name a model that would not be the one that ran.
 function activeModel(){ const v = actView(); return (v && v.model) || S.openrouterModel; }
-function refreshChips(){ $('chipModelVal').textContent=activeModel(); $('chipReasonVal').textContent=S.reasoningEffort||'balanced'; $('modelTag').textContent=activeModel(); try { $('chipAccessVal').textContent=(ACCESS_LABELS[S.access]||ACCESS_LABELS.ask); } catch(e){} }
-document.addEventListener('click',(e)=>{ if(e.target.closest && e.target.closest('.chip')) return; document.querySelectorAll('.chip.open').forEach(x=>x.classList.remove('open')); });
+function modelEntry(id){ return (ALL_MODELS || []).find((x) => x.id === id) || null; }
+
+// ---- reasoning: the levels come from the model's own catalogue entry ----
+/** The model's reasoning entry: the entry, null when it cannot reason, undefined when unknown. */
+function reasoningSpecFor(id){
+  const m = modelEntry(id);
+  if (!m) return undefined;
+  return m.reasoningSpec || null;
+}
+/** The rows the menu offers for a model: effort keys, 'on', or 'none'. */
+function reasoningKeys(spec){
+  if (!spec) return [];
+  const eff = (spec.supported_efforts || []).filter((e) => EFFORT_ORDER.includes(e) && e !== 'none');
+  if (!eff.length) return spec.mandatory ? [] : ['none', 'on'];
+  return EFFORT_ORDER.filter((k) => (k === 'none' ? !spec.mandatory : eff.includes(k)));
+}
+function nearestKey(list, want){
+  const pool = list.filter((k) => k !== 'none' && k !== 'on');
+  if (!pool.length) return list[0] || null;
+  if (pool.includes(want)) return want;
+  const wi = EFFORT_ORDER.indexOf(want);
+  let best = pool[0], bd = Infinity;
+  for (const k of pool) { const d = Math.abs(EFFORT_ORDER.indexOf(k) - wi); if (d < bd || (d === bd && EFFORT_ORDER.indexOf(k) > EFFORT_ORDER.indexOf(best))) { bd = d; best = k; } }
+  return best;
+}
+/** The model's own default, as one of its rows. */
+function reasoningDefault(spec){
+  const keys = reasoningKeys(spec);
+  if (!keys.length) return null;
+  if (keys.includes('on')) return spec.default_enabled === false ? 'none' : 'on';
+  if (spec.default_enabled === false && keys.includes('none')) return 'none';
+  return keys.includes(spec.default_effort) ? spec.default_effort : nearestKey(keys, 'medium');
+}
+/** Which row a saved choice lands on for this model. It carries over, or moves to the nearest level. */
+function resolveReasoning(choice, spec){
+  const keys = reasoningKeys(spec);
+  if (!keys.length) return null;
+  const c = String(choice || 'default');
+  if (c === 'default') return reasoningDefault(spec);
+  if (keys.includes(c)) return c;
+  if (c === 'on') return reasoningDefault(spec) === 'none' ? nearestKey(keys, 'medium') : reasoningDefault(spec);
+  if (c === 'none') return reasoningDefault(spec);
+  return keys.includes('on') ? 'on' : nearestKey(keys, c);
+}
+function paintReasonChip(){
+  const c = $('chipReason'); if (!c) return;
+  const spec = reasoningSpecFor(activeModel());
+  // The catalogue says this model does not think: there is nothing to set.
+  c.hidden = spec === null;
+  const val = $('chipReasonVal');
+  if (spec === undefined) { val.textContent = S.reasoningEffort && S.reasoningEffort !== 'default' ? (EFFORT_TEXT[S.reasoningEffort] || [S.reasoningEffort])[0] : 'Model default'; return; }
+  if (!spec) return;
+  if (!reasoningKeys(spec).length) { val.textContent = 'Always on'; return; }
+  val.textContent = EFFORT_TEXT[resolveReasoning(S.reasoningEffort, spec)][0];
+}
+function renderReasonMenu(){
+  const menu = $('menuReason'); if (!menu) return;
+  const id = activeModel();
+  const spec = reasoningSpecFor(id);
+  const name = modelLabel(id);
+  if (spec === undefined) {
+    renderOptionMenu(menu, 'Thinking', [{ key: 'default', name: 'Model default', on: true, fixed: true, note: 'The levels ' + name + ' takes appear once the model list has loaded.' }], () => {});
+    return;
+  }
+  const keys = reasoningKeys(spec);
+  if (!keys.length) {
+    renderOptionMenu(menu, 'Thinking', [{ key: 'on', name: 'Always on', on: true, fixed: true, note: name + ' always thinks before answering.' }], () => {});
+    return;
+  }
+  const cur = resolveReasoning(S.reasoningEffort, spec);
+  const def = reasoningDefault(spec);
+  renderOptionMenu(menu, 'Thinking', keys.map((k) => ({
+    key: k, name: EFFORT_TEXT[k][0], on: k === cur,
+    note: EFFORT_TEXT[k][1] + (k === def ? ' Default for this model.' : ''),
+  })), async (k) => {
+    S = await window.voxai.saveSettings({ reasoningEffort: k });
+    $('chipReason').classList.remove('open');
+    paintReasonChip();
+  });
+}
+
+// ---- access ----
+function renderAccessMenu(){
+  const menu = $('menuAccess'); if (!menu) return;
+  const cur = ACCESS_LABELS[S.access] ? S.access : 'ask';
+  renderOptionMenu(menu, 'Permissions', ACCESS.map((k) => ({ key: k, name: ACCESS_LABELS[k], on: k === cur, note: ACCESS_NOTES[k] })), async (k) => {
+    S = await window.voxai.saveSettings({ access: k });
+    $('chipAccess').classList.remove('open');
+    refreshChips();
+  });
+}
+
+function refreshChips(){
+  $('chipModelVal').textContent = modelLabel(activeModel());
+  $('chipModel').title = activeModel() || '';
+  paintReasonChip();
+  $('chipAccessVal').textContent = ACCESS_LABELS[S.access] || ACCESS_LABELS.ask;
+  const pl = $('chipPlan'); if (pl) pl.setAttribute('aria-checked', String(!!S.planMode));
+}
+document.addEventListener('click',(e)=>{ if(e.target.closest && e.target.closest('.chip')) return; closeChips(); });
 
 // sessions / starters / files (Forge-flavoured placeholders wired to real runs)
 function seedSidebar(){ refreshSessionList(); }
@@ -1799,64 +2381,202 @@ function fmtPrice(cents){
 }
 
 async function loadModels(){
-  const foot = $('modelMenuFoot');
-  if (!S || !S.hasOpenRouterKey) { if (foot) foot.textContent = 'open \u2699 Settings and add your OpenRouter key'; return; }
-  if (foot) foot.textContent = 'loading models\u2026';
+  const facts = $('pkFacts');
+  if (!S || !S.hasOpenRouterKey) { if (facts) facts.textContent = 'Add your OpenRouter key in Settings'; return; }
   try {
     const r = await window.voxai.openrouterModels();
     if (r && r.ok) {
       ALL_MODELS = r.models || [];
+      learnProviders(ALL_MODELS);
+      PK_BROWSE = null;
       SESS_PRICE = modelPriceFor(S.openrouterModel);
-      if (foot) foot.textContent = ALL_MODELS.length + ' models from OpenRouter \u00b7 ' + (S.openrouterModel || '');
-      renderModelMenu();
+      refreshChips();
+      if ($('chipModel').classList.contains('open')) renderModelMenu();
       const av = actView(); if (av) updateSessStats(av);
-    } else if (foot) { foot.textContent = 'could not load models: ' + ((r && r.error) || 'unknown error'); }
-  } catch (e) { if (foot) foot.textContent = 'could not load models: ' + ((e && e.message) || e); }
+    } else if (facts) { facts.textContent = 'Could not load models: ' + ((r && r.error) || 'unknown error'); }
+  } catch (e) { if (facts) facts.textContent = 'Could not load models: ' + ((e && e.message) || e); }
 }
 
+// ---- the model picker: plain names from OpenRouter's own catalogue ----
+// Nothing here is a list of models. The name is OpenRouter's display name without the
+// provider in front ("DeepSeek: DeepSeek V4 Flash Latest" -> "DeepSeek V4 Flash"), and
+// dated snapshots and batch/nitro variants of a model already listed stay out of the
+// browse list -- search still finds them. A model added tomorrow reads the same way.
+const MODEL_DATE_TAIL = /\s+(\d{4}-\d{2}-\d{2}|\d{8}|\d{4}|\d{2}-\d{2})$/;
+function describeModel(m){
+  const id = String((m && m.id) || '');
+  let name = String((m && m.name) || id);
+  let provider = '';
+  const c = name.indexOf(': ');
+  if (c > 0) { provider = name.slice(0, c); name = name.slice(c + 2); }
+  if (!provider) {
+    // No "Provider: " in the name: use the name the catalogue gives this id's vendor on
+    // its other models, so "mistralai/..." joins "Mistral" rather than starting its own.
+    const v = id.replace(/^~/, '').split('/')[0] || '';
+    const known = typeof MODEL_SLUG_PROV !== 'undefined' && MODEL_SLUG_PROV ? MODEL_SLUG_PROV[v] : '';
+    provider = known || (v ? v.charAt(0).toUpperCase() + v.slice(1) : 'Other');
+  }
+  let free = false;
+  name = name.replace(/\s*\(([^)]+)\)\s*$/g, (_, t) => { if (/free/i.test(t)) free = true; return ''; });
+  const latest = id.startsWith('~') || /\s+Latest$/i.test(name);
+  name = name.replace(/\s+Latest$/i, '');
+  let snapshot = '';
+  name = name.replace(MODEL_DATE_TAIL, (_, d) => { snapshot = d; return ''; });
+  const variant = (id.split(':')[1] || '').toLowerCase();
+  if (variant === 'free') free = true;
+  if (!name.trim()) name = id.split('/').pop() || id;
+  return { id, provider, name: name.trim(), latest, snapshot, variant, free };
+}
+/** The ids that make the everyday list: one row per model a person would recognise. */
+function browseModelIds(models){
+  const all = (models || []).map(describeModel);
+  const hidden = new Set();
+  for (const r of all) {
+    if (r.variant && r.variant !== 'free') hidden.add(r.id);
+    if (r.snapshot && all.some((o) => o !== r && o.provider === r.provider && o.name === r.name && !o.snapshot)) hidden.add(r.id);
+  }
+  const byName = new Map();
+  for (const r of all) {
+    if (hidden.has(r.id)) continue;
+    const k = r.provider + '|' + r.name + '|' + (r.free ? 'free' : '');
+    const cur = byName.get(k);
+    if (!cur) { byName.set(k, r); continue; }
+    const better = (r.latest && !cur.latest) || (!r.snapshot && cur.snapshot) ? r : cur;
+    hidden.add((better === r ? cur : r).id);
+    byName.set(k, better);
+  }
+  return new Set(all.filter((r) => !hidden.has(r.id)).map((r) => r.id));
+}
+function modelLabel(id){
+  const m = modelEntry(id);
+  if (m) return describeModel(m).name;
+  // Not in the catalogue (yet): the id without its plumbing.
+  return String(id || '').replace(/^~/, '').split('/').pop().replace(/-latest$/, '').replace(/:.*$/, '') || 'Choose a model';
+}
+/** $ per 1M tokens, in · out. */
+function per1M(cents){
+  if (cents == null) return '';
+  // cents are $/token x 100; x 1e4 gives $ per 1M. Rounded, so 3 is not 3.0000000000000004.
+  const d = Math.round(Number(cents) * 1e4 * 1e6) / 1e6;
+  if (d === 0) return '0';
+  if (d < 0.1) return '$' + d.toFixed(3).replace(/0+$/, '');
+  if (d < 10 && Math.round(d) !== d) return '$' + d.toFixed(2);
+  return '$' + (Math.round(d * 100) / 100);
+}
+function modelPrice(m){
+  if (!m || (m.promptCents == null && m.completionCents == null)) return '';
+  if (!Number(m.promptCents) && !Number(m.completionCents)) return 'free';
+  return per1M(m.promptCents) + ' \u00b7 ' + per1M(m.completionCents);
+}
+function modelFacts(m){
+  if (!m) return 'Not in the OpenRouter catalogue right now';
+  const bits = [];
+  if (m.context) bits.push((m.context >= 1e6 ? (Math.round(m.context / 1e4) / 100) + 'M' : Math.round(m.context / 1000) + 'k') + ' context');
+  bits.push(m.tools === false ? 'no tools \u2014 can\u2019t edit files' : 'tools');
+  if (m.vision === true) bits.push('reads images'); else if (m.vision === false) bits.push('text only');
+  return bits.join(' \u00b7 ');
+}
+let RECENT_MODELS = [];
+let MODEL_SLUG_PROV = null;   // vendor slug in the id -> the provider name the catalogue uses
+function learnProviders(models){
+  const map = {};
+  for (const m of models || []) {
+    const name = String(m.name || ''), c = name.indexOf(': ');
+    const slug = String(m.id || '').replace(/^~/, '').split('/')[0];
+    if (c > 0 && slug && !map[slug]) map[slug] = name.slice(0, c);
+  }
+  MODEL_SLUG_PROV = map;
+}
+let PK_VIEW = 'home';
+let PK_BROWSE = null;   // ids in the everyday list, worked out once per catalogue load
+function pkFoot(id){
+  const m = modelEntry(id);
+  $('pkId').textContent = id || '';
+  $('pkFacts').textContent = id ? modelFacts(m) : '';
+}
 function renderModelMenu(){
   const box = $('modelMenuList'); if (!box) return;
   const q = (($('modelSearch') && $('modelSearch').value) || '').trim().toLowerCase();
-  const frag = document.createDocumentFragment();
-  const grp = (t) => { const d = document.createElement('div'); d.className = 'grp'; d.textContent = t; frag.appendChild(d); };
-  // A model without `tools` in supported_parameters cannot drive the agent at all —
-  // it silently answers in prose. Mark it here rather than letting it fail at run time.
-  const noTools = (m) => m && m.tools === false;
-  const row = (id, name, right, cap) => {
-    const b = document.createElement('button');
-    if (id === (S && S.openrouterModel)) b.classList.add('sel');
-    b.title = id;
-    const left = document.createElement('b'); left.textContent = name || id;
-    if (noTools(cap)) {
-      left.style.opacity = '.55';
-      const warn = document.createElement('span');
-      warn.textContent = ' chat only';
-      warn.style.cssText = 'font-size:10px;letter-spacing:.08em;color:var(--del);margin-left:6px';
-      left.appendChild(warn);
-      b.title = id + ' — no tool-calling support; the agent cannot read or edit files with this model.';
-    }
-    const r = document.createElement('small'); r.textContent = right || '';
-    b.appendChild(left); b.appendChild(r);
-    b.onclick = async (e) => { e.stopPropagation(); await setModel(id); };
-    frag.appendChild(b);
-  };
-  const capOf = (id) => (ALL_MODELS || []).find((x) => x.id === id);
-  if (!q) {
-    grp('POPULAR');
-    MODELS.forEach((m) => row(m, m, '', capOf(m)));
-  }
-  let hits = !q ? ALL_MODELS : ALL_MODELS.filter((m) => (m.id && m.id.toLowerCase().indexOf(q) >= 0) || (m.name && m.name.toLowerCase().indexOf(q) >= 0));
-  // Tool-capable models first; chat-only ones still listed, just not in the way.
-  hits = hits.slice().sort((a, b) => (noTools(a) ? 1 : 0) - (noTools(b) ? 1 : 0));
-  if (q || hits.length) grp(q ? ('MATCHES (' + hits.length + ')') : ('ALL MODELS (' + ALL_MODELS.length + ')'));
-  hits.slice(0, 300).forEach((m) => row(m.id, m.name, priceString(m) || contextString(m), m));
+  const cur = activeModel();
   box.innerHTML = '';
-  box.appendChild(frag);
-  if (!q && !ALL_MODELS.length) { const d = document.createElement('div'); d.className = 'grp'; d.textContent = 'catalog loads from OpenRouter once your key is set'; box.appendChild(d); }
-  else if (q && !hits.length) { const d = document.createElement('div'); d.className = 'grp'; d.textContent = 'no matches \u2014 try a full id like anthropic/claude-sonnet-4.5'; box.appendChild(d); }
+  if (!ALL_MODELS.length) {
+    box.appendChild(el('div', 'mp-empty', S && S.hasOpenRouterKey ? 'Loading models from OpenRouter\u2026' : 'Add your OpenRouter key in Settings to choose a model.'));
+    pkFoot(cur);
+    return;
+  }
+  if (!PK_BROWSE) PK_BROWSE = browseModelIds(ALL_MODELS);
+  const rowFor = (m) => {
+    const d = describeModel(m);
+    // Only search reaches the variants left out of the list; name what makes each one
+    // different, or "Claude Sonnet 5" and its batch variant read as the same row.
+    const extra = PK_BROWSE.has(m.id) ? '' : (d.variant && d.variant !== 'free' ? d.variant : d.snapshot);
+    const r = menuRow(d.name + (extra ? ' · ' + extra : ''), m.id === cur, modelPrice(m));
+    r.dataset.id = m.id;
+    if (m.tools === false) r.style.opacity = '.6';
+    r.onmouseenter = () => { box.querySelectorAll('.hot').forEach((x) => x.classList.remove('hot')); r.classList.add('hot'); pkFoot(m.id); };
+    r.onclick = async (e) => { e.stopPropagation(); await setModel(m.id); $('chipModel').classList.remove('open'); };
+    return r;
+  };
+  if (q) {
+    const hits = ALL_MODELS.filter((m) => { const d = describeModel(m); return (d.name + ' ' + d.provider + ' ' + m.id).toLowerCase().includes(q); });
+    hits.slice(0, 200).forEach((m) => box.appendChild(rowFor(m)));
+    if (!hits.length) box.appendChild(el('div', 'mp-empty', 'No model matches. Try part of the id, like <span style="font-family:\'Sometype Mono\',monospace">claude</span>.'));
+  } else if (PK_VIEW !== 'home') {
+    const list = ALL_MODELS.filter((m) => PK_BROWSE.has(m.id) && describeModel(m).provider === PK_VIEW);
+    const back = el('div', 'mp-back', '<i>\u2039</i>' + esc(PK_VIEW) + ' <span>' + list.length + (list.length === 1 ? ' model' : ' models') + '</span>');
+    back.onclick = (e) => { e.stopPropagation(); PK_VIEW = 'home'; renderModelMenu(); };
+    box.appendChild(back);
+    list.forEach((m) => box.appendChild(rowFor(m)));
+  } else {
+    const recent = [cur].concat(RECENT_MODELS).filter((x, i, a) => x && a.indexOf(x) === i).slice(0, 5);
+    box.appendChild(el('div', 'mp-label', '<span>Recent</span><span>per 1M tokens, in \u00b7 out</span>'));
+    recent.forEach((id) => {
+      const m = modelEntry(id);
+      if (m) box.appendChild(rowFor(m));
+      else { const r = menuRow(modelLabel(id), id === cur, ''); r.dataset.id = id; r.onmouseenter = () => pkFoot(id); r.onclick = async (e) => { e.stopPropagation(); await setModel(id); $('chipModel').classList.remove('open'); }; box.appendChild(r); }
+    });
+    box.appendChild(el('div', 'mp-sep'));
+    const counts = new Map();
+    ALL_MODELS.forEach((m) => { if (PK_BROWSE.has(m.id)) { const p = describeModel(m).provider; counts.set(p, (counts.get(p) || 0) + 1); } });
+    const curProv = modelEntry(cur) ? describeModel(modelEntry(cur)).provider : '';
+    const provs = [...counts.keys()].sort((a, b) => (a === curProv ? -1 : b === curProv ? 1 : a.localeCompare(b)));
+    box.appendChild(el('div', 'mp-label', '<span>Providers</span><span>' + provs.length + '</span>'));
+    provs.forEach((p) => {
+      const r = el('div', 'mp-row prov');
+      r.dataset.go = p;
+      r.appendChild(el('span', 'ck', ''));
+      const n = el('span', 'nm'); n.textContent = p; r.appendChild(n);
+      r.appendChild(el('span', 'ct', String(counts.get(p))));
+      r.appendChild(el('span', 'go', '\u203a'));
+      r.onmouseenter = () => { box.querySelectorAll('.hot').forEach((x) => x.classList.remove('hot')); r.classList.add('hot'); };
+      r.onclick = (e) => { e.stopPropagation(); PK_VIEW = p; renderModelMenu(); box.scrollTop = 0; };
+      box.appendChild(r);
+    });
+  }
+  pkFoot(cur);
+}
+/** Arrow keys and Enter in the model search. */
+function pkKey(e){
+  const box = $('modelMenuList');
+  const rows = [...box.querySelectorAll('.mp-row, .mp-back')];
+  if (!rows.length) return;
+  let i = rows.findIndex((r) => r.classList.contains('hot'));
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault();
+    i = e.key === 'ArrowDown' ? Math.min(rows.length - 1, i + 1) : Math.max(0, i - 1);
+    rows.forEach((r) => r.classList.remove('hot'));
+    rows[i].classList.add('hot');
+    rows[i].scrollIntoView({ block: 'nearest' });
+    if (rows[i].dataset.id) pkFoot(rows[i].dataset.id);
+  } else if (e.key === 'Enter') {
+    e.preventDefault(); e.stopPropagation();
+    if (i >= 0) rows[i].click();
+  } else if (e.key === 'Backspace' && !e.target.value && PK_VIEW !== 'home') {
+    PK_VIEW = 'home'; renderModelMenu();
+  }
 }
 
-function priceString(m){
+function priceString(m){  // kept for the usage view
   if (!m || (m.promptCents == null && m.completionCents == null)) return '';
   const p = fmtPrice(m.promptCents);
   const c = fmtPrice(m.completionCents);
@@ -1877,29 +2597,23 @@ async function setModel(id){
     const av = viewOf(activeId); if (av) av.model = id;
   }
   SESS_PRICE = modelPriceFor(id);
-  $('chipModelVal').textContent = id;
-  $('modelTag').textContent = id;
   refreshChips();
-  const foot = $('modelMenuFoot'); if (foot) foot.textContent = (ALL_MODELS.length ? ALL_MODELS.length + ' models \u00b7 ' : '') + id;
-}
-
-function toggleModelMenu(force){
-  const c = $('chipModel');
-  const open = force != null ? force : !c.classList.contains('open');
-  document.querySelectorAll('.chip.open').forEach((x) => { if (x !== c) x.classList.remove('open'); });
-  c.classList.toggle('open', open);
-  if (open) { renderModelMenu(); const si = $('modelSearch'); if (si) { si.value = MODEL_SEARCH; setTimeout(function () { si.focus(); }, 0); } }
+  pkFoot(id);
 }
 
 function initModelPicker(){
-  $('chipModel').onclick = function (e) { e.stopPropagation(); if (e.target.closest('.menu')) return; toggleModelMenu(); };
+  wireChip('chipModel', () => {
+    PK_VIEW = 'home';
+    const si = $('modelSearch'); si.value = '';
+    renderModelMenu();
+    setTimeout(() => si.focus(), 0);
+  });
   const si = $('modelSearch');
-  si.oninput = function () { MODEL_SEARCH = si.value; renderModelMenu(); };
-  si.onkeydown = function (e) { if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); toggleModelMenu(false); } };
-  document.addEventListener('click', function (e) { const c = $('chipModel'); if (c.classList.contains('open') && !c.contains(e.target)) toggleModelMenu(false); });
+  si.oninput = () => { renderModelMenu(); };
+  si.onkeydown = pkKey;
+  si.onclick = (e) => e.stopPropagation();
   loadModels();
 }
-
 async function ensureSession(){
   if (activeId && viewStore.get(activeId)) return activeId;
   return newSession();
@@ -1926,6 +2640,7 @@ async function newSession(dir){
   $('sessTitle').textContent = created.title || 'New session'; $('sessTitle').title = $('sessTitle').textContent;
   if (window.__syncTitlebar) __syncTitlebar(created.title || 'New session');
   $('sessSub').textContent = created.workdir || S.workingDir;
+  if (v.workdir) expandedFolders.add(v.workdir);
   refreshSessionList(); paintActive(); go('work'); updateSendState();
   paintCtxBar(); refreshCtx();
   // Preview history and any staged attachment belong to the conversation you were
@@ -1956,6 +2671,11 @@ async function openSession(id){
       v.cacheWriteTokens = full.stats.cacheWriteTokens || 0;
     }
     const prevT = T; T = v;
+    // Tool results by call id, so each replayed tool row gets its own result.
+    const results = new Map();
+    for (const m of full.messages) {
+      if (m && m.role === 'tool' && m.tool_call_id) results.set(m.tool_call_id, typeof m.content === 'string' ? m.content : JSON.stringify(m.content));
+    }
     for (const m of full.messages) {
       if (m.role === 'user') {
         // Some user-role messages were written by the app, not the person: the
@@ -1964,13 +2684,18 @@ async function openSession(id){
         const first = typeof m.content === 'string' ? m.content
           : ((m.content || []).find((p) => p && p.type === 'text') || {}).text || '';
         if (/^\[VOX (COMPACTED CONTEXT|TOOL SCREENSHOTS)\]/.test(first)) {
-          const note = el('div', 'msg mono');
-          note.style.cssText = 'color:var(--faint);font-size:11.5px;padding:2px 0';
-          note.textContent = first.startsWith('[VOX COMPACTED') ? '— earlier conversation compacted —'
-            : '↳ ' + first.replace(/^\[VOX TOOL SCREENSHOTS\]\s*/, '');
-          v.root.appendChild(note);
+          if (first.startsWith('[VOX COMPACTED')) {
+            finalizeRunCard();
+            v.root.appendChild(el('div', 'fold', 'earlier turns summarised'));
+          } else {
+            // A turn's screenshots: a line of the step that took them.
+            const note = el('div', 'say');
+            note.textContent = '\u21b3 ' + first.replace(/^\[VOX TOOL SCREENSHOTS\]\s*/, '');
+            const r = flowRoot(v); if (r) r.appendChild(note);
+          }
           continue;
         }
+        finalizeRunCard();
         if (typeof m.content === 'string') addUser(m.content);
         else { // multimodal content array {text, image_url}
           const text = (m.content||[]).filter(p=>p&&p.type==='text').map(p=>p.text).join(' ');
@@ -1978,8 +2703,27 @@ async function openSession(id){
           addUser(text, imgs);
         }
       }
-      else if (m.role === 'assistant' && m.content) addMsg(typeof m.content === 'string' ? m.content : JSON.stringify(m.content));
+      else if (m.role === 'assistant') {
+        // The same steps a live run draws: narration and tool calls, with their results.
+        const text = typeof m.content === 'string' ? m.content : (m.content ? JSON.stringify(m.content) : '');
+        const calls = Array.isArray(m.tool_calls) ? m.tool_calls : [];
+        if (!calls.length) { finalizeRunCard(); if (text.trim()) addMsg(text); continue; }
+        if (text.trim()) {
+          if (text.trim().length <= SAY_MAX) { const say = el('div', 'md'); say.innerHTML = renderVTE(text); foldNarration(ensureRunCard(), say); }
+          else { finalizeRunCard(); addMsg(text); }
+        }
+        for (const tc of calls) {
+          const fn = tc && tc.function || {};
+          let args = {};
+          try { args = fn.arguments ? JSON.parse(fn.arguments) : {}; } catch {}
+          const rec = addToolRow(fn.name || 'tool', args, true);
+          const res = results.get(tc.id);
+          if (rec && res != null) setToolResult(rec, !/^\s*DENIED_OR_ERROR/.test(res), res);
+        }
+      }
     }
+    finalizeRunCard();
+    v.ctxFill = full.context || null;
     if (full.todos && full.todos.length) { const box = el('div','msg mono'); v.todosEl = box; v.root.appendChild(box); box.textContent = 'todos:\n' + full.todos.map((t,i)=>((t.done?'[x]':'[ ]') + ' ' + t.text)).join('\n'); }
     T = prevT;
   }
@@ -2000,7 +2744,9 @@ async function openSession(id){
   $('sessTitle').textContent = v._title || 'Session'; $('sessTitle').title = $('sessTitle').textContent;
   if (window.__syncTitlebar) __syncTitlebar(v._title || 'Session');
   $('sessSub').textContent = v._workdir || '';
-  document.querySelectorAll('.sess').forEach(x => x.classList.toggle('active', x.dataset.sid === id));
+  // Open the project it belongs to, and mark it as the one you are in.
+  if (v._workdir || v.workdir) expandedFolders.add(v._workdir || v.workdir);
+  renderSessionList();
   paintActive(); go('work'); updateSendState();
   // The ledger is restored from disk by openSession, but nothing ever painted it:
   // the cost/tokens/cache figures were only drawn by incoming `usage` events, so
@@ -2027,64 +2773,174 @@ function folderName(workdir){
   const parts = clean.split('/');
   return parts[parts.length-1] || clean;
 }
+/** now / 12m / 3h / 4d / 9 Sep — short enough for a sidebar row. */
+function relTime(iso){
+  const t = new Date(iso || 0).getTime();
+  if (!t) return '';
+  const sec = (Date.now() - t) / 1000;
+  if (sec < 60) return 'now';
+  if (sec < 3600) return Math.floor(sec / 60) + 'm';
+  if (sec < 86400) return Math.floor(sec / 3600) + 'h';
+  if (sec < 86400 * 7) return Math.floor(sec / 86400) + 'd';
+  return new Date(t).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+/** Rename a session by editing its sidebar row. Enter or leaving the field saves; Esc cancels. */
+function renameInPlace(s){
+  const row = document.querySelector('.sess[data-sid="' + s.id + '"]');
+  const label = row && row.querySelector('.s-t');
+  if (!row || !label) return;
+  const input = document.createElement('input');
+  input.className = 'sess-rename';
+  input.value = s.title || '';
+  input.setAttribute('aria-label', 'Session name');
+  label.replaceWith(input);
+  input.focus(); input.select();
+  let done = false;
+  const finish = async (save) => {
+    if (done) return; done = true;
+    const t = input.value.trim();
+    if (save && t && t !== s.title) {
+      try { await window.voxai.sessionsRename(s.id, t); } catch {}
+      if (activeId === s.id) {
+        const tEl = $('sessTitle'); if (tEl) tEl.textContent = t;
+        const v = viewOf(s.id); if (v) v._title = t;
+        if (window.__syncTitlebar) __syncTitlebar(t);
+      }
+    }
+    refreshSessionList();
+  };
+  input.addEventListener('keydown', (e) => {
+    e.stopPropagation();
+    if (e.key === 'Enter') { e.preventDefault(); finish(true); }
+    else if (e.key === 'Escape') { e.preventDefault(); finish(false); }
+  });
+  input.addEventListener('click', (e) => e.stopPropagation());
+  input.addEventListener('blur', () => finish(true));
+}
+let SESS_ITEMS = [];
+const showAllFolders = new Set();   // projects showing every session, not just the newest few
+const SESS_PER_PROJECT = 5;
 async function refreshSessionList(){
   let items = [];
   try { items = await window.voxai.sessionsList(); } catch { /* backend starting */ }
+  SESS_ITEMS = items;
+  // "Recent" in the model picker: the models your own sessions ran on, newest first.
+  RECENT_MODELS = items.map((s) => s.model).filter((m, i, a) => m && a.indexOf(m) === i).slice(0, 5);
+  renderSessionList();
+}
+/**
+ * Projects, each a group you open and close in place. A group opens with an eased
+ * height (no rebuild, so the motion is not lost), the project you are working in is
+ * marked, and each has its own "new session here".
+ */
+function renderSessionList(){
+  const items = SESS_ITEMS;
   const box = $('sessions'); box.innerHTML = '';
-  const hd = el('div', 'projhead', 'PROJECTS'); box.appendChild(hd);
-  if (!items.length) { box.appendChild(el('div', 'hint', 'No sessions yet — send a message.')); return; }
-  // group by workdir (project folder), most-recent first
+  if (!items.length) { box.appendChild(el('div', 'empty', 'No sessions yet. Send a message to start one.')); return; }
+  const q = (($('q') && $('q').value) || '').trim().toLowerCase();
   const groups = {};
-  items.forEach((s) => { const k = s.workdir || 'Default'; (groups[k] = groups[k] || []).push(s); });
-  const keys = Object.keys(groups).sort((a,b) => {
-    const ma = Math.max(...groups[a].map(s=>new Date(s.updatedAt||0).getTime()));
-    const mb = Math.max(...groups[b].map(s=>new Date(s.updatedAt||0).getTime()));
-    return mb - ma;
+  items.forEach((s) => {
+    const k = s.workdir || 'Default';
+    if (q && !((s.title || '') + ' ' + folderName(k)).toLowerCase().includes(q)) return;
+    (groups[k] = groups[k] || []).push(s);
   });
-  if (!foldersSeeded && keys.length) { foldersSeeded = true; expandedFolders.add(keys[0]); }
+  const newest = (k) => Math.max(...groups[k].map((s) => new Date(s.updatedAt || 0).getTime()));
+  const keys = Object.keys(groups).sort((a, b) => newest(b) - newest(a));
+  if (!keys.length) { box.appendChild(el('div', 'empty', 'No sessions match \u201c' + esc(q) + '\u201d.')); return; }
+  if (!foldersSeeded) { foldersSeeded = true; expandedFolders.add(keys[0]); }
+  const activeWd = (SESS_ITEMS.find((s) => s.id === activeId) || {}).workdir;
   keys.forEach((k) => {
-    const open = expandedFolders.has(k);
-    const fh = el('button','proj-folder');
-    fh.type = 'button';
-    fh.innerHTML = '<span class="pf-mark">' + (open ? '-' : '+') + '</span><span class="pf-name"></span><span class="pf-count"></span>';
-    fh.children[1].textContent = folderName(k);
-    fh.children[2].textContent = groups[k].length;
-    fh.title = k;
-    fh.onclick = () => { if (expandedFolders.has(k)) expandedFolders.delete(k); else expandedFolders.add(k); refreshSessionList(); };
-    box.appendChild(fh);
-    if (!open) return;
-    const wrap = el('div','sesswrap');
-    groups[k].forEach((s) => {
+    const list = groups[k];
+    const open = q ? true : expandedFolders.has(k);
+    const g = el('section', 'proj' + (open ? ' open' : '') + ((activeWd || 'Default') === k && activeId ? ' current' : ''));
+    const busyHere = list.some((s) => viewStore.get(s.id) && viewStore.get(s.id).busy);
+    const h = el('div', 'proj-h');
+    h.setAttribute('role', 'button');
+    h.tabIndex = 0;
+    h.setAttribute('aria-expanded', String(open));
+    h.title = k;
+    h.innerHTML = '<span class="chev">\u25b8</span>'
+      + '<svg class="fic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>'
+      + '<span class="nm"></span>'
+      + (busyHere ? '<span class="dot busy" title="Working"></span>' : '<span class="ct">' + list.length + '</span>');
+    h.querySelector('.nm').textContent = folderName(k);
+    if (k !== 'Default') {
+      const add = el('button', 'proj-add', '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>');
+      add.type = 'button';
+      add.title = 'New session in ' + folderName(k);
+      add.setAttribute('aria-label', add.title);
+      add.onclick = (e) => { e.stopPropagation(); newSession(k); };
+      h.appendChild(add);
+    }
+    const toggle = () => {
+      if (q) return;
+      const now = !g.classList.contains('open');
+      if (now) expandedFolders.add(k); else expandedFolders.delete(k);
+      rememberOpenProjects();
+      g.classList.toggle('open', now);
+      h.setAttribute('aria-expanded', String(now));
+    };
+    h.onclick = toggle;
+    h.onkeydown = (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } };
+    g.appendChild(h);
+
+    const body = el('div', 'proj-b');
+    const inner = el('div', 'proj-in');
+    const all = q || showAllFolders.has(k);
+    list.forEach((s, i) => {
+      if (!all && i >= SESS_PER_PROJECT && s.id !== activeId) return;
       const b = el('button', 'sess' + (s.id === activeId ? ' active' : ''));
+      b.type = 'button';
       b.dataset.sid = s.id;
       const busy = !!(viewStore.get(s.id) && viewStore.get(s.id).busy);
-      b.innerHTML = '<span class="dot' + (busy ? ' busy' : ' done') + '"></span><span></span>';
-      b.children[1].textContent = s.title || 'Session';
-      b.title = (s.workdir || '') + ' · ' + (s.updatedAt || '');
+      // A dot only while it is working. Every idle session used to carry the same gold
+      // dot, which said nothing. How long ago it was used is what tells them apart.
+      b.innerHTML = (busy ? '<span class="dot busy"></span>' : '') + '<span class="s-t"></span><time></time>';
+      b.querySelector('.s-t').textContent = s.title || 'Session';
+      b.querySelector('time').textContent = relTime(s.updatedAt);
+      b.title = (s.title || '') + '\n' + (s.updatedAt ? new Date(s.updatedAt).toLocaleString() : '');
       b.onclick = () => openSession(s.id);
       b.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); showSessMenu(e, s); };
-      wrap.appendChild(b);
+      inner.appendChild(b);
     });
-    box.appendChild(wrap);
+    if (!q && list.length > SESS_PER_PROJECT) {
+      const more = el('button', 'proj-more', all ? 'Show fewer' : 'Show ' + (list.length - SESS_PER_PROJECT) + ' more');
+      more.type = 'button';
+      more.onclick = (e) => { e.stopPropagation(); if (all) showAllFolders.delete(k); else showAllFolders.add(k); renderSessionList(); };
+      inner.appendChild(more);
+    }
+    body.appendChild(inner);
+    g.appendChild(body);
+    box.appendChild(g);
   });
 }
+// The search box above the list: titles and project names, as you type.
+$('q').addEventListener('input', renderSessionList);
+$('q').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.target.value = ''; renderSessionList(); } });
 
 // ---- agent events: route to the owning session view (any may be active) ----
 window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
   const v = viewOf(sid);        // register session even if we haven't opened it yet
   T = v;
+  // A finished run takes its approval, if one was still showing, with it.
+  if (['done', 'error', 'cancelled', 'limit_reached', 'budget_reached'].includes(event.type) && v.perm) {
+    clearTimeout(v.perm.timer); v.perm = null; if (sid === activeId) paintAsk();
+  }
   if (event.type === 'token') {
     clearTimeout(v.statusTimer);
     clearStatus();
-    if (v.curRun) finalizeRunCard();
+    // The step stays open: this may be narration before the next tool, which folds
+    // into it (see tool_start). If it turns out to be the answer, 'done' closes it.
+    if (v.curRun) v.curRun.wrap.classList.remove('running');
     sealThinking(v);
+    if (!v.curStream) setActivity(v, 'Writing');
     feedToken(v, event.text);
   } else if (event.type === 'turn') {
-    // Close the previous turn's batch so the next one starts its own labelled block.
+    // A new model call. The step carries on across turns; only the text is closed off.
     finalizeStream();
     sealThinking(v);
     sealLedger(v);          // backstop, if a spawn ended without a tool_end
-    finalizeRunCard();
+    setActivity(v, 'Thinking');
   } else if (event.type === 'reasoning') {
     // A real thinking BOX, the way Codex and Claude Code show it: a collapsed
     // "Thought for Ns" header you can open to read the actual reasoning. The old
@@ -2092,11 +2948,9 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     // reasoning away — you could never see what the model had actually worked out.
     clearTimeout(v.statusTimer);
     clearStatus();
-    // Thinking ends the batch above it. Without this the card stayed open, the
-    // thinking box was appended BELOW it, and the next turn's tool rows went back up
-    // into the old card — so the transcript read out of order.
+    // Inside a step, thinking is one of its lines; before any tools it stands alone.
     finalizeStream();
-    finalizeRunCard();
+    setActivity(v, 'Thinking');
     if (!v._think) {
       const box = el('div', 'think');
       // The rail IS the component -- it replaces the border, the fill and the radius.
@@ -2116,7 +2970,7 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
         box.classList.toggle('open', !open);
       };
       v._think = { box, head, chev, ttl, body, text: '', t0: Date.now() };
-      const r = RR(); if (r) { r.appendChild(box); box.scrollIntoView({ block: 'end' }); }
+      const r = flowRoot(v); if (r) { r.appendChild(box); box.scrollIntoView({ block: 'end' }); }
     }
     // Accumulate the chain so it is READABLE when opened, but never render it
     // inline — an unbounded stream of reasoning in the transcript is the thing the
@@ -2127,9 +2981,15 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
   } else if (event.type === 'tool_start') {
 
     clearTimeout(v.statusTimer);
+    // Whatever was said just before a tool call was narration. Short, it becomes a line
+    // of the step; long, it stays in the thread and the next tools start a new step.
+    const narr = v.curStream;
     finalizeStream();
     clearStatus();
     sealThinking(v);
+    const said = narr ? (narr.textContent || '').trim() : '';
+    if (said && said.length <= SAY_MAX) foldNarration(ensureRunCard(), narr);
+    else if (said) finalizeRunCard();
     const rec = addToolRow(event.name, event.args || {});
     v.latestTool = rec ? { ...rec, name: event.name, kind: kindName(event.name) } : null;
   } else if (event.type === 'tool_end') {
@@ -2141,7 +3001,7 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     if (event.name === 'spawn_agent' || event.name === 'spawn_parallel') sealLedger(v);
     // debounce 'thinking…' — only show if the model is actually slow
     clearTimeout(v.statusTimer);
-    if (v.runKeys.size) v.statusTimer = setTimeout(function(){ if (!v.curStream) setStatus('thinking…'); }, 220);
+    if (v.runKeys.size) setActivity(v, 'Thinking');
   } else if (event.type === 'image') {
     // Computer-use: stream the live screenshot into the thread so the user sees
     // everything the agent is looking at in real time.
@@ -2151,14 +3011,14 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     img.style.cssText = 'max-width:100%;max-height:520px;border-radius:10px;border:1px solid var(--edge2);display:block;margin:6px 0;background:#0e0f14';
     img.src = event.dataUrl;
     wrap.appendChild(cap); wrap.appendChild(img);
-    const r = RR(); if (r) { r.appendChild(wrap); wrap.scrollIntoView({ block: 'end' }); }
+    const r = flowRoot(v); if (r) { r.appendChild(wrap); wrap.scrollIntoView({ block: 'end' }); }
   } else if (event.type === 'sub') {
     // ---- delegated runs: one ledger per fan-out, one row per worker ----
     //
     // Five concurrent workers used to be five identical stacked boxes, each titled
     // with a running list of the tools it happened to call. They belong to ONE piece
     // of work, so they go in one table, aligned, with the numbers in tabular figures.
-    const rr = RR();
+    const rr = flowRoot(v);
     if (!rr) return;
     let L = v._ledger;
     if (!L || !L.box.isConnected) {
@@ -2327,9 +3187,9 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
       const alreadyShown = last && last.className && last.className.indexOf('md') >= 0 && (last.textContent || '').trim();
       if (!alreadyShown) addMsg(event.content);
     }
-    v.busy = false;
+    v.busy = false; v.activity = '';
     v.runKeys.delete(runKey);
-    if (sid === activeId) { $('runDot').style.display = 'none'; updateSendState(); }
+    if (sid === activeId) { $('runDot').style.display = 'none'; updateSendState(); paintShelf(); }
     refreshSessionList(); refreshUsage();
     drainQueue(sid);
   } else if (event.type === 'display') {
@@ -2448,9 +3308,9 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     hint.textContent = 'Raise SPEND LIMIT PER RUN in Settings, then send "continue".';
     box.appendChild(txt); box.appendChild(hint);
     const rr = RR(); if (rr) { rr.appendChild(box); box.scrollIntoView({ block: 'end' }); }
-    v.busy = false;
+    v.busy = false; v.activity = '';
     v.runKeys.delete(runKey);
-    if (sid === activeId) { $('runDot').style.display = 'none'; updateSendState(); }
+    if (sid === activeId) { $('runDot').style.display = 'none'; updateSendState(); paintShelf(); }
     refreshSessionList(); refreshUsage(); refreshCtx();
     drainQueue(sid);
   } else if (event.type === 'limit_reached') {
@@ -2474,9 +3334,9 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     };
     box.appendChild(txt); box.appendChild(go);
     const rr = RR(); if (rr) { rr.appendChild(box); box.scrollIntoView({ block: 'end' }); }
-    v.busy = false;
+    v.busy = false; v.activity = '';
     v.runKeys.delete(runKey);
-    if (sid === activeId) { $('runDot').style.display = 'none'; updateSendState(); }
+    if (sid === activeId) { $('runDot').style.display = 'none'; updateSendState(); paintShelf(); }
     refreshSessionList(); refreshUsage(); refreshCtx();
     drainQueue(sid);
   } else if (event.type === 'error' || event.type === 'cancelled') {
@@ -2484,12 +3344,13 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     finalizeStream(); finalizeRunCard();
     clearStatus();
     addMsg(event.type === 'cancelled' ? '(cancelled)' : 'Error: ' + event.message);
-    v.busy = false;
+    v.busy = false; v.activity = '';
     v.runKeys.delete(runKey);
-    if (sid === activeId) { $('runDot').style.display = 'none'; updateSendState(); }
+    if (sid === activeId) { $('runDot').style.display = 'none'; updateSendState(); paintShelf(); }
     refreshSessionList(); refreshUsage();
     drainQueue(sid);
   } else if (event.type === 'user_input') {
+    finalizeStream(); finalizeRunCard();
     // Codex/Claude-style: the model asks the user a question with options.
     const box = el('div', 'user-q');
     const head = el('div', 'uq-head');
@@ -2529,11 +3390,15 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     const box = el('div', 'msg warn' + (severe ? ' severe' : ''));
     box.textContent = event.message || (event.code || 'warning');
     const r = RR(); if (r) { r.appendChild(box); box.scrollIntoView({ block: 'end' }); }
+  } else if (event.type === 'context') {
+    // How full the conversation is, for the meter by Send and the heads-up on the shelf.
+    v.ctxFill = { tokens: Number(event.tokens) || 0, limit: Number(event.limit) || 0, threshold: Number(event.threshold) || 0.8 };
+    if (sid === activeId) paintMeter();
   } else if (event.type === 'compacting') {
-    // Codex/Claude-style visible notice: user sees compaction begin.
-    const box = el('div', 'msg compact busy');
-    box.textContent = 'Compacting context… (est. ' + fmtNum(event.estimatedBefore) + ' tokens → keeping recent)';
+    const box = el('div', 'fold');
+    box.textContent = 'summarising earlier turns\u2026';
     box.dataset.compactBusy = '1';
+    setActivity(v, 'Summarising earlier turns');
     const r = RR(); if (r) { r.appendChild(box); box.scrollIntoView({ block: 'end' }); }
   } else if (event.type === 'compacted') {
     // Codex/Claude-style visible confirmation with the summary remainder.
@@ -2546,14 +3411,13 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
       const busy = r.querySelector('[data-compact-busy="1"]');
       if (busy) busy.remove();
     }
-    const box = el('div', 'msg compact');
-    let txt = 'Context compacted — older turns were folded into a summary to keep the session running.';
-    if (event.dropped > 0) txt += '\nSummarized ' + fmtNum(event.dropped) + ' messages; kept the last ' + (event.keptRecent || 0) + ' in full.';
-    if (event.estimatedBefore && event.estimatedAfter) {
-      txt += '\nEstimated context: ' + fmtNum(event.estimatedBefore) + ' → ' + fmtNum(event.estimatedAfter) + ' tokens.';
-    }
-    if (event.reason === 'hard-overrun') txt += '\n⚠ forced by the hard safety limit (' + fmtNum(event.hardLimit || 0) + ' tokens).';
+    // One quiet line where the summary happened, like the one a reopened session shows.
+    const box = el('div', 'fold');
+    let txt = 'earlier turns summarised';
+    if (event.estimatedBefore && event.estimatedAfter) txt += ' \u00b7 ' + fmtTok(event.estimatedBefore) + ' \u2192 ' + fmtTok(event.estimatedAfter) + ' tokens';
+    if (event.reason === 'hard-overrun') txt += ' \u00b7 forced at the hard limit';
     box.textContent = txt;
+    box.title = (event.dropped > 0 ? fmtNum(event.dropped) + ' messages summarised; the last ' + (event.keptRecent || 0) + ' kept in full.' : '');
     if (r) { r.appendChild(box); box.scrollIntoView({ block: 'end' }); }
   } else if (event.type === 'condensed') {
     const r = RR();
@@ -2564,22 +3428,64 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
   T = null;
 });
 
-window.voxai.onAgentPermission(({ permId, kind, target, canAlways }) => {
-  $('permTitle').textContent = kind === 'shell' ? 'Allow shell command?' : 'Allow ' + (kind||'this') + '?';
-  $('permCmd').textContent = target;
-  $('permDetailBox').textContent = `${kind}: ${target}`;
-  $('permDetailBox').style.display = 'none';
-  $('permAlways').style.display = 'none';
-  $('permBar').style.display = 'flex';
-  $('permDetail').onclick = () => { const d2 = $('permDetailBox'); d2.style.display = d2.style.display === 'none' ? 'block' : 'none'; };
-  $('permAllow').onclick = async () => { $('permBar').style.display = 'none'; $('permAlways').style.display = 'none'; await window.voxai.agentPermission(permId, true, false); };
-  $('permDeny').onclick = async () => { $('permBar').style.display = 'none'; $('permAlways').style.display = 'none'; await window.voxai.agentPermission(permId, false, false); };
-  if (canAlways) {
-    $('permAlways').style.display = 'flex';
-    $('permAlwaysYes').onclick = async () => { $('permAlways').style.display = 'none'; $('permBar').style.display = 'none'; await window.voxai.agentPermission(permId, true, true); };
-    $('permAlwaysNo').onclick = async () => { $('permAlways').style.display = 'none'; $('permBar').style.display = 'none'; await window.voxai.agentPermission(permId, true, false); };
+/**
+ * An approval takes the place of the text box -- where you are already looking -- and
+ * belongs to the session that asked. It used to arrive as a strip above the box while
+ * the box stayed live, and it showed on whichever session happened to be open.
+ */
+const ASK_TITLES = {
+  shell: 'Run a command?', 'write-file': 'Change a file?', 'web-fetch': 'Open a web page?',
+  'web-search': 'Search the web?', spawn_agent: 'Start a sub-agent?', spawn_parallel: 'Start sub-agents?',
+  computer: 'Control the browser?', browser_open: 'Open the browser?', browser_act: 'Control the browser?',
+  mcp: 'Call an MCP tool?', mcp_call: 'Call an MCP tool?',
+};
+function paintAsk(){
+  const v = actView();
+  const p = v && v.perm;
+  const box = $('cmpBox'), ask = $('askBox'), edit = $('cmpEdit');
+  if (!ask) return;
+  ask.hidden = !p;
+  edit.hidden = !!p;
+  box.classList.toggle('asking', !!p);
+  if (p) {
+    $('askTitle').textContent = ASK_TITLES[p.kind] || ('Allow ' + String(p.kind || 'this').replace(/_/g, ' ') + '?');
+    $('askSub').textContent = '\u00b7 the agent wants to do this in ' + folderName(v.workdir || v._workdir || '');
+    $('askWhat').textContent = p.showDetail ? (p.kind + '\n' + p.target) : (p.target || p.kind);
+    $('askAlways').hidden = !p.canAlways;
+    $('askDetail').textContent = p.showDetail ? 'Less' : 'Details';
+    setTimeout(() => { const b = $('askAllow'); if (b && !ask.hidden) b.focus(); }, 0);
   }
-  // 120s main-side timeout auto-denies; also allow Esc to deny
+  updateSendState();
+}
+async function answerAsk(allowed, always){
+  const v = actView(); const p = v && v.perm;
+  if (!p) return;
+  v.perm = null;
+  clearTimeout(p.timer);
+  paintAsk();
+  try { await window.voxai.agentPermission(p.permId, !!allowed, !!always); } catch {}
+  const pr = $('prompt'); if (pr) pr.focus();
+}
+$('askAllow').onclick = () => answerAsk(true, false);
+$('askAlways').onclick = () => answerAsk(true, true);
+$('askDeny').onclick = () => answerAsk(false, false);
+$('askDetail').onclick = () => { const v = actView(); if (v && v.perm) { v.perm.showDetail = !v.perm.showDetail; paintAsk(); } };
+document.addEventListener('keydown', (e) => {
+  const v = actView();
+  if (!v || !v.perm || $('askBox').hidden) return;
+  if (document.querySelector('.modal-bg.show')) return;
+  if (e.key === 'Escape') { e.preventDefault(); answerAsk(false, false); }
+  else if (e.key === 'Enter' && !e.shiftKey && !(e.target && e.target.closest && e.target.closest('#askBox button'))) { e.preventDefault(); answerAsk(true, false); }
+});
+window.voxai.onAgentPermission(({ permId, sessionId, kind, target, canAlways }) => {
+  const v = sessionId ? viewOf(sessionId) : actView();
+  if (!v) return;
+  // The main process gives up after two minutes and treats it as a no; so does this.
+  const timer = setTimeout(() => { if (v.perm && v.perm.permId === permId) { v.perm = null; if (v === actView()) paintAsk(); } }, 120000);
+  v.perm = { permId, kind, target: String(target || ''), canAlways: !!canAlways, timer };
+  setActivity(v, 'Waiting for you');
+  if (v === actView()) paintAsk();
+  refreshSessionList();
 });
 
 $('btnSend').onclick = () => {
@@ -2604,20 +3510,23 @@ $('prompt').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shi
 let PENDING_ATTACH = [];   // [{dataUrl, name}]
 
 function pendingAttachments(){ return PENDING_ATTACH.map(a => ({ type: 'image_url', image_url: { url: a.dataUrl } })); }
-function clearAttachments(){ PENDING_ATTACH = []; const tr = $('attachTray'); if (tr){ tr.innerHTML=''; tr.style.display='none'; } }
+function clearAttachments(){ PENDING_ATTACH = []; const tr = $('attachTray'); if (tr){ tr.innerHTML=''; tr.hidden = true; } paintShelf(); }
 function renderAttachTray(){
   const tr = $('attachTray'); if(!tr) return;
   tr.innerHTML = '';
   PENDING_ATTACH.forEach((a, i) => {
     const thumb = el('div','attach-thumb');
-    const img = document.createElement('img'); img.src = a.dataUrl;
+    const img = document.createElement('img'); img.src = a.dataUrl; img.alt = '';
     thumb.appendChild(img);
-    const rm = el('span','rm','×'); rm.title = 'Remove';
+    // With one image the name fits; with several, the thumbnails say enough.
+    if (PENDING_ATTACH.length === 1) { const nm = el('span', 'an'); nm.textContent = a.name || 'image'; thumb.appendChild(nm); }
+    const rm = el('button','rm','\u2715'); rm.type = 'button'; rm.title = 'Remove ' + (a.name || 'image');
     rm.onclick = () => { PENDING_ATTACH.splice(i,1); renderAttachTray(); };
     thumb.appendChild(rm);
     tr.appendChild(thumb);
   });
-  tr.style.display = PENDING_ATTACH.length ? 'flex' : 'none';
+  tr.hidden = !PENDING_ATTACH.length;
+  paintShelf();
 }
 $('btnAttach').onclick = () => $('fileInput').click();
 $('fileInput').onchange = (e) => {
@@ -2664,7 +3573,40 @@ $('btnMic').onclick = startMic;
 
 
 // ---- settings modal wiring ----
-function openModal(){ $('modalBg').classList.add('show'); prefillAdvanced(); }
+function openModal(page){
+  $('modalBg').classList.add('show');
+  prefillAdvanced();
+  showSetPage(typeof page === 'string' ? page : 'account');
+}
+function showSetPage(key){
+  document.querySelectorAll('.set-nav button[data-set]').forEach((b) => {
+    if (b.dataset.set === key) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
+  });
+  document.querySelectorAll('.set-page').forEach((p) => { p.hidden = p.dataset.set !== key; });
+}
+/** Paint the switch, the engine picker, the percentages and the presets from the fields. */
+function syncSetControls(){
+  const on = $('fWebSearch').value !== 'off';
+  $('wsToggle').setAttribute('aria-checked', String(on));
+  document.querySelectorAll('.ws-dep').forEach((r) => r.classList.toggle('off', !on));
+  const eng = $('fWebEngine').value || 'exa';
+  $('wsEngine').querySelectorAll('button').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === eng)));
+  document.querySelectorAll('.rng').forEach((r) => {
+    const i = r.querySelector('input'), o = r.querySelector('output');
+    o.textContent = Math.round(Number(i.value) * 100) + '%';
+  });
+  const bud = Number($('fRunBudget').value || $('fRunBudget').placeholder);
+  $('budgetPresets').querySelectorAll('button').forEach((b) => b.classList.toggle('on', Math.abs(Number(b.dataset.v) - bud) < 1e-9));
+  const bal = $('creditsTxt'); $('acctBalance').textContent = bal ? bal.textContent : '\u2014';
+}
+function clampNum(inp){
+  if (inp.value === '') return;
+  let v = Number(inp.value);
+  if (!Number.isFinite(v)) { inp.value = ''; return; }
+  if (inp.min !== '') v = Math.max(Number(inp.min), v);
+  if (inp.max !== '') v = Math.min(Number(inp.max), v);
+  inp.value = String(v);
+}
 function prefillAdvanced(){
   // Fix 4: populate advanced knobs from settings (S comes from settings:get)
   const s = S || {};
@@ -2679,7 +3621,6 @@ function prefillAdvanced(){
   const hf = s.hardFraction || '0.9';
   if ($('fCompact')) $('fCompact').value = ct;
   if ($('fToolResultMax')) $('fToolResultMax').value = tc;
-  if ($('fCacheTtl')) $('fCacheTtl').value = ttl;
   if ($('fContextLimit')) $('fContextLimit').value = cl;
   if ($('fHardFraction')) $('fHardFraction').value = hf;
   if ($('fRunBudget')) $('fRunBudget').value = s.runBudgetUsd || '1.00';
@@ -2693,13 +3634,15 @@ function prefillAdvanced(){
   if ($('fSubModel')) $('fSubModel').value = sm;
   if ($('fSubMaxTurns')) $('fSubMaxTurns').value = smt;
   if ($('fSubTimeout')) $('fSubTimeout').value = sto;
+  // (the switch, picker and percentages are painted from these values below)
   // web search
   if ($('fWebSearch')) $('fWebSearch').value = s.webSearchEnabled === false ? 'off' : 'on';
   if ($('fWebEngine')) $('fWebEngine').value = s.webSearchEngine || 'exa';
   if ($('fWebResults')) $('fWebResults').value = String(s.webSearchMaxResults || 5);
+  syncSetControls();
 }
 function closeModal(){ $('modalBg').classList.remove('show'); }
-$('btnSettings').onclick = openModal;
+$('btnSettings').onclick = () => openModal('account');
 $('btnClose').onclick = closeModal;
 $('modalBg').addEventListener('click', (e) => { if (e.target.id === 'modalBg') closeModal(); });
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('modalBg').classList.contains('show')) closeModal(); });
@@ -2740,32 +3683,87 @@ $('btnTest').onclick = async () => {
     $('keyState').textContent = 'key OK · ' + (t || 'ok');
   } catch (e) { $('keyState').textContent = 'FAILED: ' + (e && e.message || e); }
 };
-$('btnSave').onclick = async () => {
+/**
+ * Save the settings. Everything but the keys saves as it changes; keys only when
+ * "Save keys" is pressed, so a half-typed key is never stored because you clicked
+ * somewhere else.
+ */
+async function saveSettingsNow(withKeys){
   const patch = {};
-  if ($('fKey').value) patch.openrouterKey = $('fKey').value;
-  if ($('fMgmtKey').value) patch.managementKey = $('fMgmtKey').value;
-  // Fix 4: advanced knobs
+  if (withKeys) {
+    if ($('fKey').value) patch.openrouterKey = $('fKey').value;
+    if ($('fMgmtKey').value) patch.managementKey = $('fMgmtKey').value;
+  }
   if ($('fCompact').value) patch.compactThreshold = Number($('fCompact').value).toString();
-  if ($('fToolResultMax') && $('fToolResultMax').value) patch.toolResultMaxChars = String(Math.round(Number($('fToolResultMax').value)));
-  if ($('fCacheTtl').value) patch.cacheTtlMinutes = String(Math.round(Number($('fCacheTtl').value)));
+  if ($('fToolResultMax').value) patch.toolResultMaxChars = String(Math.round(Number($('fToolResultMax').value)));
   if ($('fContextLimit').value) patch.contextLimit = String(Math.round(Number($('fContextLimit').value)));
   if ($('fHardFraction').value) patch.hardFraction = Number($('fHardFraction').value).toString();
   if ($('fRunBudget').value) patch.runBudgetUsd = Number($('fRunBudget').value).toFixed(2);
-  if ($('fSubModel').value) patch.subagentModel = $('fSubModel').value.trim();
+  // Always sent, so clearing the field really goes back to "same as the session".
+  patch.subagentModel = $('fSubModel').value.trim();
   if ($('fSubMaxTurns').value) patch.subagentMaxTurns = String(Math.round(Number($('fSubMaxTurns').value)));
   if ($('fSubTimeout').value) patch.subagentTimeoutMs = String(Math.round(Number($('fSubTimeout').value) * 1000));
-  if ($('fWebSearch')) patch.webSearchEnabled = $('fWebSearch').value !== 'off';
-  if ($('fWebEngine')) patch.webSearchEngine = $('fWebEngine').value;
-  if ($('fWebResults') && $('fWebResults').value) patch.webSearchMaxResults = String(Math.min(10, Math.max(1, Math.round(Number($('fWebResults').value) || 5))));
+  patch.webSearchEnabled = $('fWebSearch').value !== 'off';
+  patch.webSearchEngine = $('fWebEngine').value;
+  if ($('fWebResults').value) patch.webSearchMaxResults = String(Math.min(10, Math.max(1, Math.round(Number($('fWebResults').value) || 5))));
   try {
     S = await window.voxai.saveSettings(patch);
-    $('keyState').textContent = S.hasOpenRouterKey ? ('saved · key ' + S.keyStore) : 'saved (no key)';
-    $('mgmtKeyState').textContent = S.hasManagementKey ? ('saved · mgmt key ' + S.mkeyStore) : 'not set — account balance hidden';
-    refreshChips(); refreshUsage();
-  } catch (e) { $('keyState').textContent = 'SAVE FAILED: ' + (e && e.message || e); return; }
-  loadModels();
-  closeModal();
-};
+  } catch (e) {
+    flashSettingsSaved('Could not save: ' + (e && e.message || e), true);
+    return false;
+  }
+  if (withKeys) {
+    $('keyState').textContent = S.hasOpenRouterKey ? ('saved \u00b7 ' + S.keyStore) : 'not set';
+    $('mgmtKeyState').textContent = S.hasManagementKey ? ('saved \u00b7 ' + S.mkeyStore) : 'not set';
+    // Do not leave a secret sitting in a field once it is stored.
+    $('fKey').value = ''; $('fMgmtKey').value = '';
+    refreshUsage(); loadModels();
+  }
+  refreshChips();
+  flashSettingsSaved(withKeys ? 'Keys saved' : 'Saved');
+  return true;
+}
+let setSaveTimer = 0, setFlashTimer = 0;
+function queueSettingsSave(){ clearTimeout(setSaveTimer); setSaveTimer = setTimeout(() => saveSettingsNow(false), 350); }
+function flashSettingsSaved(text, isErr){
+  const el2 = $('setSaved'); if (!el2) return;
+  el2.textContent = (isErr ? '' : '\u2713 ') + text;
+  el2.classList.toggle('err', !!isErr);
+  el2.classList.add('show');
+  clearTimeout(setFlashTimer);
+  setFlashTimer = setTimeout(() => el2.classList.remove('show'), isErr ? 5000 : 1600);
+}
+$('btnSave').onclick = () => saveSettingsNow(true);
+(function wireSettings(){
+  const sheet = document.querySelector('#modalBg .sheet');
+  if (!sheet) return;
+  sheet.querySelectorAll('.set-nav button[data-set]').forEach((b) => { b.onclick = () => showSetPage(b.dataset.set); });
+  sheet.addEventListener('change', (e) => {
+    const t = e.target;
+    if (!t || t.id === 'fKey' || t.id === 'fMgmtKey') return;
+    if (t.type === 'number') clampNum(t);
+    syncSetControls();
+    queueSettingsSave();
+  });
+  sheet.addEventListener('input', (e) => { if (e.target && e.target.type === 'range') syncSetControls(); });
+  sheet.querySelectorAll('.num').forEach((n) => {
+    const inp = n.querySelector('input');
+    n.querySelectorAll('.num-b').forEach((b) => {
+      b.onclick = () => {
+        const step = Number(inp.step) || 1;
+        const cur = inp.value === '' ? Number(inp.placeholder) : Number(inp.value);
+        inp.value = String(+(cur + step * Number(b.dataset.num)).toFixed(4));
+        clampNum(inp);
+        inp.dispatchEvent(new Event('change', { bubbles: true }));
+      };
+    });
+  });
+  $('wsToggle').onclick = () => { $('fWebSearch').value = $('fWebSearch').value === 'off' ? 'on' : 'off'; syncSetControls(); queueSettingsSave(); };
+  $('wsEngine').querySelectorAll('button').forEach((b) => { b.onclick = () => { $('fWebEngine').value = b.dataset.v; syncSetControls(); queueSettingsSave(); }; });
+  $('budgetPresets').querySelectorAll('button').forEach((b) => { b.onclick = () => { $('fRunBudget').value = b.dataset.v; syncSetControls(); queueSettingsSave(); }; });
+  // The sidebar's status row is the way into the account.
+  const st = $('sideStatus'); if (st) st.onclick = () => openModal('account');
+})();
 
 // ---- new-session modal (pick project directory) ----
 function openNewSess(){
@@ -2793,8 +3791,10 @@ $('btnFolder') && ($('btnFolder').onclick = () => openNewSess());
 
 // ---- usage view ----
 let usageCursor = null; let usageHasMore = false;
-let expandedFolders = new Set(); // project folder -> expanded
-let foldersSeeded = false; // only auto-open the newest folder on first load
+// Which projects are open survives a restart.
+let expandedFolders = new Set((() => { try { return JSON.parse(localStorage.getItem('voxai.openProjects') || '[]'); } catch { return []; } })());
+let foldersSeeded = expandedFolders.size > 0; // only auto-open the newest folder when nothing was remembered
+function rememberOpenProjects(){ try { localStorage.setItem('voxai.openProjects', JSON.stringify([...expandedFolders])); } catch {} }
 function openUsage(){
   $('usageModalBg').classList.add('show');
   $('usageRows').innerHTML = '';
@@ -2802,7 +3802,7 @@ function openUsage(){
   loadUsage(true);
 }
 function closeUsage(){ $('usageModalBg').classList.remove('show'); }
-$('btnUsage').onclick = openUsage;
+if ($('btnUsage')) $('btnUsage').onclick = openUsage;
 $('btnUsageClose').onclick = closeUsage;
 $('btnUsageMore').onclick = () => loadUsage(false);
 $('usageModalBg').addEventListener('click', (e)=>{ if(e.target.id === 'usageModalBg') closeUsage(); });
@@ -2889,39 +3889,52 @@ function noteTouched(sid, path){
 
 function paintCtxBar(){
   const bar = $('ctxBar'); if (!bar) return;
+  const br = $('cbBranch');
   const v = actView();
   const sid = activeId;
-  if (!v || !sid) { bar.style.display = 'none'; return; }
+  if (!v || !sid) { bar.hidden = true; if (br) br.hidden = true; paintShelf(); return; }
   const c = (v.ctx || {});
   const touched = (TOUCHED.get(sid) || new Set()).size;
-  if (!c.cwd && !touched) { bar.style.display = 'none'; return; }
-  bar.style.display = 'flex';
 
-  const name = String(c.cwd || v.workdir || '').replace(/[\/]+$/, '').split(/[\/]/).pop() || '';
-  $('cbRepo').textContent = name;
-  $('cbRepo').title = c.cwd || v.workdir || '';
-  $('cbBranch').textContent = c.repo ? (c.branch || '') : 'not a git repo';
-  $('cbBranch').style.opacity = c.repo ? '1' : '.5';
+  // The branch belongs to the header, beside the folder it describes.
+  if (br) {
+    if (c.cwd && c.repo) { br.hidden = false; br.className = 'wh-branch'; br.textContent = c.branch || 'detached'; br.title = 'Git branch'; }
+    else if (c.cwd) { br.hidden = false; br.className = 'wh-branch none'; br.textContent = 'no git'; br.title = 'This folder is not a git repository'; }
+    else br.hidden = true;
+  }
 
+  // Only when there is something to say about changes. "No uncommitted changes" and
+  // "Not a git repository" are not worth a line on the box.
+  const files0 = Number(c.dirty || 0);
+  if (!touched && !(c.repo && (c.added || c.removed || files0))) { bar.hidden = true; paintShelf(); return; }
+  bar.hidden = false;
   const d = $('cbDiff');
-  if (c.repo && (c.added || c.removed)) {
-    d.innerHTML = '<span class="add">+' + Number(c.added||0).toLocaleString() + '</span> '
-                + '<span class="del">-' + Number(c.removed||0).toLocaleString() + '</span>';
-    d.title = (c.dirty || 0) + ' file(s) with uncommitted changes';
-  } else if (c.repo) {
-    d.textContent = 'clean';
-    d.title = 'no uncommitted changes';
-  } else { d.textContent = ''; d.title = ''; }
+  const files = Number(c.dirty || 0);
+  if (c.repo && (c.added || c.removed || files)) {
+    // Line counts only when there are some. New, untracked files have none, and a repo
+    // with no commits yet read "10 files changed +0 −0", which looks like a fault.
+    d.innerHTML = '<b>' + files.toLocaleString() + (files === 1 ? ' file changed' : ' files changed') + '</b>'
+      + (c.added ? '<span class="add">+' + Number(c.added).toLocaleString() + '</span>' : '')
+      + (c.removed ? '<span class="del">−' + Number(c.removed).toLocaleString() + '</span>' : '');
+    bar.classList.add('can-open');
+    bar.title = 'Show the changed files';
+  } else {
+    d.textContent = c.repo ? 'No uncommitted changes' : (c.cwd ? 'Not a git repository' : '');
+    bar.classList.remove('can-open');
+    bar.title = '';
+  }
+  const chev = $('cbChev'); if (chev && !chev.innerHTML) chev.innerHTML = icon(DIFF_OPEN ? 'down' : 'right', 11);
 
   const t = $('cbTouched');
-  t.textContent = touched ? (touched + (touched === 1 ? ' file touched this session' : ' files touched this session')) : '';
+  t.textContent = touched ? (touched + ' touched this session') : '';
   t.title = touched ? [...(TOUCHED.get(sid) || [])].join(String.fromCharCode(10)) : '';
+  paintShelf();
 }
 
 document.addEventListener('click', function(e){
   if (!e.target || !e.target.closest) return;
   if (e.target.closest('#cbRefresh')) { e.preventDefault(); e.stopPropagation(); refreshCtx(); refreshDiff(); return; }
-  if (e.target.closest('#ctxBar')) { toggleDiff(); }
+  const cb = e.target.closest('#ctxBar'); if (cb && cb.classList.contains('can-open')) { toggleDiff(); }
 });
 
 
@@ -2986,8 +3999,7 @@ async function refreshCtx(){
 
 function updateSessStats(v){
   const has = v && (v.tokens);
-  const stats = document.querySelectorAll('.workhead .stat');
-  for (const s of stats) s.style.display = has ? '' : 'none';
+  const pill = $('statPill'); if (pill) pill.hidden = !has;
   if (!has) return;
   const c = $('sessStatCost'), t = $('sessStatTok'), r = $('sessStatRate');
   const price = SESS_PRICE || {};
@@ -3106,12 +4118,9 @@ async function handleSessMenuAct(act){
     }
     if (act === 'export') { exportActiveSession(); return; }
     if (act === 'rename') {
-      const t = prompt('Rename session to:', s.title || '');
-      if (!t || !t.trim()) return;
-      await window.voxai.sessionsRename(s.id, t.trim());
-      const tEl = $('sessTitle'); if (tEl && activeId === s.id) tEl.textContent = t.trim();
-      if (window.__syncTitlebar) __syncTitlebar(t.trim());
-      refreshSessionList();
+      // In place, in the sidebar row. This used prompt(), which Electron does not
+      // implement, so Rename silently did nothing.
+      renameInPlace(s);
       return;
     }
   } catch (err) { alert('Action failed: ' + (err && err.message || err)); }
@@ -3142,8 +4151,20 @@ function updateSendState(){
   } else {
     btn.classList.remove('stop');
     btn.title = 'Send';
-    btn.disabled = !hasText && v && !v.busy && !queued;
+    // Enabled only when there is something to send. This read `!hasText && v && ...`,
+    // so on the start screen (no session yet, v = null) an empty box had a live Send.
+    btn.disabled = !hasText && !queued;
   }
+  // The keys line says what Enter does right now.
+  const keys = $('cmpKeys');
+  if (keys) {
+    const k = (v && v.perm) ? ['\u21b5 allow once', 'Esc deny']
+      : busy ? (hasText ? ['\u21b5 queue', '\u21e7\u21b5 new line'] : ['\u21b5 stop', 'type to queue a message'])
+      : ['\u21b5 send', '\u21e7\u21b5 new line'];
+    keys.innerHTML = k.map((x) => '<span>' + esc(x) + '</span>').join('');
+  }
+  const p = $('prompt');
+  if (p) p.placeholder = busy ? (queued ? 'Type to queue another\u2026' : 'Type to queue a message\u2026') : 'Ask anything';
 }
 function stopCurrent(){
   const v = actView();
@@ -3168,7 +4189,8 @@ async function send(){
       // steering: attach direction on top of the queued message
       v.queue[v.steerIdx].steer = text;
       v.steerIdx = null;
-      const hint = $('steerHint'); if (hint) hint.style.display = 'none';
+      const hint = $('steerHint'); if (hint) hint.hidden = true;
+      paintShelf();
       $('prompt').value = '';
       clearAttachments();
       renderQueue(v);
@@ -3186,8 +4208,9 @@ async function send(){
 }
 
 async function doSend(v, text, parts){
-  T = v; addUser(text, parts); setStatus('thinking…'); T = null;
-  v.busy = true; $('runDot').style.display = 'block'; updateSendState(); refreshSessionList();
+  T = v; addUser(text, parts); T = null;
+  v.busy = true; v.runT0 = Date.now(); v.activity = 'Thinking';
+  $('runDot').style.display = 'block'; updateSendState(); refreshSessionList(); paintShelf();
   try {
     const id = await ensureSession();
     if (activeId && id !== activeId) { activeId = id; } // keep in sync
@@ -3203,7 +4226,7 @@ async function doSend(v, text, parts){
     const reason = String((err && err.message) || err)
       .replace(/^Error invoking remote method '[^']*':\s*/, '')
       .replace(/^(Error:\s*)+/, '');
-    if (cur) { T = cur; clearStatus(); addMsg('Error: ' + reason, true); T = null; cur.busy = false; }
+    if (cur) { T = cur; clearStatus(); addMsg('Error: ' + reason, true); T = null; cur.busy = false; paintShelf(); }
     // The run never started, so nothing was sent. Hand the message back: a refusal like
     // "this model cannot read images — switch model and send again" is useless if the
     // image has already been cleared and has to be attached all over again.
@@ -3223,8 +4246,7 @@ async function doSend(v, text, parts){
 function fmtUsd(cents){ if(cents==null) return '—'; return (cents/100).toLocaleString('en-US',{style:'currency',currency:'USD'}); }
 function fmtUsdD(v){ if(v==null) return '—'; return Number(v).toLocaleString('en-US',{style:'currency',currency:'USD'}); } // dollars already (OpenRouter credits API returns $)
 async function refreshUsage(){
-  $('modelTag').textContent = S.openrouterModel || '—';
-  const bar=$('usageBar'), txt=$('usageBar'), cr=$('creditsTxt');
+  const bar = $('usageBar') || { style: {}, title: '' }, cr = $('creditsTxt');
   if(!S.hasOpenRouterKey){ cr.textContent='key not set'; bar.title = 'open ⚙ Settings to add one'; bar.style.width='0%'; return; }
   cr.textContent='checking…'; bar.title = '';
   let u=null;
@@ -3240,7 +4262,7 @@ async function refreshUsage(){
   if (acctTotal != null) {
     // The account "available" = remaining (total purchased − used), like the dashboard.
     const shownAvail = acctLeft != null ? acctLeft : acctTotal;
-    cr.textContent = fmtUsdD(shownAvail) + ' available';
+    cr.textContent = fmtUsdD(shownAvail);
     // low-balance warning (goose prints an insufficient-credits notice too)
     if (shownAvail != null && Number(shownAvail) < 1) {
       cr.style.color = 'var(--del)';
@@ -3357,9 +4379,15 @@ async function spawnSub(){
   }
 })();
 // keep the in-UI title synced to the active session
+/** Title bar: VoxAI Coder / project / session. The project is the open session's folder. */
 function syncTitlebarTitle(t){
   const el = $('tbTitle');
-  if (el) el.textContent = t || 'VoxAI Coder';
+  if (el) { el.textContent = t || 'New session'; el.title = el.textContent; }
+  const v = actView();
+  const wd = (v && (v.workdir || v._workdir)) || '';
+  const pj = $('tbProj'), sep = $('tbProjSep');
+  if (pj) { pj.textContent = wd ? folderName(wd) : ''; pj.title = wd; }
+  if (sep) sep.hidden = !wd;
 }
 // hook the existing title updaters
 const __origSetTitle = (window.__setTitle) || null;
@@ -3367,10 +4395,7 @@ window.__syncTitlebar = syncTitlebarTitle;
 // ---- compress now ----
 (function(){
   const bc = $('btnCompact');
-  if (bc) bc.onclick = () => {
-    if (!activeId) return;
-    try { window.voxai.agentCompact(activeId); } catch(e){}
-  };
+  if (bc) bc.onclick = compactNow;
 })();
 
 // ---- project memory panel ----
@@ -3427,33 +4452,23 @@ function exportActiveSession(){
 (async function(){
   seedStarters();
   S=await window.voxai.getSettings();
-  if(!S.openrouterModel) S.openrouterModel=MODELS[0];
   SESS_PRICE = modelPriceFor(S.openrouterModel);
   $('keyState').textContent = S.hasOpenRouterKey?('key stored ('+S.keyStore+') - leave blank to keep'):'not set';
   $('mgmtKeyState').textContent = S.hasManagementKey?('mgmt key stored ('+S.mkeyStore+') - leave blank to keep'):'not set — account balance hidden';
   $('sessSub').textContent=S.workingDir;
-  $('chipReasonVal').textContent=S.reasoningEffort||'balanced';
-  $('chipAccessVal').textContent=(ACCESS_LABELS[S.access]||ACCESS_LABELS.ask);
-  $('chipPlanVal').textContent=(S.planMode?'plan on':'plan off');
   initModelPicker();
-  chip('chipReason','menuReason',REASONS,()=>$('chipReasonVal').textContent,async(v)=>{$('chipReasonVal').textContent=v;S=await window.voxai.saveSettings({reasoningEffort:v});});
-  (function(){
-    // Access chip: show friendly labels, store canonical keys.
-    const getKey = () => (ACCESS_LABELS[S.access] ? S.access : 'ask');
-    const render = () => {
-      const m = $('menuAccess'); const c = $('chipAccess');
-      m.innerHTML='';
-      ACCESS.forEach(k=>{ const b=document.createElement('button'); b.textContent=ACCESS_LABELS[k]; if(k===getKey()) b.classList.add('sel'); b.onclick=async (e)=>{ e.stopPropagation(); $('chipAccessVal').textContent=ACCESS_LABELS[k]; S=await window.voxai.saveSettings({access:k}); c.classList.remove('open'); }; m.appendChild(b); });
-      $('chipAccessVal').textContent=ACCESS_LABELS[getKey()];
-    };
-    if ($('chipAccess')) $('chipAccess').onclick=(e)=>{ e.stopPropagation(); if(e.target.closest('.menu'))return; document.querySelectorAll('.chip.open').forEach(x=>{if(x!==$('chipAccess'))x.classList.remove('open')}); $('chipAccess').classList.toggle('open'); render(); };
-  })();
-  chip('chipPlan','menuPlan',PLANMODE,()=>$('chipPlanVal').textContent,async(v)=>{$('chipPlanVal').textContent=v;S=await window.voxai.saveSettings({planMode:(v==='plan on')});});
+  wireChip('chipReason', renderReasonMenu);
+  wireChip('chipAccess', renderAccessMenu);
+  $('chipPlan').onclick = async () => {
+    S = await window.voxai.saveSettings({ planMode: !S.planMode });
+    refreshChips();
+  };
   refreshChips(); refreshUsage();
   await refreshSessionList();
   if(!S.hasOpenRouterKey){ openModal(); $('keyState').textContent='Set your OpenRouter API key to use agent turns — then hit Test, then Save.'; }
-  $('backendState').innerHTML='<span style="color:var(--add)">- vox backend ready</span>';
-  $('backendDetail').textContent='in-process - openrouter '+S.openrouterModel;
+  $('backendState').className = 'sf-dot ok';
+  $('backendDetail').textContent = 'Ready';
+  $('sideStatus').title = 'Agent ready · balance on your OpenRouter account — click for Account settings';
   updateSendState();
 })();
 </script>

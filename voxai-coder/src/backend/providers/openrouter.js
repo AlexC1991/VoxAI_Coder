@@ -28,7 +28,9 @@ const DEFAULT_HOST = 'https://openrouter.ai';
  * @param {string} opts.model            e.g. 'anthropic/claude-sonnet-4.5'
  * @param {Array}  opts.messages         OpenAI-style [{role, content, tool_calls?, tool_call_id?}]
  * @param {Array}  [opts.tools]          OpenAI-style [{type:'function', function:{name, description, parameters}}]
- * @param {string} [opts.reasoningEffort] 'instant'|'brief'|'balanced'|'deep'|'exhaustive' → mapped to max_tokens budget hint
+ * @param {string} [opts.reasoningEffort] 'default' | an OpenRouter effort ('none'…'max') | 'on'
+ * @param {object|null} [opts.reasoningSpec] the model's catalogue `reasoning` entry: null when the
+ *   catalogue says it cannot reason, undefined when we do not know
  * @param {number} [opts.maxTokens]
  * @param {number} [opts.temperature]
  * @param {AbortSignal} [opts.signal]
@@ -38,7 +40,7 @@ const DEFAULT_HOST = 'https://openrouter.ai';
 async function chatCompletions(opts) {
   const {
     apiKey, host = DEFAULT_HOST, model, messages, tools,
-    reasoningEffort = 'balanced', maxTokens = 16384, temperature,
+    reasoningEffort = 'default', reasoningSpec, maxTokens = 16384, temperature,
     signal, onEvent, providerSort = null, sessionId = null,
   } = opts;
   if (!apiKey) throw new Error('voxai: OpenRouter API key missing');
@@ -88,11 +90,9 @@ async function chatCompletions(opts) {
         ? { sort: providerSort || process.env.VOX_PROVIDER_SORT }
         : {}),
     },
-    // reasoning hint — only send to models that support it, because sending it to
-    // arbitrary models can make some providers suppress tool calls and just stream prose.
-    ...(supportsReasoning(model) && reasoningEffort && reasoningEffort !== 'instant'
-      ? { reasoning: { effort: mapEffort(reasoningEffort) } }
-      : {}),
+    // reasoning — only what this model's catalogue entry says it accepts. Sending it to
+    // a model that cannot reason can make some providers suppress tool calls.
+    ...reasoningParam(reasoningEffort, reasoningSpec, model),
   };
 
   const res = await fetch(`${host.replace(/\/$/, '')}/api/v1/chat/completions`, {
@@ -188,6 +188,58 @@ function applyCacheBreakpoints(messages, model) {
     break;
   }
   return out;
+}
+
+// OpenRouter's effort scale, least to most.
+const EFFORTS = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+// Settings saved before levels came from the catalogue.
+const OLD_EFFORTS = { instant: 'none', brief: 'low', balanced: 'default', deep: 'high', exhaustive: 'xhigh' };
+
+/** A saved reasoning choice in today's vocabulary: 'default', 'on', or an effort. */
+function normalizeReasoning(v) {
+  const s = String(v == null ? '' : v).toLowerCase();
+  if (s === 'default' || s === 'on' || EFFORTS.includes(s)) return s;
+  if (s in OLD_EFFORTS) return OLD_EFFORTS[s];
+  return 'default';
+}
+
+/** The supported effort closest to `want`; ties go to the higher one. */
+function nearestEffort(list, want) {
+  if (!list || !list.length) return null;
+  if (list.includes(want)) return want;
+  const wi = EFFORTS.indexOf(want);
+  let best = list[0];
+  let bd = Infinity;
+  for (const k of list) {
+    const d = Math.abs(EFFORTS.indexOf(k) - wi);
+    if (d < bd || (d === bd && EFFORTS.indexOf(k) > EFFORTS.indexOf(best))) { bd = d; best = k; }
+  }
+  return best;
+}
+
+/**
+ * The `reasoning` field for one request, from the saved choice and the model's
+ * catalogue entry ({supported_efforts, default_effort, default_enabled, mandatory}).
+ *
+ * The old version guessed from the model id which models could reason, and missed
+ * most of them -- DeepSeek V4 Flash among them -- so the chip changed nothing.
+ */
+function reasoningParam(choice, spec, model) {
+  const c = normalizeReasoning(choice);
+  if (c === 'default') return {};
+  if (spec === undefined) {
+    // No catalogue yet: only the models the old guess knew, and only an effort.
+    return supportsReasoning(model) && EFFORTS.includes(c) && c !== 'none' ? { reasoning: { effort: c } } : {};
+  }
+  if (!spec) return {};                                   // the catalogue says it cannot reason
+  const efforts = (Array.isArray(spec.supported_efforts) ? spec.supported_efforts : []).filter((e) => EFFORTS.includes(e));
+  if (c === 'none') {
+    if (spec.mandatory) return {};
+    return efforts.includes('none') ? { reasoning: { effort: 'none' } } : { reasoning: { enabled: false } };
+  }
+  if (c === 'on' || !efforts.length) return spec.mandatory ? {} : { reasoning: { enabled: true } };
+  const e = nearestEffort(efforts.filter((x) => x !== 'none'), c);
+  return e ? { reasoning: { effort: e } } : {};
 }
 
 function mapEffort(e) {
@@ -303,4 +355,4 @@ async function chatOnce({ apiKey, host = DEFAULT_HOST, model, messages, maxToken
   return JSON.parse(text);
 }
 
-module.exports = { chatCompletions, chatOnce, DEFAULT_HOST, applyCacheBreakpoints, cacheMode };
+module.exports = { chatCompletions, chatOnce, DEFAULT_HOST, applyCacheBreakpoints, cacheMode, reasoningParam, normalizeReasoning, nearestEffort, EFFORTS };

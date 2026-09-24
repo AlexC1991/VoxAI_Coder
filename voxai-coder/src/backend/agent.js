@@ -11,6 +11,7 @@
  *     tools       {type:'tool_start', id, name, args}
  *                 {type:'tool_end', id, name, ok, result, mutated?}
  *     context     {type:'compacting'|'compacted'|'warning'} · {type:'todos', todos}
+ *                 {type:'context', tokens, limit, threshold}  how full, for the meter
  *     accounting  {type:'usage', usage} · {type:'budget', spent, budget}
  *     sub-agents  {type:'sub'} · {type:'agent_finished'} · {type:'awaiting_agents'}
  *     terminal    {type:'done'|'error'|'cancelled'|'limit_reached'|'budget_reached'}
@@ -282,7 +283,9 @@ function looksLikeTestCmd(cmd) {
 async function* runAgent(opts) {
   const {
     session, userText, apiKey, host, model,
-    reasoningEffort = 'balanced',
+    reasoningEffort = 'default',
+    // The model's catalogue `reasoning` entry (null = cannot reason, undefined = unknown).
+    reasoningSpec,
     // 4096 was low enough that a long file write hit finish_reason:'length'
     // mid-generation — which truncates the tool-call arguments JSON and lands on
     // the parse-error path below. Goose sends 393k on the same models. 16k is safe
@@ -354,6 +357,20 @@ async function* runAgent(opts) {
       return s.slice(0, 117) + '…';
     } catch { return ''; }
   };
+  // What the approval prompt shows: the command or the path, not the call's JSON.
+  // The kinds match the ones the tools check themselves, so "always allow" learned
+  // at the gate is the same rule the tool would have asked about.
+  const permissionAsk = (name, a) => {
+    a = a || {};
+    const act = String(a.action || a.op || '');
+    if (name === 'shell') return { kind: 'shell', target: String(a.command || '') };
+    if (['write', 'edit', 'patch'].includes(name) || (name === 'fs' && ['mkdir', 'move', 'remove'].includes(act))) {
+      return { kind: 'write-file', target: String(a.path || a.source || a.file || '') || summarizeArgs(a) };
+    }
+    if (name === 'web_fetch' || name === 'browser_open') return { kind: 'web-fetch', target: String(a.url || '') || summarizeArgs(a) };
+    if (name === 'web_search') return { kind: 'web-search', target: String(a.query || '') || summarizeArgs(a) };
+    return { kind: name, target: summarizeArgs(a) };
+  };
   const ctx = {
     workdir: session.workdir,
     session,
@@ -363,19 +380,28 @@ async function* runAgent(opts) {
     resolveIn,
     userInput: userInput || (async () => ({ answer: null, cancelled: true })),
     emit: pushEvent,
+    // Set while a call the user has just approved at the sandbox gate is running, so
+    // the tool's own check does not ask the same question a second time.
+    callApproved: false,
+    // Resolves true when the action may go ahead; throws when it is refused.
     checkPermission: async (kind, target) => {
+      if (ctx.callApproved) return true;
       const auto =
         access === 'full' ||
         (kind === 'write-file' && access !== 'ask') ||
-        (kind === 'shell' && (access === 'full' || (access === 'edit + run tests' && looksLikeTestCmd(target)))) ||
+        // `access` is always a canonical key here (normalizeAccess above). Comparing it
+        // with the old label 'edit + run tests' never matched, so this level asked
+        // before every test run exactly like "edit".
+        (kind === 'shell' && access === 'test' && looksLikeTestCmd(target)) ||
         // web-fetch auto below full access at "edit files freely"+ (ALIGNED with
         // sandbox AUTO_LEVEL web_fetch:1) — previously only full access, which
         // made sandbox say "no prompt" while this still prompted (double-gating bug).
         (['web-fetch', 'web-search'].includes(kind) && access !== 'ask');
-      if (auto) return;
+      if (auto) return true;
       // ask the UI via callback; must resolve true/false (timeout → false)
       const allowed = await askPermission({ kind, target });
       if (!allowed) throw new Error(`permission denied: ${kind} ${target}`);
+      return true;
     },
   };
 
@@ -396,6 +422,11 @@ async function* runAgent(opts) {
   const estimatedBefore = estimateSessionTokens(session, systemPrompt);
   // User-visible compaction notices (like Codex/Claude Code): tell the UI before
   // and after we fold older turns, so compaction is never silent.
+  // How full the conversation is, by the same estimate that decides when to summarise,
+  // so the meter by Send and the summarising agree.
+  const ctxLimit = Number(contextLimit) > 0 ? Number(contextLimit) : (Number(process.env.VOX_CONTEXT_LIMIT) > 0 ? Number(process.env.VOX_CONTEXT_LIMIT) : 200000);
+  const ctxThreshold = compactThreshold != null && Number(compactThreshold) > 0 ? Number(compactThreshold) : 0.8;
+  const contextEvent = () => ({ type: 'context', tokens: estimateSessionTokens(session, systemPrompt), limit: ctxLimit, threshold: ctxThreshold });
   const willCompact = (() => {
     // cheap pre-check matching compactSession's trigger (budget = limit * threshold)
     const limit = Number(contextLimit) > 0 ? Number(contextLimit) : (Number(process.env.VOX_CONTEXT_LIMIT) > 0 ? Number(process.env.VOX_CONTEXT_LIMIT) : 200000);
@@ -426,6 +457,7 @@ async function* runAgent(opts) {
       fitsHardLimit: comp.fitsHardLimit,
     };
   }
+  yield contextEvent();
   if (comp.compacted && !comp.fitsHardLimit) {
     // The provider is about to receive a request that our own estimator flags as
     // over the hard limit — surface it instead of silently shipping the goose fate.
@@ -511,7 +543,7 @@ async function* runAgent(opts) {
       workdir: session.workdir, session, emit: pushEvent, checkPermission: ctx.checkPermission,
       resolveIn, userData, live, userInput: userInput || (async () => ({ answer: null, cancelled: true })),
       runner: (o) => runAgent(o),
-      agentOpts: { apiKey, host, model, reasoningEffort, access, signal, isSubAgent, workdir: session.workdir,
+      agentOpts: { apiKey, host, model, reasoningEffort, reasoningSpec, access, sessionId: session.id, signal, isSubAgent, workdir: session.workdir,
         defaultSubModel: subagentModel, defaultSubMaxTurns: subagentMaxTurns, defaultSubTimeoutMs: subagentTimeoutMs,
         // Sub-agents spend the PARENT's remaining allowance, never a fresh one.
         // Rebuilt each turn so a fan-out later in the run sees the depleted figure.
@@ -531,7 +563,7 @@ async function* runAgent(opts) {
     // prose in between, piled every call into a single unbroken block. The prototype
     // groups each turn's calls as its own labelled run, and only the loop knows
     // where those edges are.
-    if (turn > 0) yield { type: 'turn', n: turn + 1 };
+    if (turn > 0) { yield { type: 'turn', n: turn + 1 }; yield contextEvent(); }
 
     let content = '';
     const toolCalls = [];
@@ -540,7 +572,7 @@ async function* runAgent(opts) {
       const r = await chatCompletions({
         apiKey, host, model, messages,
         tools: toolList.map((t) => t.def),
-        reasoningEffort, maxTokens, signal,
+        reasoningEffort, reasoningSpec, maxTokens, signal,
         sessionId: session.id,   // sticky routing — keeps the cache on one upstream
         onEvent: (e) => {
           if (e.token) {
@@ -639,6 +671,7 @@ async function* runAgent(opts) {
     for (let i = 0; i < toolCalls.length; i++) {
       const tc = toolCalls[i];
       const id = tc.id || `call_${turn}_${i}`;
+      ctx.callApproved = false;
       let args = {};
       try { args = tc.arguments ? JSON.parse(tc.arguments) : {}; }
       catch (e) {
@@ -691,7 +724,13 @@ async function* runAgent(opts) {
         if (!pol.allowed) {
           if (pol.needsPermission) {
             // Full access auto-allows; below that we ASK the user (goose-style).
-            const allowed = await ctx.checkPermission(tc.name, summarizeArgs(args));
+            // checkPermission resolves on yes and THROWS on no. Reading its result as
+            // a boolean made every approval a refusal: it used to resolve undefined.
+            const gate = permissionAsk(tc.name, args);
+            let allowed = false;
+            try { allowed = (await ctx.checkPermission(gate.kind, gate.target)) !== false; }
+            catch { allowed = false; }
+            if (allowed) ctx.callApproved = true;
             if (!allowed) {
               const msg = `DENIED_OR_ERROR: permission denied for ${tc.name} — do NOT retry this tool call.`;
               session.messages.push({ role: 'tool', tool_call_id: id, content: msg });
@@ -739,6 +778,7 @@ async function* runAgent(opts) {
         }
         emitWake = null;
         const outcome = await runP;
+        ctx.callApproved = false;
         if (outcome.error) throw outcome.error;
         const result = outcome.value;
         // PLAN MODE: an approved ask_confirm unlocks mutating tools for the run.

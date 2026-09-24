@@ -71,7 +71,7 @@ contextBridge.exposeInMainWorld('voxai', {
   // agent (own Node loop, streamed events)
   agentSend: (sessionId, text, attachments) => ipcRenderer.invoke('agent:send', { sessionId, text, attachments: attachments || [] }),
   agentCancel: (runKey) => ipcRenderer.invoke('agent:cancel', runKey),
-  agentPermission: (permId, allowed) => ipcRenderer.invoke('agent:permission', { permId, allowed }),
+  agentPermission: (permId, allowed, always) => ipcRenderer.invoke('agent:permission', { permId, allowed, always: !!always }),
   agentAnswer: (inputId, answer) => ipcRenderer.invoke('agent:user-input-answer', { inputId, answer }),
   agentCompact: (sessionId) => ipcRenderer.invoke('agent:compact', { sessionId }),
   sessionsExport: (id) => ipcRenderer.invoke('sessions:export', { id }),

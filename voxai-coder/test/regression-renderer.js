@@ -95,8 +95,10 @@ if (fnSrc) {
 
 console.log('\n[U] context bar');
 check('context bar markup exists', /id="ctxBar"/.test(HTML), 'missing');
+// Each shown once, where it belongs: the project in the title bar, the branch in the
+// header, the changes (and files touched) on the strip above the message box.
 check('it shows repo, branch, diff and touched files',
-  ['cbRepo', 'cbBranch', 'cbDiff', 'cbTouched'].every((id) => HTML.includes('id="' + id + '"')), 'incomplete');
+  ['tbProj', 'cbBranch', 'cbDiff', 'cbTouched'].every((id) => HTML.includes('id="' + id + '"')), 'incomplete');
 check('touched files come from mutation receipts', /noteTouched\(sid, event\.mutated\.path\)/.test(HTML), 'not wired');
 check('background agent changes count too', /for \(const f of \(event\.files_changed \|\| \[\]\)\) noteTouched/.test(HTML), 'not wired');
 check('git state refreshes when a run ends', /refreshUsage\(\); refreshCtx\(\);/.test(HTML), 'not wired');
@@ -333,7 +335,8 @@ check('icons are painted into the buttons', HTML.includes('function paintIcons')
 
 
 console.log('\n[AE] one screen, diff on the input strip');
-check('no Sub-agents tab', !HTML.includes('>Sub-agents<'), 'still there');
+// A Sub-agents TAB, not the word: "Sub-agents" is now a section inside Settings.
+check('no Sub-agents tab', !/<button class="tab\b[^>]*>Sub-agents</.test(HTML) && !/data-screen="subagents"/.test(HTML), 'still there');
 check('no Memory tab', !/data-screen="memory"/.test(HTML), 'still there');
 check('Settings survives as an action', HTML.includes('id="btnSettings"'), 'lost settings');
 check('diff list sits above the composer', HTML.includes('id="diffList"'), 'no diff list');
@@ -380,7 +383,9 @@ const AG2 = fs.readFileSync(path.join(ROOT, 'src/backend/agent.js'), 'utf8');
 // was the only boundary, so every call piled into one unbroken block.
 check('the loop emits a turn boundary', AG2.includes("type: 'turn'"), 'no boundary');
 check('the UI closes the batch on it', HTML.includes("event.type === 'turn'"), 'ignored');
-check('thinking also closes the batch', /event\.type === 'reasoning'[\s\S]{0,900}finalizeRunCard\(\)/.test(HTML), 'card left open');
+// Thinking used to be appended BELOW an open batch while the next tool rows went back
+// up into it, so the transcript read out of order. Now it goes inside the open step.
+check('thinking lands inside the open step, in order', /event\.type === 'reasoning'[\s\S]{0,1600}const r = flowRoot\(v\)/.test(HTML), 'thinking appended outside the step');
 check('empty batches are dropped', HTML.includes("card.body.querySelector('.toolrow')"), 'empty cards kept');
 // A raw WebContentsView has no chrome; the frame has to come from geometry.
 check('preview corners are rounded', MAIN.includes('setBorderRadius'), 'square panel');

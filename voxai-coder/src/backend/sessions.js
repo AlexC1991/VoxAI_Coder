@@ -33,10 +33,13 @@ function newId() {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}_${crypto.randomBytes(3).toString('hex')}`;
 }
 
-function createSession({ workdir, model, title }) {
+function createSession({ workdir, model, title, parentId }) {
   return {
     id: newId(),
     title: title || 'New session',
+    // Set on a sub-agent's own session: it belongs to the conversation that started
+    // it and is not a session of its own in the sidebar.
+    parentId: parentId || null,
     workdir,
     model,
     messages: [],
@@ -60,7 +63,7 @@ async function saveSession(userData, session) {
   const dir = sessionsDir(userData);
   await fsp.mkdir(dir, { recursive: true });
   const lines = [
-    JSON.stringify({ kind: 'meta', id: session.id, title: session.title, workdir: session.workdir, model: session.model, createdAt: session.createdAt, updatedAt: session.updatedAt }),
+    JSON.stringify({ kind: 'meta', id: session.id, title: session.title, workdir: session.workdir, model: session.model, ...(session.parentId ? { parentId: session.parentId } : {}), createdAt: session.createdAt, updatedAt: session.updatedAt }),
     ...session.messages.map((m) => JSON.stringify({ kind: 'message', message: m })),
     ...(session.usage || []).map((u) => JSON.stringify({ kind: 'usage', usage: u })),
     JSON.stringify({ kind: 'todos', todos: session.todos }),
@@ -102,7 +105,7 @@ async function loadSession(userData, id) {
   for (const line of raw.split('\n')) {
     if (!line.trim()) continue;
     const o = JSON.parse(line);
-    if (o.kind === 'meta') Object.assign(session, { title: o.title, workdir: o.workdir, model: o.model, createdAt: o.createdAt, updatedAt: o.updatedAt });
+    if (o.kind === 'meta') Object.assign(session, { title: o.title, workdir: o.workdir, model: o.model, parentId: o.parentId || null, createdAt: o.createdAt, updatedAt: o.updatedAt });
     else if (o.kind === 'message') session.messages.push(o.message);
     else if (o.kind === 'usage') session.usage.push(o.usage);
     else if (o.kind === 'todos') session.todos = o.todos;
@@ -119,7 +122,16 @@ async function loadSession(userData, id) {
   return session;
 }
 
-async function listSessions(userData, limit = 50) {
+/**
+ * Is this a sub-agent's working session rather than a conversation? Newer ones carry
+ * parentId; older ones only their "subagent" / "subagent:<role>" title.
+ */
+function isSubSession(meta) {
+  return !!(meta && (meta.parentId || /^subagent(:|$)/.test(String(meta.title || ''))));
+}
+
+/** Conversations, newest first; with { subs: true }, sub-agent sessions instead. */
+async function listSessions(userData, limit = 50, { subs = false } = {}) {
   const dir = sessionsDir(userData);
   try { await fsp.mkdir(dir, { recursive: true }); } catch { /* noop */ }
   let files = [];
@@ -129,7 +141,9 @@ async function listSessions(userData, limit = 50) {
     try {
       const first = (await fsp.readFile(path.join(dir, f), 'utf8')).split('\n')[0];
       const o = JSON.parse(first);
-      if (o.kind === 'meta') metas.push({ id: o.id, title: o.title, workdir: o.workdir, model: o.model, updatedAt: o.updatedAt });
+      // Sub-agent sessions stay on disk (a worker can be resumed) but are not listed
+      // as conversations: each fan-out used to add one "session" per worker.
+      if (o.kind === 'meta' && isSubSession(o) === subs) metas.push({ id: o.id, title: o.title, workdir: o.workdir, model: o.model, parentId: o.parentId || null, updatedAt: o.updatedAt });
     } catch { /* skip corrupt */ }
   }
   metas.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
@@ -143,7 +157,7 @@ async function deleteSession(userData, id) {
 /** Serialize a session as JSONL text (for export). */
 function exportSession(session) {
   const lines = [
-    JSON.stringify({ kind: 'meta', id: session.id, title: session.title, workdir: session.workdir, model: session.model, createdAt: session.createdAt, updatedAt: session.updatedAt }),
+    JSON.stringify({ kind: 'meta', id: session.id, title: session.title, workdir: session.workdir, model: session.model, ...(session.parentId ? { parentId: session.parentId } : {}), createdAt: session.createdAt, updatedAt: session.updatedAt }),
     ...(session.messages || []).map((m) => JSON.stringify({ kind: 'message', message: m })),
     ...(session.usage || []).map((u) => JSON.stringify({ kind: 'usage', usage: u })),
     JSON.stringify({ kind: 'todos', todos: session.todos || [] }),
@@ -151,4 +165,4 @@ function exportSession(session) {
   return lines.join('\n');
 }
 
-module.exports = { createSession, saveSession, loadSession, listSessions, deleteSession, sessionsDir, recordUsage, exportSession };
+module.exports = { createSession, saveSession, loadSession, listSessions, deleteSession, sessionsDir, recordUsage, exportSession, isSubSession };
