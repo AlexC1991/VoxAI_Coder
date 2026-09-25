@@ -121,7 +121,9 @@ function initUpdater({ app, send, log = () => {} }) {
 
   let pending = null;   // the verified manifest for the update being downloaded
   let retryTimer = null;
-  let lastCheck = 0;
+  // Counted from launch: the window appearing is a focus too, and the startup check
+  // below already covers it -- otherwise every launch checked twice, 15s apart.
+  let lastCheck = Date.now();
   const failed = (e, extra) => {
     set({ state: 'error', error: plainError(e), checkedAt: Date.now(), ...(extra || {}) });
     // Offline, or caught mid-release: try again soon rather than in half an hour.

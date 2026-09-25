@@ -515,6 +515,9 @@ async function drain(gen) {
       const early = foc.checks();
       await wait(120); foc.up.onFocus(); await wait(5);
       check('coming back to the window checks, but not every time', early === 1 && foc.checks() >= 2, [early, foc.checks()]);
+      // The window appearing at launch is a focus too; the startup check covers it.
+      const launch = await scenario({ manifests: [signed({ version: '0.2.0' })], run: async (up) => { up.onFocus(); await wait(5); } });
+      check('a launch does not check twice', launch.checks() === 0, launch.checks());
     } finally {
       global.fetch = realFetch;
       delete require.cache[EU];
@@ -529,6 +532,16 @@ async function drain(gen) {
     const REL = read('scripts/release.js');
     check('a release is named only after its files are attached', REL.indexOf("['attach', manifestPath]") < REL.indexOf("['release', `v${version}`"), 'named first');
     check('the release script checks the feed like an installed copy', REL.includes("if (bad.length) die(`the feed does not check out"), 'version string only');
+    // Every build used to leave its ~110 MB installers behind in release/.
+    check('each build clears the last one first', PKG.scripts.predist === 'node scripts/clean-release.js', PKG.scripts);
+    {
+      const OUTD = path.join(WD, 'release-out');
+      fs.mkdirSync(path.join(OUTD, 'win-unpacked'), { recursive: true });
+      for (const f of ['VoxAI-Coder-Setup-0.2.1.exe', 'VoxAI-Coder-Setup-0.2.1.exe.blockmap', 'VoxAI-Coder-0.2.1-portable.exe', 'latest.yml', 'update.json', 'my-notes.txt']) fs.writeFileSync(path.join(OUTD, f), 'x');
+      require('child_process').execFileSync(process.execPath, [path.join(ROOT, 'scripts/clean-release.js')], { env: { ...process.env, VOX_RELEASE_OUT: OUTD } });
+      const left = fs.readdirSync(OUTD);
+      check('only the build\'s own files go', left.length === 1 && left[0] === 'my-notes.txt', left);
+    }
     check('the window can see and act on updates', /updates: \{[\s\S]{0,200}update:install/.test(read('src/preload/preload.js')) && read('src/renderer/index.html').includes("id=\"updPill\""), 'no UI');
   }
 

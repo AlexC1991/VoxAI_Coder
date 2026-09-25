@@ -8,6 +8,7 @@
     "dev": "electron . --dev",
     "test": "node test/regression-protocol.js && node test/regression-tools.js && node test/regression-renderer.js && node test/regression-sessions.js && node test/regression-refit.js",
     "pack": "electron-builder --dir",
+    "predist": "node scripts/clean-release.js",
     "dist": "electron-builder --publish never",
     "icon": "electron scripts/make-icon.js",
     "release-key": "node scripts/release-key.js",
