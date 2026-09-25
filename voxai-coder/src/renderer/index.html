@@ -1991,7 +1991,10 @@ function flushTyping(v){
   if(v.pending){ v.shown += v.pending.slice(v.pi); v.pending = ''; v.pi = 0; }
 }
 function paintStream(){ const v = RT(); if(v && v.curStream) paintTyped(v); }
-function finalizeStream(){ const v = RT(); if(v && v.curStream){ flushTyping(v); v.curStream.classList.remove('live'); v.curStream.innerHTML = renderVTE(v.shown); v.curStream = null; } }
+// A block that only ever got whitespace (a model's "\n\n" before a tool call) is
+// removed, not kept: empty, it still took a slot in the thread's spacing and left a
+// double gap between a step and the answer. Found in a live run.
+function finalizeStream(){ const v = RT(); if(v && v.curStream){ flushTyping(v); if (!String(v.shown || '').trim()) v.curStream.remove(); else { v.curStream.classList.remove('live'); v.curStream.innerHTML = renderVTE(v.shown); } v.curStream = null; } }
 
 // --- run cards (per-view) ---
 function kindName(name){
@@ -2126,7 +2129,7 @@ function summariseResult(name, raw, ok){
       if (o.from !== undefined && o.returned !== undefined && (o.from > 1 || o.truncated)) {
         return 'lines ' + n(o.from) + '-' + n(o.to) + ' of ' + n(o.lines);
       }
-      return n(o.lines) + ' lines' + (o.truncated ? ' (truncated)' : '');
+      return n(o.lines) + (Number(o.lines) === 1 ? ' line' : ' lines') + (o.truncated ? ' (truncated)' : '');
     }
     if (o.replaced !== undefined) return 'replaced' + (o.match && o.match !== 'exact' ? ' (' + o.match + ')' : '');
     if (o.edits !== undefined) return o.edits + (o.edits === 1 ? ' edit' : ' edits');

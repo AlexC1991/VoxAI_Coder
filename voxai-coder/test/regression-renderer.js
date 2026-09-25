@@ -54,6 +54,7 @@ if (fnSrc) {
   const J = (o) => JSON.stringify(o);
 
   check('file read reports line count', sum('read', J({ path: 'a', lines: 312 }), true) === '312 lines', sum('read', J({ lines: 312 }), true));
+  check('one line is "1 line"', sum('read', J({ path: 'a', lines: 1 }), true) === '1 line', sum('read', J({ path: 'a', lines: 1 }), true));
   check('truncated read says so', /truncated/.test(sum('read', J({ lines: 4000, truncated: true }), true)), sum('read', J({ lines: 4000, truncated: true }), true));
   check('edit reports a replacement', sum('edit', J({ replaced: 24, match: 'exact' }), true) === 'replaced', sum('edit', J({ replaced: 24, match: 'exact' }), true));
   check('a fuzzy match is called out', /line-trimmed/.test(sum('edit', J({ replaced: 5, match: 'line-trimmed' }), true)), sum('edit', J({ replaced: 5, match: 'line-trimmed' }), true));

@@ -663,6 +663,30 @@ async function drain(gen) {
       check('and stays on it without re-attaching', sent.slice(before).filter((m) => m === 'Page.enable').length === 0, sent.slice(before));
       cdp.cleanup();
     }
+    // A one-line file read as "2 lines": the newline that ends a line does not start one.
+    {
+      const { buildTools } = require(path.join(ROOT, 'src/backend/tools/index.js'));
+      const rctx = { workdir: WD, session: { id: 'rl', workdir: WD, messages: [], todos: [] }, emit: () => {}, resolveIn: (w, p) => path.resolve(w, p), checkPermission: async () => {} };
+      const rd = buildTools(rctx).ALL.find((t) => t.def.function.name === 'read');
+      const cnt = async (name, body) => { fs.writeFileSync(path.join(WD, name), body); const r = await rd.run({ path: name }, rctx); return [r.lines, r.content]; };
+      const got = [await cnt('l1.txt', 'hello\n'), await cnt('l1b.txt', 'hello'), await cnt('l3.txt', 'a\nb\nc\n'), await cnt('l0.txt', ''), await cnt('lb.txt', 'a\n\n')];
+      check('a file is as many lines as an editor shows', JSON.stringify(got) === JSON.stringify([[1, 'hello'], [1, 'hello'], [3, 'a\nb\nc'], [0, ''], [2, 'a\n']]), got);
+    }
+    // A model's "\n\n" before a tool call left an empty text block in the thread,
+    // which doubled the gap between the step and the answer.
+    {
+      const src = /function finalizeStream\(\)\{[^\n]*\}/.exec(read('src/renderer/index.html'))[0];
+      const mk = (shown) => {
+        const node = { removed: false, html: null, cls: ['md', 'live'], remove() { this.removed = true; }, classList: { remove: (c) => { node.cls = node.cls.filter((x) => x !== c); } }, set innerHTML(h) { node.html = h; } };
+        const v = { curStream: node, shown, pending: '', pi: 0 };
+        new vm.Script(src + '; finalizeStream();').runInNewContext({ RT: () => v, flushTyping: () => {}, renderVTE: (t) => '<p>' + t + '</p>' });
+        return { node, v };
+      };
+      const a = mk('\n\n  ');
+      check('a text block that only got whitespace is removed', a.node.removed && a.v.curStream === null, a.node);
+      const b = mk('Checking the file.');
+      check('a real one stays, rendered', !b.node.removed && b.node.html === '<p>Checking the file.</p>' && !b.node.cls.includes('live'), b.node);
+    }
     // OpenRouter out of reach: the run ended on "Something went wrong — fetch failed".
     {
       const OR = require(path.join(ROOT, 'src/backend/providers/openrouter.js'));

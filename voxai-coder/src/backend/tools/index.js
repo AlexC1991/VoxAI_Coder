@@ -43,7 +43,10 @@ const read = tool('read',
     const full = resolveIn(ctx.workdir, p);
     const text = await fsp.readFile(full, 'utf8');
     markSeen(full, text); // arms the freshness guard for later edits
-    const lines = text.split('\n');
+    // The newline that ends the last line does not start another: a one-line file
+    // read as "2 lines". Found in a live run.
+    const lines = text === '' ? [] : text.split('\n');
+    if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
 
     const start = Math.max(1, Number.isFinite(Number(offset)) && Number(offset) > 0 ? Math.floor(Number(offset)) : 1);
     const count = Math.max(1, Number.isFinite(Number(limit)) && Number(limit) > 0 ? Math.floor(Number(limit)) : READ_MAX_LINES);
