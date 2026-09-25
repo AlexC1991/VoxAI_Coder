@@ -1548,6 +1548,10 @@ let ppLiveUrl = '';
 /** Paint the address bar + host label for a URL. */
 function ppSetUrl(url){
   ppLiveUrl = url || '';
+  // Remembered per session, so closing the panel and opening it again brings the page
+  // back. It reopened blank and said "The model hasn't shown anything yet" after two
+  // pages had been shown. Found in a live run.
+  if (url && url !== 'about:blank') { const av = actView(); if (av) av.ppLastUrl = url; }
   const u = $('ppUrl'); if (u) u.textContent = url || 'about:blank';
   const hst = $('ppHost');
   if (!hst) return;
@@ -1814,7 +1818,8 @@ window.voxai && ($('ppToggle').onclick = async () => {
   // can have opened it without the renderer ever being told.
   let open = !!($('previewPanel') && $('previewPanel').classList.contains('open'));
   try { const st = await window.voxai.preview.state(); if (st) open = !!st.open; } catch {}
-  open ? ppClose() : ppOpen();
+  const last = actView() && actView().ppLastUrl;
+  open ? ppClose() : ppOpen(last || undefined);
 });
 (function wirePreviewBar(){
   const b = () => ppBridge();
@@ -2292,6 +2297,17 @@ function startRunCard(){
 }
 /** Where a step's own things go: inside the open step, else the thread. */
 function flowRoot(v){ return (v && v.curRun && v.curRun.body) || (v && v.root) || null; }
+/** A screenshot the agent took, live or on reopening. Only an inline image is drawn. */
+function cuShot(title, dataUrl){
+  if (!/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(String(dataUrl || ''))) return null;
+  const wrap = el('div', 'cu-shot');
+  wrap.appendChild(el('div', 'cu-shot-cap', esc(title || 'screen')));
+  const img = document.createElement('img');
+  img.style.cssText = 'max-width:100%;max-height:520px;border-radius:10px;border:1px solid var(--edge2);display:block;margin:6px 0;background:#0e0f14';
+  img.src = dataUrl;
+  wrap.appendChild(img);
+  return wrap;
+}
 /** Move a short piece of narration into the step as one of its lines. */
 function foldNarration(card, node){
   if (!card || !node) return;
@@ -3653,10 +3669,20 @@ async function openSession(id){
             finalizeRunCard();
             v.root.appendChild(el('div', 'fold', 'earlier turns summarised'));
           } else {
-            // A turn's screenshots: a line of the step that took them.
+            // A turn's screenshots: a line of the step that took them, and the pictures
+            // themselves, as they were shown live. Reopened, a session showed only the
+            // line -- 13 screenshots gone from the record. Found in a live run.
             const note = el('div', 'say');
             note.textContent = '\u21b3 ' + first.replace(/^\[VOX TOOL SCREENSHOTS\]\s*/, '');
-            const r = flowRoot(v); if (r) r.appendChild(note);
+            const r = flowRoot(v);
+            if (r) {
+              // The pictures, then the line: it says "…screenshot from computer above".
+              for (const p of (Array.isArray(m.content) ? m.content : [])) {
+                const shot = p && p.type === 'image_url' ? cuShot('screen', p.image_url && p.image_url.url) : null;
+                if (shot) r.appendChild(shot);
+              }
+              r.appendChild(note);
+            }
           }
           continue;
         }
@@ -3986,13 +4012,8 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
   } else if (event.type === 'image') {
     // Computer-use: stream the live screenshot into the thread so the user sees
     // everything the agent is looking at in real time.
-    const wrap = el('div', 'cu-shot');
-    const cap = el('div', 'cu-shot-cap', esc(event.title || 'screen'));
-    const img = document.createElement('img');
-    img.style.cssText = 'max-width:100%;max-height:520px;border-radius:10px;border:1px solid var(--edge2);display:block;margin:6px 0;background:#0e0f14';
-    img.src = event.dataUrl;
-    wrap.appendChild(cap); wrap.appendChild(img);
-    const r = flowRoot(v); if (r) { r.appendChild(wrap); followThread(); }
+    const wrap = cuShot(event.title, event.dataUrl);
+    const r = flowRoot(v); if (wrap && r) { r.appendChild(wrap); followThread(); }
   } else if (event.type === 'sub') {
     // A sub-agent's progress belongs to the row that delegated it: live on the row's
     // note while it works, its own actions and report behind the row's click. It used

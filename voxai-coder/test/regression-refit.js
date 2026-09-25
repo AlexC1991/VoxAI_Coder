@@ -758,6 +758,25 @@ async function drain(gen) {
       let rg = null; try { await T.rag.run({ path: '.', query: 'x' }, nctx); } catch (e) { rg = e.message; }
       check('rag on a folder says to use grep', /is a folder.*use grep/.test(rg || ''), rg);
     }
+    // Reopened, a session showed "↳ 1 screenshot from computer above" and no picture:
+    // the screenshots it had shown live were gone from the record.
+    {
+      const H = read('src/renderer/index.html');
+      const cs = new vm.Script('(' + /function cuShot\(title, dataUrl\)\{[\s\S]*?\n\}/.exec(H)[0] + ')').runInNewContext({
+        el: (t, c, h) => ({ tag: t, className: c, html: h, kids: [], appendChild(x) { this.kids.push(x); } }),
+        esc: (s) => s, document: { createElement: (t) => ({ tag: t, style: {} }) },
+      });
+      check('a screenshot is drawn from its inline image', cs('screen', 'data:image/png;base64,AAAA') && cs('screen', 'data:image/png;base64,AAAA').kids[1].src === 'data:image/png;base64,AAAA', 'none');
+      check('and nothing else is loaded as one', cs('x', 'https://evil.test/p.png') === null && cs('x', 'javascript:alert(1)') === null, 'loaded');
+      check('reopening draws the screenshots, above their line', /cuShot\('screen', p\.image_url && p\.image_url\.url\)[\s\S]{0,120}\}\s*r\.appendChild\(note\);/.test(H), 'line only');
+    }
+    // Closing the preview and opening it again showed a blank page and "The model
+    // hasn't shown anything yet", after two pages had been shown.
+    {
+      const H = read('src/renderer/index.html');
+      check('the preview remembers its page for each session', H.includes("if (url && url !== 'about:blank') { const av = actView(); if (av) av.ppLastUrl = url; }"), 'forgotten');
+      check('and reopens it', H.includes('const last = actView() && actView().ppLastUrl;') && H.includes('open ? ppClose() : ppOpen(last || undefined);'), 'blank');
+    }
     // The page's own scripts compile: a broken regex in index.html shows up as a blank
     // app, not a failing test, unless something checks.
     {
