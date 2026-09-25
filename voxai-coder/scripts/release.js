@@ -1,0 +1,120 @@
+/**
+ * Publish the installer that `npm run dist` just built, so installed copies update.
+ *
+ *   npm run release -- --notes "What changed, in a sentence or two" [--dry-run]
+ *
+ * 1. Signs update.json (version, installer name, size, SHA-512, notes) with the
+ *    release key made by `npm run release-key`.
+ * 2. Saves a version to the public CodeRook project voxai-coder-releases (README and
+ *    CHANGELOG only -- the code stays in the private voxai-coder project), names it
+ *    v<version>, and attaches the installer and update.json to it.
+ * 3. Reads the public update feed back to confirm installed copies can see it.
+ *
+ * --dry-run does step 1 and prints the rest.
+ */
+const crypto = require('crypto');
+const fs = require('fs');
+const path = require('path');
+const os = require('os');
+const { execFileSync, execSync } = require('child_process');
+const { signManifest, verifyManifest, FEED, PROJECT } = require('../src/main/updater.js');
+
+const ROOT = path.join(__dirname, '..');
+const pkg = require(path.join(ROOT, 'package.json'));
+const argv = process.argv.slice(2);
+const flag = (n) => argv.includes(n);
+const opt = (n) => { const i = argv.indexOf(n); return i >= 0 ? argv[i + 1] : undefined; };
+const DRY = flag('--dry-run');
+const notes = String(opt('--notes') || '').trim();
+const RELEASES_DIR = process.env.VOX_RELEASES_DIR || path.join(ROOT, '..', '..', PROJECT);
+const PRIV = process.env.VOX_RELEASE_KEY
+  || path.join(process.env.APPDATA || path.join(os.homedir(), '.config'), 'voxai-coder-release', 'update-key.pem');
+
+const die = (msg) => { console.error('release: ' + msg); process.exit(1); };
+if (!notes) die('say what changed: npm run release -- --notes "..."');
+if (notes.length > 600) die('keep --notes under 600 characters (' + notes.length + ')');
+
+const version = pkg.version;
+const file = `VoxAI-Coder-Setup-${version}.exe`;
+const installer = path.join(ROOT, 'release', file);
+if (!fs.existsSync(installer)) die(`${installer} is missing; run npm run dist first`);
+if (fs.statSync(installer).mtimeMs < fs.statSync(path.join(ROOT, 'package.json')).mtimeMs) die('the installer is older than package.json; run npm run dist again');
+if (!fs.existsSync(PRIV)) die(`no release key at ${PRIV}; run npm run release-key once`);
+
+// ---- 1. the signed manifest
+const bytes = fs.readFileSync(installer);
+const m = {
+  app: 'voxai-coder', version, file, size: bytes.length,
+  sha512: crypto.createHash('sha512').update(bytes).digest('base64'),
+  notes, releasedAt: new Date().toISOString(),
+};
+m.sig = signManifest(m, fs.readFileSync(PRIV, 'utf8'));
+// The app checks with the public key it ships; check with that same one here, so a
+// key mix-up fails now instead of on every installed copy.
+if (!verifyManifest(m, fs.readFileSync(path.join(ROOT, 'resources', 'update-key.pem'), 'utf8'))) {
+  die('the signature does not verify with resources/update-key.pem: the key pair does not match');
+}
+const manifestPath = path.join(ROOT, 'release', 'update.json');
+fs.writeFileSync(manifestPath, JSON.stringify(m, null, 2));
+console.log(`signed ${file} (${(m.size / 1048576).toFixed(1)} MB) as ${version}`);
+
+// ---- 2. the public releases project
+fs.mkdirSync(RELEASES_DIR, { recursive: true });
+const readme = `# VoxAI Coder
+
+Releases of VoxAI Coder, a desktop coding agent for Windows.
+
+Download **${file}** from the latest release and run it. After that the app keeps
+itself up to date: it checks here, downloads new versions in the background and
+offers to restart when one is ready.
+
+Every release carries \`update.json\`, signed with the project's release key. The app
+installs only updates whose signature and checksum match.
+
+The source code is not published here.
+`;
+fs.writeFileSync(path.join(RELEASES_DIR, 'README.md'), readme);
+const logPath = path.join(RELEASES_DIR, 'CHANGELOG.md');
+const prev = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').replace(/^# Changes\s*/, '') : '';
+if (!prev.includes(`## ${version} `)) {
+  fs.writeFileSync(logPath, `# Changes\n\n## ${version} (${m.releasedAt.slice(0, 10)})\n\n${notes}\n\n${prev}`.replace(/\n{3,}/g, '\n\n'));
+}
+
+// cbx runs with node directly -- no shell, so the notes need no quoting.
+function cbxEntry() {
+  const root = execSync('npm root -g').toString().trim();
+  const cpkg = JSON.parse(fs.readFileSync(path.join(root, '@coderook', 'cli', 'package.json'), 'utf8'));
+  const bin = typeof cpkg.bin === 'string' ? cpkg.bin : (cpkg.bin.cbx || Object.values(cpkg.bin)[0]);
+  return path.join(root, '@coderook', 'cli', bin);
+}
+const steps = [
+  ['submit', '--name', PROJECT, '-m', `${version}: ${notes}`.slice(0, 240)],
+  ['release', `v${version}`, '--notes', notes],
+  ['attach', installer],
+  ['attach', manifestPath],
+];
+if (DRY) {
+  console.log(`dry run -- would run in ${RELEASES_DIR}:`);
+  for (const s of steps) console.log('  cbx ' + s.map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(' '));
+  process.exit(0);
+}
+const entry = cbxEntry();
+for (const s of steps) {
+  console.log('> cbx ' + s[0] + ' ' + (s[1] || ''));
+  execFileSync(process.execPath, [entry, ...s], { cwd: RELEASES_DIR, stdio: 'inherit' });
+}
+
+// ---- 3. what installed copies will see
+(async () => {
+  try {
+    const res = await fetch(`${FEED}/latest.yml`);
+    const text = await res.text();
+    if (res.status === 404) {
+      console.log(`\nThe feed answers 404: ${PROJECT} is private. Make it public on coderook.com so installed copies can see the release.`);
+    } else if (text.includes(`version: '${version}'`) || text.includes(`version: ${version}`)) {
+      console.log(`\nThe update feed now offers ${version}.`);
+    } else {
+      console.log(`\nThe feed answered ${res.status} but does not show ${version} yet:\n${text.slice(0, 300)}`);
+    }
+  } catch (e) { console.log('\nCould not read the feed back: ' + e.message); }
+})();

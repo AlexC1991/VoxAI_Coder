@@ -1,6 +1,6 @@
 {
   "name": "voxai-coder",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "VoxAI Coder — Forge-style desktop coding agent. Own Node agent loop, OpenRouter models, no external agent binary.",
   "main": "src/main/main.js",
   "scripts": {
@@ -8,8 +8,10 @@
     "dev": "electron . --dev",
     "test": "node test/regression-protocol.js && node test/regression-tools.js && node test/regression-renderer.js && node test/regression-sessions.js && node test/regression-refit.js",
     "pack": "electron-builder --dir",
-    "dist": "electron-builder",
-    "icon": "electron scripts/make-icon.js"
+    "dist": "electron-builder --publish never",
+    "icon": "electron scripts/make-icon.js",
+    "release-key": "node scripts/release-key.js",
+    "release": "node scripts/release.js"
   },
   "author": "VoxAI",
   "license": "MIT",
@@ -34,6 +36,21 @@
         "nsis",
         "portable"
       ]
+    },
+    "publish": [
+      {
+        "provider": "generic",
+        "url": "https://api.coderook.com/v1/public/projects/batty-251/voxai-coder-releases/updates"
+      }
+    ],
+    "nsis": {
+      "artifactName": "VoxAI-Coder-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "VoxAI-Coder-${version}-portable.${ext}"
     }
+  },
+  "dependencies": {
+    "electron-updater": "^6.8.9"
   }
 }

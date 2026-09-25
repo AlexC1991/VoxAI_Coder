@@ -5,6 +5,18 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('voxai', {
+  // Updates from CodeRook: where it stands, check now, restart into a downloaded one
+  updates: {
+    state: () => ipcRenderer.invoke('update:state'),
+    check: () => ipcRenderer.invoke('update:check'),
+    install: () => ipcRenderer.invoke('update:install'),
+    onState: (cb) => {
+      const fn = (_e, st) => cb(st);
+      ipcRenderer.on('update:state', fn);
+      return () => ipcRenderer.removeListener('update:state', fn);
+    },
+  },
+
   // Sub-agents: manual spawn + list + change events
   subagents: {
     list: () => ipcRenderer.invoke('subagents:list'),

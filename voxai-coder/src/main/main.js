@@ -1151,6 +1151,19 @@ ipcMain.handle('openrouter:generations', async (_e, { limit = 40, cursor } = {})
 
   try { createWindow(); } catch (e) { try { console.error('createWindow failed:', e && e.message); } catch {} }
   app.on('activate', () => { try { if (BrowserWindow.getAllWindows().length === 0) createWindow(); } catch (e) {} });
+
+  // Updates from CodeRook's feed, signature-checked (see updater.js).
+  let updater = null;
+  try {
+    updater = require('./updater').initUpdater({
+      app,
+      send: (st) => { const c = chatWebContents(); c && c.send('update:state', st); },
+      log: (m) => { try { console.log('[update] ' + m); } catch {} },
+    });
+  } catch (e) { try { console.error('updater failed to start:', e && e.message); } catch {} }
+  ipcMain.handle('update:state', () => (updater ? updater.state() : { state: 'off', version: app.getVersion() }));
+  ipcMain.handle('update:check', () => (updater ? updater.check() : null));
+  ipcMain.handle('update:install', () => (updater ? updater.install() : false));
 });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });

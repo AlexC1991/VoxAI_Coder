@@ -435,6 +435,38 @@ async function drain(gen) {
     check('every tool has a verb', ['search', 'agents', 'sandbox_status', 'artifact_publish'].every((t) => HTML.includes("case '" + t + "'")), 'missing');
   }
 
+  // ------------------------------------------------------------------ [CP]
+  console.log('\n[CP] updates come from CodeRook, and only signed ones install');
+  {
+    const crypto = require('crypto');
+    const U = require(path.join(ROOT, 'src/main/updater.js'));
+    const { publicKey, privateKey } = crypto.generateKeyPairSync('ed25519');
+    const pub = publicKey.export({ type: 'spki', format: 'pem' });
+    const priv = privateKey.export({ type: 'pkcs8', format: 'pem' });
+    const m = { app: 'voxai-coder', version: '0.2.1', file: 'VoxAI-Coder-Setup-0.2.1.exe', size: 1234, sha512: 'abc==', notes: 'Fixes' };
+    m.sig = U.signManifest(m, priv);
+    check('a signed manifest verifies', U.verifyManifest(m, pub), 'refused');
+    check('a changed installer hash is refused', !U.verifyManifest({ ...m, sha512: 'evil==' }, pub), 'accepted');
+    check('changed notes are refused', !U.verifyManifest({ ...m, notes: 'Install this other thing' }, pub), 'accepted');
+    const other = crypto.generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'pem' });
+    check('another key\'s signature is refused', !U.verifyManifest(m, other), 'accepted');
+    check('no signature, no update', !U.verifyManifest({ ...m, sig: undefined }, pub), 'accepted');
+    const info = { version: '0.2.1', files: [{ url: 'VoxAI-Coder-Setup-0.2.1.exe', sha512: 'abc==', size: 1234 }, { url: 'update.json', sha512: 'x', size: 9 }] };
+    check('manifest and feed agree', U.matchesFeed(m, info), 'disagree');
+    check('a feed listing another installer is refused', !U.matchesFeed(m, { ...info, files: [...info.files, { url: 'Other.exe', sha512: 'q', size: 1 }] }), 'accepted');
+    check('a feed with another version is refused', !U.matchesFeed(m, { ...info, version: '0.2.2' }), 'accepted');
+
+    const PKG = JSON.parse(read('package.json'));
+    check('the app reads the public releases feed', PKG.build.publish && PKG.build.publish[0].url === U.FEED && /\/voxai-coder-releases\/updates$/.test(U.FEED), PKG.build.publish);
+    check('installers are named without spaces, as the feed lists them', PKG.build.nsis.artifactName === 'VoxAI-Coder-Setup-${version}.${ext}', PKG.build.nsis);
+    check('electron-updater ships with the app', PKG.dependencies && PKG.dependencies['electron-updater'], PKG.dependencies);
+    check('dist never publishes by itself', /--publish never/.test(PKG.scripts.dist), PKG.scripts.dist);
+    const KEY = read('resources/update-key.pem');
+    check('only the public key is in the project', KEY.includes('BEGIN PUBLIC KEY') && !KEY.includes('PRIVATE'), 'private key in the project');
+    check('updates download only after the signature checks out', /autoDownload = false/.test(read('src/main/updater.js')) && /verifyManifest\(m, publicKey\(\)\) \|\| !matchesFeed\(m, info\)/.test(read('src/main/updater.js')), 'downloads unchecked');
+    check('the window can see and act on updates', /updates: \{[\s\S]{0,200}update:install/.test(read('src/preload/preload.js')) && read('src/renderer/index.html').includes("id=\"updPill\""), 'no UI');
+  }
+
   try { fs.rmSync(WD, { recursive: true, force: true }); } catch {}
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

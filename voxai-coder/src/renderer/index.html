@@ -83,6 +83,18 @@ button{font-family:inherit} ::selection{background:rgba(200,169,97,.26)}
 .side-foot:hover .sf-label,.side-foot:hover .sf-bal{color:var(--ink)}
 .side-foot:focus-visible{outline:2px solid var(--goldedge);outline-offset:2px;border-radius:6px}
 .sf-dot{width:7px;height:7px;border-radius:50%;background:var(--faint);flex:none}
+/* An update on its way or ready: shown only then, above the footer. */
+.upd-pill{display:flex;align-items:center;gap:8px;margin:6px 0 4px;padding:7px 10px;border:1px solid var(--edge2);border-radius:8px;background:var(--panel2);color:var(--mut);font:12.5px Chivo,sans-serif;cursor:pointer;text-align:left;min-width:0}
+.upd-pill[hidden]{display:none}
+.upd-pill:hover{color:var(--ink);border-color:var(--sub)}
+.upd-dot{width:7px;height:7px;border-radius:50%;background:var(--sub);flex:none}
+.upd-pill.dl{cursor:default}
+.upd-pill.dl .upd-dot{animation:pulse 1.6s infinite}
+.upd-pill.ready{border-color:var(--goldedge);color:var(--ink)}
+.upd-pill.ready .upd-dot{background:var(--gold);box-shadow:0 0 5px var(--goldedge)}
+.upd-pill.bad .upd-dot{background:var(--del)}
+.upd-txt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.upd-txt b{font-weight:600;color:var(--gold)}
 .sf-dot.ok{background:var(--add)} .sf-dot.bad{background:var(--del)}
 .sf-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sf-bal{font-family:"Sometype Mono",monospace;font-size:12px;color:var(--mut);white-space:nowrap}
@@ -776,6 +788,7 @@ tests"). Scroll the row instead of breaking words:
       <button class="newsess" id="btnNew">✎ New session <kbd>Ctrl N</kbd></button>
       <div class="search">⌕ <input id="q" placeholder="Search sessions"></div>
       <div class="sesslist" id="sessions"></div>
+      <button class="upd-pill" id="updPill" type="button" hidden><span class="upd-dot"></span><span class="upd-txt" id="updTxt"></span></button>
       <button class="side-foot" id="sideStatus" type="button" title="Account and balance">
         <span class="sf-dot" id="backendState"></span>
         <span class="sf-label" id="backendDetail">Starting…</span>
@@ -939,6 +952,7 @@ tests"). Scroll the row instead of breaking words:
       <div class="set-scroll">
         <div class="set-group"><div class="set-row wide"><div class="set-txt"><div class="set-lbl">OpenRouter key</div><div class="set-desc">Every model call and web search is billed to this key.</div></div><div class="set-ctl"><div class="keyrow"><input id="fKey" type="password" placeholder="sk-or-v1-…" autocomplete="off" aria-label="OpenRouter key"><button class="btn ghost" id="btnTest" type="button">Test</button></div><div class="set-state" id="keyState">not set</div></div></div><div class="set-row wide"><div class="set-txt"><div class="set-lbl">Management key <span class="opt">optional</span></div><div class="set-desc">Adds your full account usage history. Not needed to run the agent.</div></div><div class="set-ctl"><div class="keyrow"><input id="fMgmtKey" type="password" placeholder="sk-or-v1-…" autocomplete="off" aria-label="Management key"><button class="btn ghost" id="btnTestMgmt" type="button">Test</button></div><div class="set-state" id="mgmtKeyState">not set</div></div></div><div class="set-actions"><span class="set-hint">Keys are saved only when you press Save keys.</span><button class="btn" id="btnSave" type="button">Save keys</button></div></div>
         <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Balance</div><div class="set-desc">Read from OpenRouter when the app starts and after each run.</div></div><div class="set-ctl"><div class="bal"><b id="acctBalance">—</b></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Usage history</div><div class="set-desc">Per-model spend on this key.</div></div><div class="set-ctl"><button class="btn ghost" id="btnUsage" type="button">Open usage</button></div></div></div>
+        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Updates</div><div class="set-desc" id="updDesc">Checks for new versions when the app starts and every few hours.</div></div><div class="set-ctl"><button class="btn ghost" id="btnUpdCheck" type="button">Check now</button></div></div></div>
       </div>
     </section>
 
@@ -5090,6 +5104,61 @@ function exportActiveSession(){
   $('sideStatus').title = 'Agent ready · balance on your OpenRouter account — click for Account settings';
   updateSendState();
 })();
+
+// ---- updates (CodeRook feed; see src/main/updater.js) ----
+let UPD = { state: 'off' };
+function anyRunBusy(){ for (const v of viewStore.values()) if (v.busy) return true; return false; }
+function paintUpdate(){
+  const st = UPD || {}, pill = $('updPill'), txt = $('updTxt'), desc = $('updDesc');
+  const ver = st.version ? 'Version ' + st.version : 'Version unknown';
+  const lines = {
+    off: st.reason || '',
+    idle: 'checks when the app starts and every few hours',
+    checking: 'checking for updates\u2026',
+    current: 'up to date',
+    downloading: 'downloading ' + st.next + ' (' + (st.percent || 0) + '%)',
+    ready: st.next + ' is downloaded; restart to use it',
+    refused: st.error || 'an update was refused',
+    error: 'could not check: ' + (st.error || 'unknown error'),
+  };
+  if (desc) desc.textContent = ver + (lines[st.state] ? ' \u00b7 ' + lines[st.state] : '');
+  const btn = $('btnUpdCheck');
+  if (btn) {
+    btn.disabled = ['off', 'checking', 'downloading'].includes(st.state);
+    btn.textContent = st.state === 'ready' ? 'Restart now' : 'Check now';
+  }
+  if (!pill) return;
+  pill.classList.remove('ready', 'dl', 'bad');
+  if (st.state === 'ready') {
+    pill.hidden = false; pill.classList.add('ready');
+    txt.innerHTML = 'Update <b>' + esc(st.next) + '</b> ready \u00b7 Restart';
+    pill.title = st.notes ? 'What\u2019s new: ' + st.notes : 'Restart to finish updating';
+  } else if (st.state === 'downloading') {
+    pill.hidden = false; pill.classList.add('dl');
+    txt.textContent = 'Downloading update ' + st.next + ' \u00b7 ' + (st.percent || 0) + '%';
+    pill.title = '';
+  } else if (st.state === 'refused') {
+    pill.hidden = false; pill.classList.add('bad');
+    txt.textContent = 'Update ' + st.next + ' refused: not signed';
+    pill.title = st.error || '';
+  } else pill.hidden = true;
+}
+async function restartIntoUpdate(){
+  // Restarting stops a run mid-step; finish or stop it first.
+  if (anyRunBusy()) { $('updTxt').textContent = 'Stop or finish the run first'; setTimeout(paintUpdate, 2500); return; }
+  $('updTxt').textContent = 'Restarting\u2026';
+  const ok = await window.voxai.updates.install();
+  if (!ok) paintUpdate();
+}
+if (window.voxai && window.voxai.updates) {
+  $('updPill').onclick = () => { if (UPD.state === 'ready') restartIntoUpdate(); else if (UPD.state === 'refused') $('updPill').hidden = true; };
+  $('btnUpdCheck').onclick = async () => {
+    if (UPD.state === 'ready') { restartIntoUpdate(); return; }
+    const st = await window.voxai.updates.check(); if (st) { UPD = st; paintUpdate(); }
+  };
+  window.voxai.updates.onState((st) => { UPD = st || UPD; paintUpdate(); });
+  window.voxai.updates.state().then((st) => { UPD = st || UPD; paintUpdate(); }).catch(() => {});
+}
 </script>
 <div id="sessMenu" style="display:none;position:fixed;z-index:99;min-width:160px;background:var(--panel2);border:1px solid var(--edge2);border-radius:8px;padding:4px;box-shadow:0 10px 34px rgba(0,0,0,.55)"><button data-act="open">Open</button><button data-act="rename">Rename…</button><button data-act="export">Export JSONL</button><button data-act="delete">Delete</button><button data-act="reveal">Open folder</button></div>
 </body>
