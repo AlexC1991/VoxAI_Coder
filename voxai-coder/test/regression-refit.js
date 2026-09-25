@@ -517,6 +517,11 @@ async function drain(gen) {
     check('a message that could not be sent is a notice, and says it is back in the box', HTML.includes("title: 'Couldn’t send that', text: tidyPaths(reason) + ' Your message is back in the box.'") && !HTML.includes("addMsg('Error: ' + reason, true)"), 'bare Error: text');
     check('a tiny spend limit is not shown as $0.00', HTML.includes('money(event.budget, Number(event.budget) < 0.01 ? 5 : 2)'), '$0.00');
     check('Settings shows the real version', HTML.includes('<span id="setVersion">') && !HTML.includes('VoxAI Coder 0.1</div>'), '0.1');
+    const MAIN3 = read('src/main/main.js');
+    check('usage history finds its rows in any of the shapes the endpoint returns', MAIN3.includes('const list = [d, d && d.rows, d && d.data, d && d.results, body && body.rows, body && body.results].find(Array.isArray);') && !MAIN3.includes('(body && body.data && body.data) || []'), '.map is not a function');
+    check('usage lists the biggest spend first', MAIN3.includes('rows.sort((a, b) => (Number(b.cost) || 0) - (Number(a.cost) || 0));'), 'arrival order');
+    check('the usage window opens above Settings', HTML.includes('#usageModalBg{z-index:60}'), 'hidden under Settings');
+    check('a queued message goes out with its steering', HTML.includes("const text = next.steer ? next.text + '\\n\\n' + next.steer : next.text;\n  doSend(v, text, next.parts || []);"), 'steering dropped');
     check('memory rows read as words', HTML.includes("if (act === 'add') return pick('list', 'Remembered', 'Remembering');"), 'Memory · add (2)');
   }
 

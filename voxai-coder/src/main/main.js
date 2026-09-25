@@ -977,13 +977,24 @@ ipcMain.handle('openrouter:generations', async (_e, { limit = 40, cursor } = {})
       const msg = (body && body.error && (body.error.message || body.error.code)) || ('HTTP ' + res.status);
       return { ok: false, error: String(msg), status: res.status };
     }
-    const rows = ((body && body.data && body.data) || []).map((r) => ({
+    // The rows are not always a bare array at body.data: that assumption threw
+    // "(...).map is not a function" and the usage window showed nothing. Take the first
+    // array among the shapes the endpoint uses; say what came back if there is none.
+    const d = body && body.data;
+    const list = [d, d && d.rows, d && d.data, d && d.results, body && body.rows, body && body.results].find(Array.isArray);
+    if (!list) {
+      const shape = (o) => (o && typeof o === 'object' ? Object.keys(o).slice(0, 8).join(', ') : typeof o);
+      return { ok: false, error: 'unexpected usage response (data: ' + shape(d) + '; top: ' + shape(body) + ')' };
+    }
+    const rows = list.map((r) => ({
       model: r.model || '?',
       createdAt: null,
       nativeTotal: Number(r.tokens_total || 0),
       requestCount: Number(r.request_count || 0),
       cost: r.total_usage != null ? r.total_usage : null, // dollars
     }));
+    // Biggest spend first: in the order it arrived, the model that cost $26 was last.
+    rows.sort((a, b) => (Number(b.cost) || 0) - (Number(a.cost) || 0));
     return { ok: true, rows, hasMore: false, total: rows.length, nextCursor: null };
   } catch (e) {
     return { ok: false, error: String((e && e.message) || e) };

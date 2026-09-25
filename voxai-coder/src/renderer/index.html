@@ -183,6 +183,9 @@ tests"). Scroll the row instead of breaking words:
 .hunk pre{margin:0;padding:8px 11px;font-family:"Sometype Mono",monospace;font-size:13px;line-height:1.7;white-space:pre-wrap}
 .ln-add{color:var(--add)} .ln-del{color:var(--del)} .ln-ctx{color:var(--dim)}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50}
+/* Usage opens from Settings, so it goes on top of it: at the same level it opened
+   underneath, half-hidden. Found in a live test. */
+#usageModalBg{z-index:60}
 .modal-bg.show{display:flex}
 /* ---- Settings: a sheet with sections ----
    It was one 560px column of 17 fields: API keys next to "hard limit fraction",
@@ -1514,7 +1517,10 @@ function drainQueue(sid, byHand){
   if (!v || v.busy || !(v.queue && v.queue.length)) return false;
   const next = v.queue.shift();
   renderQueue(v);
-  doSend(v, next.text, next.parts || []);
+  // Steering is part of the message: it was shown on the queued row and then dropped
+  // when the message went out, so "answer in three words" never reached the agent.
+  const text = next.steer ? next.text + '\n\n' + next.steer : next.text;
+  doSend(v, text, next.parts || []);
   return true;
 }
 // ---- right-hand Atlas preview (real in-app browser, resizable) ----
