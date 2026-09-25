@@ -43,10 +43,15 @@ function makeReplTool() {
       try {
         value = vm.runInContext('(' + src + '\n)', ctx2, { timeout: 10000, filename: 'node_repl' });
       } catch (eExpr) {
-        // 2) fall back to statements
+        // A runtime error in a valid expression is the answer: running it again as
+        // statements repeated its side effects (its console output came out twice).
+        if (!(eExpr instanceof SyntaxError) && !(eExpr && eExpr.name === 'SyntaxError')) {
+          return { ok: false, error: (eExpr && eExpr.message) || String(eExpr), logs: logs.slice(0, 50) };
+        }
+        // 2) statements. Their completion value is the result: `const x = 5; x * 2` is
+        // 10. It used to be thrown away, so any snippet with a statement returned nothing.
         try {
-          vm.runInContext(src, ctx2, { timeout: 10000, filename: 'node_repl' });
-          value = undefined;
+          value = vm.runInContext(src, ctx2, { timeout: 10000, filename: 'node_repl' });
         } catch (eStmt) {
           return { ok: false, error: (eStmt && eStmt.message) || String(eStmt), logs: logs.slice(0, 50) };
         }

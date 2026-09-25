@@ -95,7 +95,12 @@ function makeRagTool() {
       const full = resolveIn(ctx.workdir, args.path);
       let text;
       try { text = await fsp.readFile(full, 'utf8'); }
-      catch { throw new Error(`rag: cannot read ${args.path}`); }
+      catch (e) {
+        // Given a folder it said only "cannot read .", and the model tried again the same way.
+        if (e && e.code === 'EISDIR') throw new Error(`rag: ${args.path} is a folder. rag searches inside one large file; to search the project, use grep (or search).`);
+        if (e && e.code === 'ENOENT') throw new Error(`rag: there is no file ${args.path}. Check the path with glob.`);
+        throw new Error(`rag: cannot read ${args.path} (${(e && e.code) || 'error'})`);
+      }
       if (text.length < RAG_MIN_CHARS) {
         return { path: args.path, small: true, chars: text.length, note: `file is ${text.length} chars — use read instead`, text: text.slice(0, 6000) };
       }

@@ -658,6 +658,20 @@ async function drain(gen) {
         check('a folder listing shows accented names', d.stdout.includes('café'), d.stdout);
       }
     }
+    // node_repl dropped the value of any snippet with a statement, and ran a failing
+    // expression twice; rag given a folder said only "cannot read .".
+    {
+      const { buildTools } = require(path.join(ROOT, 'src/backend/tools/index.js'));
+      const nctx = { workdir: WD, session: { id: 'n', workdir: WD, messages: [], todos: [] }, emit: () => {}, resolveIn: (w, p) => path.resolve(w, p), checkPermission: async () => {} };
+      const T = Object.fromEntries(buildTools(nctx).ALL.map((t) => [t.def.function.name, t]));
+      const r1 = await T.node_repl.run({ code: 'const x = 5; x * 2' }, nctx);
+      check('a snippet with statements returns its last value', r1.ok && r1.value === 10, r1);
+      const r2 = await T.node_repl.run({ code: '(console.log("once"), missingName)' }, nctx);
+      check('a failing expression runs once', !r2.ok && r2.logs.length === 1 && /missingName/.test(r2.error), r2);
+      check('an expression still returns its value', (await T.node_repl.run({ code: '[1,2,3].map((n) => n * 2)' }, nctx)).value.join(',') === '2,4,6', 'no value');
+      let rg = null; try { await T.rag.run({ path: '.', query: 'x' }, nctx); } catch (e) { rg = e.message; }
+      check('rag on a folder says to use grep', /is a folder.*use grep/.test(rg || ''), rg);
+    }
     // The page's own scripts compile: a broken regex in index.html shows up as a blank
     // app, not a failing test, unless something checks.
     {
