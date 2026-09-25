@@ -683,6 +683,24 @@ async function drain(gen) {
       const H = read('src/renderer/index.html');
       check('a clicked link never navigates the page', H.includes("const a = e.target && e.target.closest && e.target.closest('a[href]');") && H.includes("if (/^https?:\\/\\//i.test(href) && window.voxai && window.voxai.openExternal)"), 'navigates');
     }
+    // New session: a typo made a session in a folder that does not exist, without a
+    // word; the error went into a dialog that had already closed; Esc did nothing.
+    {
+      const H = read('src/renderer/index.html'), M = read('src/main/main.js');
+      check('a session needs a folder that exists', M.includes("try { isDir = path.isAbsolute(dir) && fs.statSync(dir).isDirectory(); } catch { isDir = false; }") && M.includes("if (!isDir) return { ok: false, error: `There is no folder at ${dir"), 'made anyway');
+      check('and the app says so where you are looking', H.includes("if (!created || created.ok === false) throw new Error((created && created.error) || 'Could not start a session.');") && H.includes('try { await newSession(dir); closeNewSess(); }'), 'closed first');
+      check('the + on a project says so too', H.includes("newSession(k).catch((err) => toast(String(err && err.message || err)))"), 'unhandled');
+      check('Esc closes the New session dialog', H.includes("if (e.key === 'Escape' && $('newSessModalBg').classList.contains('show')) { e.preventDefault(); closeNewSess(); }"), 'stays open');
+    }
+    // Images dropped on the window or pasted into the box are attached; other files are
+    // explained (a dropped file once loaded in place of the app, then did nothing).
+    {
+      const H = read('src/renderer/index.html');
+      check('a dropped image is attached', H.includes("document.addEventListener('drop', (e) => {") && H.includes('addImageFiles(e.dataTransfer.files);'), 'nothing');
+      check('a pasted image is attached, text pastes as usual', H.includes("$('prompt').addEventListener('paste', (e) => {") && H.includes("if (!files.some((f) => /^image\\//i.test(f.type || ''))) return;"), 'nothing');
+      check('a file that is not an image is explained', H.includes("toast(skipped === all.length && skipped === 1 ? 'Only images can be attached."), 'silent');
+      check('"Keys saved" only when a key was typed', H.includes("flashSettingsSaved(('openrouterKey' in patch || 'managementKey' in patch) ? 'Keys saved' : 'Saved');"), 'always');
+    }
     // Text that is not ours is text, not HTML: a queued message with an onerror
     // handler ran in the app's page (which holds the bridge).
     {

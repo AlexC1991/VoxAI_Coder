@@ -3530,6 +3530,7 @@ async function ensureSession(){
 async function newSession(dir){
   const workdir = dir || (S && S.workingDir) || '';
   const created = await window.voxai.sessionsCreate({ title: 'New session', workdir: workdir, model: S.openrouterModel });
+  if (!created || created.ok === false) throw new Error((created && created.error) || 'Could not start a session.');
   const v = viewOf(created.id);
   v.busy = false; v.queue = []; v.cost = 0; v.tokens = 0; v.rate = 0; v.inTokens = 0; v.outTokens = 0;
   v.cacheReadTokens = 0; v.cacheWriteTokens = 0;
@@ -3813,7 +3814,7 @@ function renderSessionList(){
       add.type = 'button';
       add.title = 'New session in ' + folderName(k);
       add.setAttribute('aria-label', add.title);
-      add.onclick = (e) => { e.stopPropagation(); newSession(k); };
+      add.onclick = (e) => { e.stopPropagation(); newSession(k).catch((err) => toast(String(err && err.message || err))); };
       h.appendChild(add);
     }
     const toggle = () => {
@@ -4374,17 +4375,37 @@ function renderAttachTray(){
   tr.hidden = !PENDING_ATTACH.length;
   paintShelf();
 }
-$('btnAttach').onclick = () => $('fileInput').click();
-$('fileInput').onchange = (e) => {
-  const files = Array.from(e.target.files || []);
-  files.forEach((f) => {
-    if (!f) return;
+/** Stage image files for the next message; say what was left out. */
+function addImageFiles(files){
+  const all = Array.from(files || []).filter(Boolean);
+  const imgs = all.filter((f) => /^image\//i.test(f.type || ''));
+  imgs.forEach((f) => {
     const reader = new FileReader();
-    reader.onload = () => { PENDING_ATTACH.push({ dataUrl: reader.result, name: f.name }); renderAttachTray(); };
+    reader.onload = () => { PENDING_ATTACH.push({ dataUrl: reader.result, name: f.name || 'pasted image' }); renderAttachTray(); };
     reader.readAsDataURL(f);
   });
-  e.target.value = '';
-};
+  const skipped = all.length - imgs.length;
+  if (skipped) toast(skipped === all.length && skipped === 1 ? 'Only images can be attached. For other files, put them in the project folder or type the path.' : 'Only images can be attached; ' + skipped + (skipped === 1 ? ' file was' : ' files were') + ' left out.');
+  return imgs.length;
+}
+$('btnAttach').onclick = () => $('fileInput').click();
+$('fileInput').onchange = (e) => { addImageFiles(e.target.files); e.target.value = ''; };
+// Dropping a file on the window used to load it IN PLACE of the app (now blocked in
+// the main process, which left the drop silently doing nothing). An image is attached,
+// the same as the + button; anything else is explained. Pasting an image works too.
+const hasFiles = (e) => !!(e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files'));
+document.addEventListener('dragover', (e) => { if (hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
+document.addEventListener('drop', (e) => {
+  if (!hasFiles(e)) return;
+  e.preventDefault();
+  addImageFiles(e.dataTransfer.files);
+});
+$('prompt').addEventListener('paste', (e) => {
+  const files = e.clipboardData ? [...e.clipboardData.files] : [];
+  if (!files.some((f) => /^image\//i.test(f.type || ''))) return;   // text pastes as usual
+  e.preventDefault();
+  addImageFiles(files);
+});
 
 // ===== mic → voice to text (Web Speech API) =====
 let recog = null, recogOn = false;
@@ -4566,7 +4587,9 @@ async function saveSettingsNow(withKeys){
     refreshUsage(); loadModels();
   }
   refreshChips();
-  flashSettingsSaved(withKeys ? 'Keys saved' : 'Saved');
+  // "Keys saved" only when a key was typed: pressing Save with the key fields empty
+  // said it anyway. Found in a live run.
+  flashSettingsSaved(('openrouterKey' in patch || 'managementKey' in patch) ? 'Keys saved' : 'Saved');
   return true;
 }
 let setSaveTimer = 0, setFlashTimer = 0;
@@ -4626,11 +4649,13 @@ $('newSessBrowse').onclick = async () => {
 $('newSessOk').onclick = async () => {
   const dir = $('newSessDir').value.trim();
   if (!dir) { const hn = $('newSessHint'); if (hn) hn.textContent = 'Choose a project directory first.'; return; }
-  closeNewSess();
-  try { await newSession(dir); }
-  catch(e){ const hn = $('newSessHint'); if (hn) hn.textContent = 'Error: ' + (e&&e.message||e); }
+  // Close only once it worked: the error used to be written into a dialog that had
+  // already closed, so nobody saw it.
+  try { await newSession(dir); closeNewSess(); }
+  catch(e){ const hn = $('newSessHint'); if (hn) hn.textContent = String(e && e.message || e); }
 };
 $('newSessCancel').onclick = closeNewSess;
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('newSessModalBg').classList.contains('show')) { e.preventDefault(); closeNewSess(); } });
 $('newSessDir').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('newSessOk').click(); } });
 $('newSessModalBg').addEventListener('click', (e) => { if (e.target.id === 'newSessModalBg') closeNewSess(); });
 $('btnFolder') && ($('btnFolder').onclick = () => openNewSess());

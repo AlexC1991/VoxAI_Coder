@@ -585,10 +585,16 @@ app.whenReady().then(() => {
   ipcMain.handle('sessions:list', () => store.listSessions(userData()));
   ipcMain.handle('sessions:create', async (_e, { title, workdir, model }) => {
     const s = getSettings(false);
-    const sess = store.createSession({ workdir: workdir || s.workingDir, model: model || s.openrouterModel, title });
+    // Only a folder that is there. A typo made a session in C:\does\not\exist without a
+    // word, and its first action failed. Found in a live run.
+    const dir = String(workdir || s.workingDir || '').trim();
+    let isDir = false;
+    try { isDir = path.isAbsolute(dir) && fs.statSync(dir).isDirectory(); } catch { isDir = false; }
+    if (!isDir) return { ok: false, error: `There is no folder at ${dir || '(nothing given)'}. Choose a folder that exists, by its full path.` };
+    const sess = store.createSession({ workdir: dir, model: model || s.openrouterModel, title });
     await store.saveSession(userData(), sess);
     live.set(sess.id, sess);
-    return { id: sess.id, title: sess.title, workdir: sess.workdir, model: sess.model, updatedAt: sess.updatedAt };
+    return { ok: true, id: sess.id, title: sess.title, workdir: sess.workdir, model: sess.model, updatedAt: sess.updatedAt };
   });
   ipcMain.handle('sessions:open', async (_e, id) => {
     const sess = await getLive(id);
