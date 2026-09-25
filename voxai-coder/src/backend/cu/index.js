@@ -178,6 +178,18 @@ function makeComputerUseTool(opts) {
       const implied = args.url ? 'browser' : (name === 'cu_launch' && args.nativePath ? 'native' : null);
       const backend = args.backend || implied || lastSurface || 'browser';
       lastSurface = backend;
+      // Every browser action works on the preview the user is looking at, not only
+      // after an `open`. A page the USER put in the preview, read with `state`,
+      // started a separate hidden Chrome on about:blank instead: the agent reported
+      // an empty page with the Tip Calculator plainly on screen. Found in a live run.
+      if (backend === 'browser' && name !== 'cu_launch' && typeof attachAtlas === 'function') {
+        let wc = null;
+        try { wc = attachAtlas(); } catch { wc = null; }
+        if (wc && !cdp.attachedTo(wc)) {
+          const ar = await cdp.attach(wc);
+          if (!ar.ok) throw new Error('could not attach computer-use to the preview: ' + (ar.error || 'unknown'));
+        }
+      }
       switch (name) {
         case 'cu_launch': {
           if (backend === 'native') {
@@ -226,7 +238,7 @@ function makeComputerUseTool(opts) {
           }
           const st = await cdp.getState(true);
           emitImage(ctx, st.screenshot, st.title || st.url);
-          return { backend, surface: 'browser', title: st.title, url: st.url, elements: st.elements, text: (st.text || '').slice(0, 12000), screenshot: st.screenshot || null, elementCount: (st.elements || []).length };
+          return { backend, surface: 'browser', title: st.title, url: st.url, elements: st.elements, text: (st.text || '').slice(0, 12000), screenshot: st.screenshot || null, elementCount: (st.elements || []).length, ...(st.note ? { note: st.note } : {}) };
         }
         case 'cu_click': {
           if (backend === 'native') {

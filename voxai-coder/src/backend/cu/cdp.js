@@ -303,11 +303,28 @@ async function showHighlight(x, y, w, h, label, ms) {
   try { await send('Runtime.evaluate', { expression: `(${SHOW_HIGHLIGHT_SNIPPET})(${x}, ${y}, ${w}, ${h}, ${label ? JSON.stringify(String(label).slice(0,60)) : 'null'}, ${ms || 1000})`, returnByValue: true }); } catch {}
 }
 
+/**
+ * Is the app's window minimised? Windows draws nothing for a minimised window, so a
+ * screenshot request waits for a frame that never comes (2 in 3 went unanswered in a
+ * test) -- that is what stalled the agent's page reads. Reading the page still works.
+ */
+function windowMinimised() {
+  if (!C || !C.attachedWC) return false;
+  try {
+    const { BrowserWindow } = require('electron');
+    return BrowserWindow.getAllWindows().some((w) => w.isMinimized());
+  } catch { return false; }
+}
+
 async function getState(includeScreenshot = true) {
   await ensureReady();
   const res = await send('Runtime.evaluate', { expression: ELEM_SNIPPET, returnByValue: true });
   const snap = (res && res.result && res.result.value) || { title: '', url: '', text: '', elements: [] };
   let screenshot = null;
+  if (includeScreenshot && windowMinimised()) {
+    return { surface: 'browser', title: snap.title, url: snap.url, text: snap.text, elements: snap.elements, screenshot: null,
+      note: 'No screenshot: the VoxAI Coder window is minimised, so the page is not being drawn. The text and elements above are current.' };
+  }
   if (includeScreenshot) {
     try {
       const shot = await send('Page.captureScreenshot', { format: 'png' });
@@ -406,6 +423,8 @@ async function windowCenter() {
 
 async function screenshot() {
   await ensureReady();
+  // Minimised, nothing is drawn: say so at once rather than wait out the time limit.
+  if (windowMinimised()) throw new Error('No screenshot: the VoxAI Coder window is minimised, so the page is not being drawn. Read the page state instead, or ask the user to restore the window.');
   const shot = await send('Page.captureScreenshot', { format: 'png' });
   return shot && shot.data ? 'data:image/png;base64,' + shot.data : null;
 }
@@ -447,4 +466,11 @@ async function attach(wc) {
   return { ok: true, surface: 'atlas' };
 }
 
-module.exports = { withTimeout, launch, navigate, getState, clickInput, typeInput, pressInput, scrollInput, screenshot, list, close, attach, showPointer, showHighlight, ensureOverlay, cleanup, ensureReady, findChrome };
+/** Is the computer-use layer already driving this webContents? */
+function attachedTo(wc) {
+  try {
+    return !!(C && wc && C.attachedWC === wc && wc.debugger && wc.debugger.isAttached && wc.debugger.isAttached());
+  } catch { return false; }
+}
+
+module.exports = { withTimeout, attachedTo, launch, navigate, getState, clickInput, typeInput, pressInput, scrollInput, screenshot, list, close, attach, showPointer, showHighlight, ensureOverlay, cleanup, ensureReady, findChrome };

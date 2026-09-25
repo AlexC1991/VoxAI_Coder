@@ -2649,7 +2649,8 @@ function stopNotice(ev, live){
     text: 'A guard against runaway loops, not an error. Work so far is saved.',
     actions: live ? [{ label: 'Continue', onClick: continueRun }] : [],
   });
-  return noticeRow({ tone: 'bad', icon: 'alert', title: 'Something went wrong', text: tidyPaths(String(ev.message || 'The run stopped with an error.')) });
+  const msg = String(ev.message || 'The run stopped with an error.');
+  return noticeRow({ tone: 'bad', icon: 'alert', title: /^Could not reach OpenRouter/.test(msg) ? 'Could not reach OpenRouter' : 'Something went wrong', text: tidyPaths(msg) });
 }
 /** Carry on after a stop: the same as typing "continue". */
 function continueRun(b){ if (b) b.disabled = true; const p = $('prompt'); if (p) { p.value = 'continue'; send(); } }

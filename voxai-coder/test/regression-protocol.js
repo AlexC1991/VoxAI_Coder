@@ -158,6 +158,16 @@ async function subAgentIsolationTest() {
   check('child signal was aborted by the timeout', childSignal && childSignal.aborted === true, childSignal && childSignal.aborted);
   check('PARENT signal survived', parentCtl.signal.aborted === false, parentCtl.signal.aborted);
   check('timeout was reported', res && res.ok === false && /timed out/i.test(res.error || ''), res);
+
+  // The limit in Settings is a ceiling: with it at 10 s the model asked for 120 s and
+  // a 40 s job ran to the end.
+  const spawn2 = makeSpawnTool({
+    runner: fakeRunner,
+    agentOpts: { apiKey: 'k', model: 'm', workdir: process.cwd(), isSubAgent: false, budgetRemaining: 1, subTimeoutFloorMs: 0, defaultSubTimeoutMs: 150 },
+    userData: null, live: null, emit: () => {},
+  });
+  const res2 = await spawn2.run('spawn_agent', { task: 'hang', timeoutMs: 60000 });
+  check('the model cannot raise the time limit set in Settings', res2 && res2.ok === false && /timed out after 0s/.test(res2.error || ''), res2 && res2.error);
 }
 
 function captureBody() {

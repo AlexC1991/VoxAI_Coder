@@ -22,6 +22,8 @@ const check = (name, cond, got) => {
   else { fail++; console.log('  FAIL  ' + name + '  got: ' + JSON.stringify(got)); }
 };
 
+const NATIVE_FETCH = global.fetch;   // the fakes below replace it
+
 /** A fake OpenRouter that replies with `script(n)` for the n-th request. */
 function fakeOpenRouter(script) {
   let n = 0;
@@ -513,7 +515,7 @@ async function drain(gen) {
     check('the strip asks about the session\'s own folder', HTML.includes('const r = await window.voxai.workspaceContext(wd);'), 'empty after a reload');
     check('the spend limit is a notice with Continue and Change the limit', HTML.includes("title: 'Stopped at the spend limit'") && HTML.includes("{ label: 'Change the limit', ghost: true, onClick: () => openModal('spend') }"), 'old box');
     check('the turn limit is a notice with Continue', HTML.includes("title: ev.turns ? 'Paused after ' + ev.turns + ' turns' : 'Paused'"), 'old box');
-    check('an error is a notice, not "Error: …" as text', HTML.includes("title: 'Something went wrong'") && !HTML.includes("addMsg('Error: ' + event.message)"), 'bare text');
+    check('an error is a notice, not "Error: …" as text', HTML.includes(": 'Something went wrong', text: tidyPaths(msg)") && !HTML.includes("addMsg('Error: ' + event.message)"), 'bare text');
     check('a message that could not be sent is a notice, and says it is back in the box', HTML.includes("title: 'Couldn’t send that', text: tidyPaths(reason) + ' Your message is back in the box.'") && !HTML.includes("addMsg('Error: ' + reason, true)"), 'bare Error: text');
     check('a tiny spend limit is not shown as $0.00', HTML.includes('money(ev.budget, Number(ev.budget) < 0.01 ? 5 : 2)'), '$0.00');
     check('Settings shows the real version', HTML.includes('<span id="setVersion">') && !HTML.includes('VoxAI Coder 0.1</div>'), '0.1');
@@ -638,7 +640,47 @@ async function drain(gen) {
     const ss5 = new vm.Script('(' + /function stepSummary\(counts, stats\)\{[\s\S]*?\n\}/.exec(read('src/renderer/index.html'))[0] + ')').runInNewContext({});
     check('a step you stopped is titled "Stopped"', ss5({}, { stopped: 1 }).head === 'Stopped', ss5({}, { stopped: 1 }).head);
     check('a stopped action reads "stopped", not failed', read('src/renderer/index.html').includes("if (rec.stopped) return { html: 'stopped' };"), 'failed');
+    const CDPSRC = read('src/backend/cu/cdp.js');
+    check('minimised, a page read skips the screenshot instead of stalling', CDPSRC.includes('if (includeScreenshot && windowMinimised()) {') && CDPSRC.includes("return BrowserWindow.getAllWindows().some((w) => w.isMinimized());"), 'waits for a frame');
+    check('and a screenshot says so at once', CDPSRC.includes("if (windowMinimised()) throw new Error('No screenshot: the VoxAI Coder window is minimised"), 'stalls');
+    check('the agent is told why there is no picture', read('src/backend/cu/index.js').includes('...(st.note ? { note: st.note } : {})'), 'silent');
     check('every browser command goes through the limit', read('src/backend/cu/cdp.js').includes('return withTimeout(C.attachedWC.debugger.sendCommand(method, params)'), 'no limit');
+    // A page the user put in the preview, read without an `open` first: it read a
+    // hidden about:blank instead and said the page was empty.
+    {
+      const { makeComputerUseTool } = require(path.join(ROOT, 'src/backend/cu/index.js'));
+      let attached = false; const sent = [];
+      const wc = { debugger: {
+        attach: () => { attached = true; }, detach: () => { attached = false; }, isAttached: () => attached,
+        removeAllListeners: () => {}, removeListener: () => {}, on: () => {},
+        sendCommand: async (m) => { sent.push(m); if (m === 'Runtime.evaluate') return { result: { value: { title: 'Tip Calculator', url: 'file:///tip/index.html', text: 'Bill', elements: [] } } }; if (m === 'Page.captureScreenshot') return { data: 'AAAA' }; return {}; },
+      } };
+      const cu = makeComputerUseTool({ attachAtlas: () => wc });
+      const st = await cu.run('cu_state', {}, { emit: () => {} });
+      check('reading the page reads the preview the user sees, with no open first', st.title === 'Tip Calculator' && st.url === 'file:///tip/index.html' && attached, st);
+      const before = sent.length;
+      await cu.run('cu_state', {}, { emit: () => {} });
+      check('and stays on it without re-attaching', sent.slice(before).filter((m) => m === 'Page.enable').length === 0, sent.slice(before));
+      cdp.cleanup();
+    }
+    // OpenRouter out of reach: the run ended on "Something went wrong — fetch failed".
+    {
+      const OR = require(path.join(ROOT, 'src/backend/providers/openrouter.js'));
+      const faked = global.fetch;
+      global.fetch = NATIVE_FETCH;
+      let e1 = null;
+      try { await OR.chatOnce({ apiKey: 'x', host: 'http://127.0.0.1:59999', model: 'm', messages: [] }); } catch (e) { e1 = e; }
+      let e3 = null;
+      try { await OR.chatOnce({ apiKey: 'x', host: 'http://127.0.0.1:9', model: 'm', messages: [] }); } catch (e) { e3 = e; }
+      check('a blocked port says so', e3 && /(that port is blocked for web requests)/.test(e3.message), e3 && e3.message);
+      check('an unreachable OpenRouter says so, and what to do', e1 && e1.code === 'unreachable' && /^Could not reach OpenRouter at http:\/\/127\.0\.0\.1:59999 \(the connection was refused\)\. .*address in Settings, then send again\.$/.test(e1.message), e1 && e1.message);
+      const ac = new AbortController(); ac.abort();
+      let e2 = null;
+      try { await OR.chatOnce({ apiKey: 'x', host: 'http://127.0.0.1:9', model: 'm', messages: [], signal: ac.signal }); } catch (e) { e2 = e; }
+      global.fetch = faked;
+      check('a Stop still reads as a stop, not as unreachable', e2 && e2.name === 'AbortError' && e2.code !== 'unreachable', e2 && (e2.name + ' ' + e2.message));
+      check('the notice is titled for it', read('src/renderer/index.html').includes("/^Could not reach OpenRouter/.test(msg) ? 'Could not reach OpenRouter' : 'Something went wrong'"), 'generic title');
+    }
   }
 
   // ------------------------------------------------------------------ [CP]

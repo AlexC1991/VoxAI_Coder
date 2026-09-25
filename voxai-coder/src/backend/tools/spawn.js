@@ -74,7 +74,7 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
       role: { type: 'string', enum: Object.keys(ROLES), description: 'explore/review are read-only; build can modify files. Default build.' },
       model: { type: 'string', description: 'Optional model override.' },
       maxTurns: { type: 'integer', description: 'Optional max tool-turns (default 25).' },
-      timeoutMs: { type: 'integer', description: 'Optional timeout in ms (default 300000).' },
+      timeoutMs: { type: 'integer', description: 'Optional, SHORTER time limit in ms. It cannot go past the limit the user set in Settings (default 300000); a larger number is cut to that.' },
     },
     required: ['task'],
     additionalProperties: false,
@@ -119,9 +119,12 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
     const events = [];
     let timedOut = false;
     const t0 = Date.now();
-    const requestedTimeout = Number(task.timeoutMs) > 0 ? Number(task.timeoutMs)
-      : (Number(agentOpts.defaultSubTimeoutMs) > 0 ? Number(agentOpts.defaultSubTimeoutMs)
-      : (Number(process.env.VOX_SUBAGENT_TIMEOUT_MS) > 0 ? Number(process.env.VOX_SUBAGENT_TIMEOUT_MS) : 300000));
+    // The limit in Settings is a ceiling. The model may ask for LESS, never more: with
+    // the limit at 10 s it passed timeoutMs 120000 and a 40 s job ran to the end.
+    // Found in a live run.
+    const userLimit = Number(agentOpts.defaultSubTimeoutMs) > 0 ? Number(agentOpts.defaultSubTimeoutMs)
+      : (Number(process.env.VOX_SUBAGENT_TIMEOUT_MS) > 0 ? Number(process.env.VOX_SUBAGENT_TIMEOUT_MS) : 300000);
+    const requestedTimeout = Number(task.timeoutMs) > 0 ? Math.min(Number(task.timeoutMs), userLimit) : userLimit;
     // Floor it. A sub-agent cannot do anything useful in under ten seconds -- the first
     // token alone routinely takes longer -- so a smaller figure is a units mistake, and
     // honouring it kills every worker before it starts (which is what happened).
@@ -359,7 +362,7 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
               background: { type: 'boolean', description: 'Return immediately and let the agent run while you continue. Its report is delivered to you automatically when it finishes. Use when you have other work to get on with; leave false when you need the answer before your next step.' },
               model: { type: 'string', description: 'Optional model override.' },
               maxTurns: { type: 'integer', description: 'Optional max tool-turns (default 25).' },
-              timeoutMs: { type: 'integer', description: 'Optional timeout in ms (default 300000).' },
+              timeoutMs: { type: 'integer', description: 'Optional, SHORTER time limit in ms. It cannot go past the limit the user set in Settings (default 300000); a larger number is cut to that.' },
             },
             additionalProperties: false,
           },

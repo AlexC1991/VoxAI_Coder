@@ -22,6 +22,35 @@
 const DEFAULT_HOST = 'https://openrouter.ai';
 
 /**
+ * fetch() that says what went wrong when the network does.
+ *
+ * With OpenRouter out of reach, the run ended on "Something went wrong — fetch
+ * failed": no word of what failed or what to do. A Stop (an abort) passes through
+ * untouched, so it still reads as a stop. Found in a live run.
+ */
+async function post(host, init) {
+  const base = String(host || DEFAULT_HOST).replace(/\/$/, '');
+  try {
+    return await fetch(`${base}/api/v1/chat/completions`, init);
+  } catch (e) {
+    if (e && e.name === 'AbortError') throw e;
+    const code = (e && e.cause && (e.cause.code || (e.cause.errors && e.cause.errors[0] && e.cause.errors[0].code))) || '';
+    const why = {
+      ECONNREFUSED: 'the connection was refused', ENOTFOUND: 'the address could not be found',
+      EAI_AGAIN: 'the address could not be looked up', ETIMEDOUT: 'the connection timed out',
+      ECONNRESET: 'the connection was dropped', UND_ERR_CONNECT_TIMEOUT: 'the connection timed out',
+      UND_ERR_SOCKET: 'the connection was dropped', CERT_HAS_EXPIRED: 'its certificate is not valid',
+    }[code] || (code ? code
+      : /bad port/i.test(String(e && e.cause && e.cause.message)) ? 'that port is blocked for web requests'
+      : 'no response');
+    const err = new Error(`Could not reach OpenRouter at ${base} (${why}). Check your internet connection`
+      + (base === DEFAULT_HOST ? '' : ', or the OpenRouter address in Settings') + ', then send again.');
+    err.code = 'unreachable';
+    throw err;
+  }
+}
+
+/**
  * @param {object} opts
  * @param {string} opts.apiKey
  * @param {string} [opts.host]
@@ -95,7 +124,7 @@ async function chatCompletions(opts) {
     ...reasoningParam(reasoningEffort, reasoningSpec, model),
   };
 
-  const res = await fetch(`${host.replace(/\/$/, '')}/api/v1/chat/completions`, {
+  const res = await post(host, {
     method: 'POST',
     signal,
     headers: {
@@ -339,7 +368,7 @@ async function consumeSSE(body, onEvent) {
 // `extra` merges into the request body (plugins, usage accounting, ...); `signal`
 // lets a caller abort. Both optional, so existing callers are unchanged.
 async function chatOnce({ apiKey, host = DEFAULT_HOST, model, messages, maxTokens = 64, extra = null, signal = undefined }) {
-  const res = await fetch(`${host.replace(/\/$/, '')}/api/v1/chat/completions`, {
+  const res = await post(host, {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${apiKey}`,
