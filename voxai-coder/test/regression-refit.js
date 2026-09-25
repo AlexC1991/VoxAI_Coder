@@ -532,6 +532,18 @@ async function drain(gen) {
     const REL = read('scripts/release.js');
     check('a release is named only after its files are attached', REL.indexOf("['attach', manifestPath]") < REL.indexOf("['release', `v${version}`"), 'named first');
     check('the release script checks the feed like an installed copy', REL.includes("if (bad.length) die(`the feed does not check out"), 'version string only');
+    // After installing, the download stayed in pending/ -- a second 110 MB copy.
+    {
+      const LA = path.join(WD, 'localappdata');
+      const pend = path.join(LA, 'voxai-coder-updater', 'pending');
+      const put = (v) => { fs.mkdirSync(pend, { recursive: true }); fs.writeFileSync(path.join(pend, `VoxAI-Coder-Setup-${v}.exe`), 'x'); fs.writeFileSync(path.join(pend, 'update-info.json'), JSON.stringify({ fileName: `VoxAI-Coder-Setup-${v}.exe` })); };
+      put('0.2.3');
+      check('an installed download is cleared on the next start', U.clearInstalledDownload('0.2.3', () => {}, LA) === true && !fs.existsSync(pend), fs.existsSync(pend));
+      put('0.2.4');
+      check('one still waiting to be installed is kept', U.clearInstalledDownload('0.2.3', () => {}, LA) === false && fs.existsSync(path.join(pend, 'VoxAI-Coder-Setup-0.2.4.exe')), fs.existsSync(pend));
+      fs.rmSync(path.join(LA, 'voxai-coder-updater'), { recursive: true, force: true });
+      check('nothing downloaded is not an error', U.clearInstalledDownload('0.2.3', () => {}, LA) === false, 'threw');
+    }
     // Every build used to leave its ~110 MB installers behind in release/.
     check('each build clears the last one first', PKG.scripts.predist === 'node scripts/clean-release.js', PKG.scripts);
     {

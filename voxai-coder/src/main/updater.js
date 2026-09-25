@@ -66,6 +66,25 @@ function plainError(e) {
   return s.split('\n')[0].slice(0, 160);
 }
 
+/**
+ * A downloaded installer stays in the updater's pending folder after it has been
+ * installed -- a second 110 MB copy beside the one the installer keeps for itself.
+ * Once the app is running that version (or a later one), the download has done its job.
+ */
+function clearInstalledDownload(version, log = () => {}, root = process.env.LOCALAPPDATA) {
+  try {
+    const dir = path.join(root || '', 'voxai-coder-updater', 'pending');
+    const info = JSON.parse(fs.readFileSync(path.join(dir, 'update-info.json'), 'utf8'));
+    const got = (/(\d+\.\d+\.\d+)/.exec(String(info.fileName || '')) || [])[1];
+    if (!got) return false;
+    const semver = require(require.resolve('semver', { paths: [path.dirname(require.resolve('electron-updater'))] }));
+    if (semver.gt(got, version)) return false;   // a newer one, still waiting to be installed
+    fs.rmSync(dir, { recursive: true, force: true });
+    log(`removed the installed ${got} download`);
+    return true;
+  } catch { return false; }   // nothing downloaded, or unreadable: leave it
+}
+
 function publicKey() {
   // A test run may check against a key of its own; a real run only ever uses the shipped one.
   const p = (process.env.VOX_UPDATE_TEST && process.env.VOX_UPDATE_PUBKEY) || path.join(__dirname, '..', '..', 'resources', 'update-key.pem');
@@ -95,6 +114,7 @@ function initUpdater({ app, send, log = () => {} }) {
     return { state: () => st, check: async () => st, install: () => false, onFocus: () => {} };
   }
 
+  if (!test) clearInstalledDownload(app.getVersion(), log);
   const { autoUpdater } = require('electron-updater');
   autoUpdater.setFeedURL({ provider: 'generic', url: feed });
   autoUpdater.autoDownload = false;          // only after the signature checks out
@@ -181,4 +201,4 @@ function initUpdater({ app, send, log = () => {} }) {
   };
 }
 
-module.exports = { initUpdater, plainError, manifestText, signManifest, verifyManifest, matchesFeed, FEED, APP, OWNER, PROJECT };
+module.exports = { initUpdater, clearInstalledDownload, plainError, manifestText, signManifest, verifyManifest, matchesFeed, FEED, APP, OWNER, PROJECT };
