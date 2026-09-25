@@ -87,11 +87,15 @@ function cbxEntry() {
   const bin = typeof cpkg.bin === 'string' ? cpkg.bin : (cpkg.bin.cbx || Object.values(cpkg.bin)[0]);
   return path.join(root, '@coderook', 'cli', bin);
 }
+// Attach first, name last. A download on a save nobody can see stays hidden until
+// the save is named, so the feed switches to the new release with its installer and
+// its signed manifest already in place. Named first, the feed briefly offered a
+// release whose files were not there yet.
 const steps = [
   ['submit', '--name', PROJECT, '-m', `${version}: ${notes}`.slice(0, 240)],
-  ['release', `v${version}`, '--notes', notes],
   ['attach', installer],
   ['attach', manifestPath],
+  ['release', `v${version}`, '--notes', notes],
 ];
 if (DRY) {
   console.log(`dry run -- would run in ${RELEASES_DIR}:`);
@@ -105,16 +109,26 @@ for (const s of steps) {
 }
 
 // ---- 3. what installed copies will see
+// Read the feed back the way an installed copy does -- anonymously, uncached -- and run
+// the same checks it runs. Anything short of all of them is a failed release.
 (async () => {
+  const { matchesFeed } = require('../src/main/updater.js');
   try {
-    const res = await fetch(`${FEED}/latest.yml`);
+    const res = await fetch(`${FEED}/latest.yml?t=${Date.now()}`, { cache: 'no-store' });
     const text = await res.text();
-    if (res.status === 404) {
-      console.log(`\nThe feed answers 404: ${PROJECT} is private. Make it public on coderook.com so installed copies can see the release.`);
-    } else if (text.includes(`version: '${version}'`) || text.includes(`version: ${version}`)) {
-      console.log(`\nThe update feed now offers ${version}.`);
-    } else {
-      console.log(`\nThe feed answered ${res.status} but does not show ${version} yet:\n${text.slice(0, 300)}`);
-    }
-  } catch (e) { console.log('\nCould not read the feed back: ' + e.message); }
+    if (res.status === 404) die(`the feed answers 404: ${PROJECT} is private. Make it public on coderook.com.`);
+    const files = [...text.matchAll(/- url: '?([^'\n]+?)'?\s+sha512: '?([^'\n]+?)'?\s+size: (\d+)/g)].map((x) => ({ url: x[1], sha512: x[2], size: Number(x[3]) }));
+    const fv = (/^version: '?([^'\n]+?)'?$/m.exec(text) || [])[1];
+    const mres = await fetch(`${FEED}/update.json?t=${Date.now()}`, { cache: 'no-store', redirect: 'follow' });
+    const pm = await mres.json();
+    const ok = {
+      version: fv === version,
+      signature: verifyManifest(pm, fs.readFileSync(path.join(ROOT, 'resources', 'update-key.pem'), 'utf8')),
+      matches: matchesFeed(pm, { version: fv, files }),
+      installer: pm.sha512 === m.sha512 && pm.size === m.size,
+    };
+    const bad = Object.keys(ok).filter((k) => !ok[k]);
+    if (bad.length) die(`the feed does not check out (${bad.join(', ')}): installed copies would not take this release`);
+    console.log(`\nThe feed offers ${version}: signature, manifest and installer all check out.`);
+  } catch (e) { die('could not read the feed back: ' + e.message); }
 })();

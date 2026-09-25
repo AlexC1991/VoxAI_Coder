@@ -22,7 +22,11 @@ const PROJECT = 'voxai-coder-releases';
 const FEED = `https://api.coderook.com/v1/public/projects/${OWNER}/${PROJECT}/updates`;
 const APP = 'voxai-coder';
 const FIRST_CHECK_MS = 15 * 1000;
-const CHECK_EVERY_MS = 4 * 60 * 60 * 1000;
+// Each check is one small request (latest.yml). Every 4 hours meant a release made
+// while the app was open went unseen for hours -- found in a live test.
+const CHECK_EVERY_MS = 30 * 60 * 1000;
+const FOCUS_MIN_GAP_MS = 10 * 60 * 1000;    // coming back to the window checks, at most this often
+const RETRY_AFTER_ERROR_MS = 5 * 60 * 1000;  // offline, or a release still being published
 
 /**
  * The exact text that is signed -- one field per line in a fixed order, the free-text
@@ -63,7 +67,8 @@ function plainError(e) {
 }
 
 function publicKey() {
-  const p = path.join(__dirname, '..', '..', 'resources', 'update-key.pem');
+  // A test run may check against a key of its own; a real run only ever uses the shipped one.
+  const p = (process.env.VOX_UPDATE_TEST && process.env.VOX_UPDATE_PUBKEY) || path.join(__dirname, '..', '..', 'resources', 'update-key.pem');
   return fs.readFileSync(p, 'utf8');
 }
 
@@ -75,17 +80,23 @@ function publicKey() {
  */
 function initUpdater({ app, send, log = () => {} }) {
   const test = process.env.VOX_UPDATE_TEST || '';
+  // Test runs may shorten the timers and point at another feed (to test going offline).
+  const ms = (name, dflt) => (test && Number(process.env[name]) > 0 ? Number(process.env[name]) : dflt);
+  const feed = (test && process.env.VOX_UPDATE_FEED) || FEED;
+  const EVERY = ms('VOX_UPDATE_EVERY_MS', CHECK_EVERY_MS);
+  const FOCUS_GAP = ms('VOX_UPDATE_FOCUS_MS', FOCUS_MIN_GAP_MS);
+  const RETRY = ms('VOX_UPDATE_RETRY_MS', RETRY_AFTER_ERROR_MS);
   const portable = !!process.env.PORTABLE_EXECUTABLE_DIR;
   let st = { state: 'off', version: app.getVersion() };
   const set = (patch) => { st = { ...st, ...patch }; try { send(st); } catch {} };
 
   if ((!app.isPackaged || portable) && !test) {
     st.reason = portable ? 'The portable build does not update itself. Use the installer for updates.' : 'Updates run in the installed app.';
-    return { state: () => st, check: async () => st, install: () => false };
+    return { state: () => st, check: async () => st, install: () => false, onFocus: () => {} };
   }
 
   const { autoUpdater } = require('electron-updater');
-  autoUpdater.setFeedURL({ provider: 'generic', url: FEED });
+  autoUpdater.setFeedURL({ provider: 'generic', url: feed });
   autoUpdater.autoDownload = false;          // only after the signature checks out
   autoUpdater.autoInstallOnAppQuit = !test;  // a downloaded update installs on the next quit
   autoUpdater.disableDifferentialDownload = true;  // the feed has no blockmaps
@@ -96,7 +107,7 @@ function initUpdater({ app, send, log = () => {} }) {
     // folder's name from it. Give it one, with a cache folder of its own.
     try {
       const cfg = path.join(require('os').tmpdir(), 'voxai-coder-update-test.yml');
-      fs.writeFileSync(cfg, `provider: generic\nurl: ${FEED}\nupdaterCacheDirName: voxai-coder-updater-test\n`);
+      fs.writeFileSync(cfg, `provider: generic\nurl: ${feed}\nupdaterCacheDirName: voxai-coder-updater-test\n`);
       autoUpdater.updateConfigPath = cfg;
     } catch (e) { log('test config not written: ' + e.message); }
     // The same semver electron-updater compares with.
@@ -109,40 +120,56 @@ function initUpdater({ app, send, log = () => {} }) {
   st.state = 'idle';
 
   let pending = null;   // the verified manifest for the update being downloaded
+  let retryTimer = null;
+  let lastCheck = 0;
+  const failed = (e, extra) => {
+    set({ state: 'error', error: plainError(e), checkedAt: Date.now(), ...(extra || {}) });
+    // Offline, or caught mid-release: try again soon rather than in half an hour.
+    clearTimeout(retryTimer);
+    retryTimer = setTimeout(() => { retryTimer = null; check(); }, RETRY);
+  };
   autoUpdater.on('checking-for-update', () => set({ state: 'checking', error: '' }));
   autoUpdater.on('update-not-available', () => set({ state: 'current', checkedAt: Date.now() }));
   autoUpdater.on('update-available', async (info) => {
     try {
-      const res = await fetch(`${FEED}/update.json`, { redirect: 'follow' });
+      // Never a cached copy: a manifest left over from the last release would read
+      // as a mismatch the moment a new one appears.
+      const res = await fetch(`${feed}/update.json?t=${Date.now()}`, { redirect: 'follow', cache: 'no-store' });
       if (!res.ok) throw new Error(`update.json: HTTP ${res.status}`);
       const m = await res.json();
-      if (!verifyManifest(m, publicKey()) || !matchesFeed(m, info)) {
-        set({ state: 'refused', next: info.version, error: 'This update is not signed with VoxAI Coder\'s release key, so it was not downloaded.' });
+      if (!verifyManifest(m, publicKey())) {
+        set({ state: 'refused', next: info.version, checkedAt: Date.now(), error: 'This update is not signed with VoxAI Coder\'s release key, so it was not downloaded.' });
         return;
       }
+      // Signed by us but describing another release: the feed and the manifest have
+      // not caught up with each other yet. Not a forgery -- look again shortly.
+      if (!matchesFeed(m, info)) { failed(new Error('the release is still being published'), { next: info.version }); return; }
       pending = m;
       set({ state: 'downloading', next: info.version, percent: 0, notes: m.notes || '' });
       await autoUpdater.downloadUpdate();
     } catch (e) {
-      set({ state: 'error', next: info && info.version, error: plainError(e) });
+      failed(e, { next: info && info.version });
     }
   });
   autoUpdater.on('download-progress', (p) => set({ state: 'downloading', percent: Math.round(Number(p.percent) || 0) }));
-  autoUpdater.on('update-downloaded', (info) => set({ state: 'ready', next: info.version, percent: 100, notes: (pending && pending.notes) || '' }));
-  autoUpdater.on('error', (e) => set({ state: 'error', error: plainError(e) }));
+  autoUpdater.on('update-downloaded', (info) => set({ state: 'ready', next: info.version, percent: 100, checkedAt: Date.now(), notes: (pending && pending.notes) || '' }));
+  autoUpdater.on('error', (e) => { if (st.state !== 'error') failed(e); });
 
   const check = async () => {
     // Downloaded and waiting for a restart: checking again would only download it twice.
     if (st.state === 'ready' || st.state === 'downloading' || st.state === 'checking') return st;
-    try { await autoUpdater.checkForUpdates(); } catch (e) { set({ state: 'error', error: plainError(e) }); }
+    lastCheck = Date.now();
+    try { await autoUpdater.checkForUpdates(); } catch (e) { if (st.state !== 'error') failed(e); }
     return st;
   };
   setTimeout(check, FIRST_CHECK_MS);
-  setInterval(check, CHECK_EVERY_MS);
+  setInterval(check, EVERY);
 
   return {
     state: () => st,
     check,
+    // Back at the window after a while: a release may have landed since.
+    onFocus: () => { if (Date.now() - lastCheck >= FOCUS_GAP) check(); },
     install: () => {
       if (st.state !== 'ready' || test) return false;
       // Silent install, then start the new version.

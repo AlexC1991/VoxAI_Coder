@@ -32,6 +32,23 @@ app.setPath('userData', path.join(app.getPath('appData'), 'voxai-coder'));
 // taskbar button under the VoxAI icon rather than Electron's.
 if (process.platform === 'win32') app.setAppUserModelId('ai.vox.coder');
 
+// One copy at a time. Two copies share that data folder, so they fought over its cache
+// and could write the same session file; and an update cannot replace files that a
+// second copy still holds open. Opening the app again brings the open window forward.
+// (The lock belongs to the data folder, so `npm start` and the installed app count as
+// one: close one before starting the other.)
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+  return;
+}
+app.on('second-instance', () => {
+  const w = BrowserWindow.getAllWindows()[0];
+  if (!w) return;
+  if (w.isMinimized()) w.restore();
+  w.show();
+  w.focus();
+});
+
 // ---------------------------------------------------------------- settings ---
 const SETTINGS_PATH = path.join(app.getPath('userData'), 'voxai-settings.json');
 
@@ -1161,6 +1178,7 @@ ipcMain.handle('openrouter:generations', async (_e, { limit = 40, cursor } = {})
       log: (m) => { try { console.log('[update] ' + m); } catch {} },
     });
   } catch (e) { try { console.error('updater failed to start:', e && e.message); } catch {} }
+  app.on('browser-window-focus', () => { try { updater && updater.onFocus(); } catch {} });
   ipcMain.handle('update:state', () => (updater ? updater.state() : { state: 'off', version: app.getVersion() }));
   ipcMain.handle('update:check', () => (updater ? updater.check() : null));
   ipcMain.handle('update:install', () => (updater ? updater.install() : false));

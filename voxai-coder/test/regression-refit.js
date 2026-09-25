@@ -463,7 +463,72 @@ async function drain(gen) {
     check('dist never publishes by itself', /--publish never/.test(PKG.scripts.dist), PKG.scripts.dist);
     const KEY = read('resources/update-key.pem');
     check('only the public key is in the project', KEY.includes('BEGIN PUBLIC KEY') && !KEY.includes('PRIVATE'), 'private key in the project');
-    check('updates download only after the signature checks out', /autoDownload = false/.test(read('src/main/updater.js')) && /verifyManifest\(m, publicKey\(\)\) \|\| !matchesFeed\(m, info\)/.test(read('src/main/updater.js')), 'downloads unchecked');
+    check('updates download only after the signature checks out', /autoDownload = false/.test(read('src/main/updater.js')) && read('src/main/updater.js').includes('if (!verifyManifest(m, publicKey())) {'), 'downloads unchecked');
+    // ---- the updater's decisions, against a stand-in for electron-updater
+    const { EventEmitter } = require('events');
+    const KEYFILE = path.join(WD, 'test-update-key.pem');
+    fs.writeFileSync(KEYFILE, pub);
+    Object.assign(process.env, { VOX_UPDATE_TEST: '0.2.0', VOX_UPDATE_PUBKEY: KEYFILE, VOX_UPDATE_RETRY_MS: '60', VOX_UPDATE_FOCUS_MS: '80', VOX_UPDATE_EVERY_MS: '600000', VOX_UPDATE_FEED: 'https://feed.test/updates' });
+    const EU = require.resolve('electron-updater', { paths: [ROOT] });
+    const realFetch = global.fetch;
+    const wait = (n) => new Promise((r) => setTimeout(r, n));
+    const signed = (over) => { const x = { ...m, version: '0.2.1', ...over }; x.sig = U.signManifest(x, priv); return x; };
+    const feedInfo = { version: '0.2.1', files: [{ url: 'VoxAI-Coder-Setup-0.2.1.exe', sha512: 'abc==', size: 1234 }] };
+    // One scenario: `manifests` are what update.json returns, in turn; `offline` fails the check.
+    async function scenario({ manifests = [], offline = 0, run }) {
+      const fake = new EventEmitter();
+      let checks = 0, downloads = 0;
+      fake.setFeedURL = () => {};
+      fake.checkForUpdates = async () => {
+        checks++;
+        fake.emit('checking-for-update');
+        if (checks <= offline) throw new Error('getaddrinfo ENOTFOUND feed.test');
+        fake.emit('update-available', feedInfo);
+      };
+      fake.downloadUpdate = async () => { downloads++; fake.emit('update-downloaded', feedInfo); };
+      fake.quitAndInstall = () => {};
+      require.cache[EU] = { id: EU, filename: EU, loaded: true, exports: { autoUpdater: fake } };
+      let n = 0;
+      global.fetch = async () => ({ ok: true, json: async () => manifests[Math.min(n++, manifests.length - 1)] });
+      const states = [];
+      const up = U.initUpdater({ app: { getVersion: () => '0.2.0', isPackaged: true }, send: (s) => states.push(s.state + (s.error ? ':' + s.error : '')) });
+      await run(up);
+      return { up, states, checks: () => checks, downloads: () => downloads };
+    }
+    try {
+      const good = await scenario({ manifests: [signed()], run: async (up) => { await up.check(); await wait(20); } });
+      check('a signed release downloads and waits for a restart', good.up.state().state === 'ready' && good.downloads() === 1, good.states);
+
+      const forged = await scenario({ manifests: [{ ...signed(), sha512: 'evil==' }], run: async (up) => { await up.check(); await wait(20); } });
+      check('a forged manifest is refused and nothing downloads', forged.up.state().state === 'refused' && forged.downloads() === 0, forged.states);
+
+      // update.json still describes the last release: wait, look again, then take it.
+      const lag = await scenario({ manifests: [signed({ version: '0.2.0' }), signed()], run: async (up) => { await up.check(); await wait(200); } });
+      check('caught mid-release it retries, not refuses', lag.states.some((x) => /still being published/.test(x)) && !lag.states.some((x) => x.startsWith('refused')) && lag.up.state().state === 'ready', lag.states);
+
+      const off = await scenario({ manifests: [signed()], offline: 1, run: async (up) => { await up.check(); await wait(200); } });
+      check('offline says so plainly and tries again by itself', off.states.includes('error:CodeRook could not be reached') && off.checks() >= 2 && off.up.state().state === 'ready', off.states);
+
+      const foc = await scenario({ manifests: [signed({ version: '0.2.0' })], run: async (up) => {
+        await up.check(); up.onFocus(); await wait(5);
+      } });
+      const early = foc.checks();
+      await wait(120); foc.up.onFocus(); await wait(5);
+      check('coming back to the window checks, but not every time', early === 1 && foc.checks() >= 2, [early, foc.checks()]);
+    } finally {
+      global.fetch = realFetch;
+      delete require.cache[EU];
+      for (const k of ['VOX_UPDATE_TEST', 'VOX_UPDATE_PUBKEY', 'VOX_UPDATE_RETRY_MS', 'VOX_UPDATE_FOCUS_MS', 'VOX_UPDATE_EVERY_MS', 'VOX_UPDATE_FEED']) delete process.env[k];
+    }
+    const UP = read('src/main/updater.js');
+    check('an open app checks every 30 minutes', /CHECK_EVERY_MS = 30 \* 60 \* 1000/.test(UP), 'every 4 hours');
+    check('update.json is never a cached copy', /update\.json\?t=\$\{Date\.now\(\)\}`, \{ redirect: 'follow', cache: 'no-store' \}/.test(UP), 'cached');
+    const MAIN2 = read('src/main/main.js');
+    check('one copy of the app at a time', /if \(!app\.requestSingleInstanceLock\(\)\) \{\s*app\.quit\(\);\s*return;/.test(MAIN2) && MAIN2.includes("app.on('second-instance'"), 'copies pile up');
+    check('focus reaches the updater', MAIN2.includes("app.on('browser-window-focus', () => { try { updater && updater.onFocus(); } catch {} });"), 'never on focus');
+    const REL = read('scripts/release.js');
+    check('a release is named only after its files are attached', REL.indexOf("['attach', manifestPath]") < REL.indexOf("['release', `v${version}`"), 'named first');
+    check('the release script checks the feed like an installed copy', REL.includes("if (bad.length) die(`the feed does not check out"), 'version string only');
     check('the window can see and act on updates', /updates: \{[\s\S]{0,200}update:install/.test(read('src/preload/preload.js')) && read('src/renderer/index.html').includes("id=\"updPill\""), 'no UI');
   }
 

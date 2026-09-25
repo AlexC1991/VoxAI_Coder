@@ -952,7 +952,7 @@ tests"). Scroll the row instead of breaking words:
       <div class="set-scroll">
         <div class="set-group"><div class="set-row wide"><div class="set-txt"><div class="set-lbl">OpenRouter key</div><div class="set-desc">Every model call and web search is billed to this key.</div></div><div class="set-ctl"><div class="keyrow"><input id="fKey" type="password" placeholder="sk-or-v1-…" autocomplete="off" aria-label="OpenRouter key"><button class="btn ghost" id="btnTest" type="button">Test</button></div><div class="set-state" id="keyState">not set</div></div></div><div class="set-row wide"><div class="set-txt"><div class="set-lbl">Management key <span class="opt">optional</span></div><div class="set-desc">Adds your full account usage history. Not needed to run the agent.</div></div><div class="set-ctl"><div class="keyrow"><input id="fMgmtKey" type="password" placeholder="sk-or-v1-…" autocomplete="off" aria-label="Management key"><button class="btn ghost" id="btnTestMgmt" type="button">Test</button></div><div class="set-state" id="mgmtKeyState">not set</div></div></div><div class="set-actions"><span class="set-hint">Keys are saved only when you press Save keys.</span><button class="btn" id="btnSave" type="button">Save keys</button></div></div>
         <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Balance</div><div class="set-desc">Read from OpenRouter when the app starts and after each run.</div></div><div class="set-ctl"><div class="bal"><b id="acctBalance">—</b></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Usage history</div><div class="set-desc">Per-model spend on this key.</div></div><div class="set-ctl"><button class="btn ghost" id="btnUsage" type="button">Open usage</button></div></div></div>
-        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Updates</div><div class="set-desc" id="updDesc">Checks for new versions when the app starts and every few hours.</div></div><div class="set-ctl"><button class="btn ghost" id="btnUpdCheck" type="button">Check now</button></div></div></div>
+        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Updates</div><div class="set-desc" id="updDesc">Checks for new versions shortly after the app starts, every 30 minutes, and when you come back to the window.</div></div><div class="set-ctl"><button class="btn ghost" id="btnUpdCheck" type="button">Check now</button></div></div></div>
       </div>
     </section>
 
@@ -5114,15 +5114,17 @@ function anyRunBusy(){ for (const v of viewStore.values()) if (v.busy) return tr
 function paintUpdate(){
   const st = UPD || {}, pill = $('updPill'), txt = $('updTxt'), desc = $('updDesc');
   const ver = st.version ? 'Version ' + st.version : 'Version unknown';
+  // When it last looked, so "up to date" can be trusted (or not).
+  const at = st.checkedAt ? new Date(st.checkedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
   const lines = {
     off: st.reason || '',
-    idle: 'checks when the app starts and every few hours',
+    idle: 'checks shortly after the app starts, then every 30 minutes',
     checking: 'checking for updates\u2026',
-    current: 'up to date',
+    current: 'up to date' + (at ? ' \u00b7 checked ' + at : ''),
     downloading: 'downloading ' + st.next + ' (' + (st.percent || 0) + '%)',
     ready: st.next + ' is downloaded; restart to use it',
     refused: st.error || 'an update was refused',
-    error: 'could not check: ' + (st.error || 'unknown error'),
+    error: 'could not check: ' + (st.error || 'unknown error') + ' \u00b7 trying again in a few minutes',
   };
   if (desc) desc.textContent = ver + (lines[st.state] ? ' \u00b7 ' + lines[st.state] : '');
   const btn = $('btnUpdCheck');
