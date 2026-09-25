@@ -599,6 +599,28 @@ async function drain(gen) {
     check('a .cmd checker goes through cmd.exe (Node refuses it otherwise)', LSP.includes("if (process.platform === 'win32' && /\\.(cmd|bat)$/i.test(cmd)) {"), 'EINVAL');
   }
 
+  // ------------------------------------------------------------------ [CX]
+  console.log('\n[CX] Stop works while an action is stuck; the browser has time limits');
+  {
+    // ask_user with nobody answering stands in for a tool that never returns.
+    fakeOpenRouter((n) => (n === 1 ? call('stuck1', 'ask_user', { question: 'still there?' }) : say('done')));
+    const ctl = new AbortController();
+    const sess = { id: 'cx', workdir: WD, messages: [] };
+    setTimeout(() => ctl.abort(), 500);
+    const t0 = Date.now();
+    const ev = await drain(runAgent({ session: sess, userText: 'go', apiKey: 'k', model: 'm', access: 'full', signal: ctl.signal, askPermission: async () => true, userInput: () => new Promise(() => {}), maxTurns: 3 }));
+    const took = Date.now() - t0;
+    check('Stop ends a run whose action is stuck', ev.some((e) => e.type === 'cancelled') && took < 3000, { took, types: ev.map((e) => e.type) });
+    const last = sess.messages[sess.messages.length - 1];
+    check('the stuck call still gets a result, so the history stays valid', last && last.role === 'tool' && last.tool_call_id === 'stuck1' && /stopped by the user/.test(last.content), last);
+    const cdp = require(path.join(ROOT, 'src/backend/cu/cdp.js'));
+    const t1 = Date.now();
+    let err = null;
+    try { await cdp.withTimeout(new Promise(() => {}), 'Runtime.evaluate', 200); } catch (e) { err = e; }
+    check('a browser command that never answers fails after its limit', err && /did not answer \(Runtime\.evaluate\)/.test(err.message) && Date.now() - t1 < 1500, err && err.message);
+    check('every browser command goes through the limit', read('src/backend/cu/cdp.js').includes('return withTimeout(C.attachedWC.debugger.sendCommand(method, params)'), 'no limit');
+  }
+
   // ------------------------------------------------------------------ [CP]
   console.log('\n[CP] updates come from CodeRook, and only signed ones install');
   {

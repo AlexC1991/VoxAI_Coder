@@ -920,6 +920,18 @@ async function* runAgent(opts) {
         for (;;) {
           while (emitQueue.length) { const e = emitQueue.shift(); if (e) yield e; }
           if (toolSettled) break;
+          // Stop must work even while a tool is stuck: a browser read that never
+          // answered held the run for minutes and Stop did nothing. Found in a live run.
+          // The call still gets a result, so the history stays valid for the next turn.
+          if (signal && signal.aborted) {
+            emitWake = null;
+            const msg = 'DENIED_OR_ERROR: stopped by the user while this was still running.';
+            session.messages.push({ role: 'tool', tool_call_id: id, content: msg });
+            yield { type: 'tool_end', id, name: tc.name, ok: false, result: msg };
+            bg.cancelAll(session.id);
+            yield { type: 'cancelled' };
+            return;
+          }
           // pushEvent() resolves this the moment anything is emitted, and again when
           // the tool settles. The timer is only a backstop so a lost wake-up costs a
           // quarter second of latency rather than the whole run.

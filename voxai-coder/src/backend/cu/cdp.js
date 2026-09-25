@@ -108,21 +108,38 @@ async function newTarget(port, url) {
   return res.json();
 }
 
-function send(method, params = {}) {
+/**
+ * Every command has a time limit. Without one, a page that stopped answering (a read
+ * of the preview never came back) held the agent for minutes. Found in a live run.
+ * A screenshot is optional, so it gets less time.
+ */
+const SEND_TIMEOUT_MS = 20000;
+function withTimeout(p, method, ms, onTimeout) {
+  let t;
+  const limit = new Promise((_, reject) => {
+    t = setTimeout(() => {
+      try { if (onTimeout) onTimeout(); } catch {}
+      reject(new Error(`the page did not answer (${method}) within ${Math.round(ms / 1000)}s -- it may be busy or hidden; reload it or try again`));
+    }, ms);
+  });
+  return Promise.race([p, limit]).finally(() => clearTimeout(t));
+}
+
+function send(method, params = {}, ms = method === 'Page.captureScreenshot' ? 10000 : SEND_TIMEOUT_MS) {
   if (!C) return Promise.reject(new Error('computer-use browser not initialized'));
   if (C.attachedWC && C.attachedWC.debugger) {
     // Drive the real in-app browser (Atlas) via Electron's CDP debugger.
-    return C.attachedWC.debugger.sendCommand(method, params).catch((e) => {
+    return withTimeout(C.attachedWC.debugger.sendCommand(method, params).catch((e) => {
       throw new Error((e && e.message) || 'cdp error');
-    });
+    }), method, ms);
   }
   if (!C.ws) return Promise.reject(new Error('computer-use browser not initialized'));
   const id = ++C.seq;
-  return new Promise((resolve, reject) => {
+  return withTimeout(new Promise((resolve, reject) => {
     C.pending[id] = { resolve, reject };
     try { C.ws.send(JSON.stringify({ id, method, params })); }
     catch (e) { delete C.pending[id]; reject(e); }
-  });
+  }), method, ms, () => { delete C.pending[id]; });
 }
 
 async function bindPage(wsUrl, onUserEvent) {
@@ -430,4 +447,4 @@ async function attach(wc) {
   return { ok: true, surface: 'atlas' };
 }
 
-module.exports = { launch, navigate, getState, clickInput, typeInput, pressInput, scrollInput, screenshot, list, close, attach, showPointer, showHighlight, ensureOverlay, cleanup, ensureReady, findChrome };
+module.exports = { withTimeout, launch, navigate, getState, clickInput, typeInput, pressInput, scrollInput, screenshot, list, close, attach, showPointer, showHighlight, ensureOverlay, cleanup, ensureReady, findChrome };
