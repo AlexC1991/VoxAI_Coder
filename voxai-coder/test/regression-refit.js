@@ -786,7 +786,7 @@ async function drain(gen) {
       v2.queue.shift(); sync(v2);
       check('and follows it as it moves up', v2.steerIdx === 1 && v2.queue[v2.steerIdx] === C, v2.steerIdx);
       check('a message going out re-finds the one being steered', H.includes('const next = v.queue.shift();\n  syncSteer(v);'), 'index kept');
-      check('Send on the start screen starts a session instead of doing nothing', /async function send\(\)\{\s*let v = actView\(\);[\s\S]{0,400}if \(!v\) \{\s*if \(!\$\('prompt'\)\.value\.trim\(\)\) return;[\s\S]{0,120}try \{ await newSession\(\); \}/.test(H), 'nothing');
+      check('Send on the start screen starts a session instead of doing nothing', /async function send\(\)\{\s*let v = actView\(\);[\s\S]{0,900}if \(!v\) \{\s*if \(!\$\('prompt'\)\.value\.trim\(\)\) return;[\s\S]{0,120}try \{ await newSession\(\); \}/.test(H), 'nothing');
       check('Edit does not replace a draft', H.includes("if (ta.value.trim()) { toast('Send or clear what you are typing first, then edit this message.'); return; }"), 'replaced');
       check('Edit brings back the steer note and images', H.includes("ta.value = item.steer ? raw + '\\n\\n' + item.steer : raw;") && H.includes("if (url) PENDING_ATTACH.push({ dataUrl: url, name: 'image' });"), 'dropped');
     }

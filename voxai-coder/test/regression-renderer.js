@@ -370,7 +370,11 @@ check('diff refuses without a workdir', HTML.includes('const v = actView(); cons
 check('main will not guess the project', MAIN.includes('unknown: true'), 'still falls back');
 check('preview history is per session', HTML.includes('v.ppHistory'), 'global history');
 // Both session-entry paths must clear the tray: creating one, and switching to one.
-check('attachments do not follow you', (HTML.match(/try \{ clearAttachments\(\); \} catch \{\}/g) || []).length >= 2, 'tray carried over');
+// A new session clears the tray; switching to one brings back ITS attachments (each
+// session keeps its own draft), so nothing crosses from one to another.
+check('attachments do not follow you', (HTML.match(/try \{ clearAttachments\(\); \} catch \{\}/g) || []).length >= 1
+  && HTML.includes("PENDING_ATTACH = (v && v.draftAttach) ? v.draftAttach.slice() : [];")
+  && HTML.includes('if (prevView && prevView !== v) restoreDraft(v);'), 'tray carried over');
 // Things that SHOULD be shared are left alone.
 const FRESH = fs.readFileSync(path.join(ROOT, 'src/backend/tools/freshness.js'), 'utf8');
 check('freshness guard stays keyed by file, not session', FRESH.includes('fullPath'), 'wrongly scoped');
