@@ -163,7 +163,7 @@ check('closing resets the split', /atlasOpen = false;[\s\S]{0,140}atlasFrac = 0\
 
 console.log('\n[AA] a warning is not an error');
 check('warnings default to amber', /\.\msg\.\warn{[^}]*var\(--gold\)/.test(HTML), 'still red');
-check('only real breakage goes red', HTML.includes("' severe'"), 'no severity split');
+check('only real breakage goes red', HTML.includes("tone: severe ? 'bad' : 'warn'"), 'no severity split');
 const AG = fs.readFileSync(path.join(ROOT, 'src/backend/agent.js'), 'utf8');
 check('one helper reads every cache field', AG.includes('function cacheReadTokens'), 'missing helper');
 check('accounting and warning agree', (AG.match(/cacheReadTokens\(/g) || []).length >= 3, 'not shared');

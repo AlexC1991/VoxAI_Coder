@@ -511,6 +511,12 @@ async function drain(gen) {
     check('the changes strip is re-read when a run finishes', HTML.includes("refreshSessionList(); refreshUsage(); if (sid === activeId) refreshCtx();"), 'stale after a run');
     check('and soon after each file change', HTML.includes('v.ctxTimer = setTimeout(refreshCtx, 700);'), 'stale during a run');
     check('the strip asks about the session\'s own folder', HTML.includes('const r = await window.voxai.workspaceContext(wd);'), 'empty after a reload');
+    check('the spend limit is a notice with Continue and Change the limit', HTML.includes("title: 'Stopped at the spend limit'") && HTML.includes("{ label: 'Change the limit', ghost: true, onClick: () => openModal('spend') }"), 'old box');
+    check('the turn limit is a notice with Continue', HTML.includes("title: event.turns ? 'Paused after ' + event.turns + ' turns' : 'Paused'"), 'old box');
+    check('an error is a notice, not "Error: …" as text', HTML.includes("title: 'Something went wrong'") && !HTML.includes("addMsg('Error: ' + event.message)"), 'bare text');
+    check('a message that could not be sent is a notice, and says it is back in the box', HTML.includes("title: 'Couldn’t send that', text: tidyPaths(reason) + ' Your message is back in the box.'") && !HTML.includes("addMsg('Error: ' + reason, true)"), 'bare Error: text');
+    check('a tiny spend limit is not shown as $0.00', HTML.includes('money(event.budget, Number(event.budget) < 0.01 ? 5 : 2)'), '$0.00');
+    check('Settings shows the real version', HTML.includes('<span id="setVersion">') && !HTML.includes('VoxAI Coder 0.1</div>'), '0.1');
     check('memory rows read as words', HTML.includes("if (act === 'add') return pick('list', 'Remembered', 'Remembering');"), 'Memory · add (2)');
   }
 

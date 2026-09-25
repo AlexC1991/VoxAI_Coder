@@ -517,6 +517,15 @@ tests"). Scroll the row instead of breaking words:
 .toolrow.open > .top .tr-chev{transform:rotate(90deg)}
 .tr-spin{width:13px;height:13px;flex:none;margin:0 1px;border-radius:50%;background:conic-gradient(var(--gold) 0 90deg,rgba(200,169,97,.18) 90deg 360deg);-webkit-mask:radial-gradient(circle,transparent 52%,#000 54%);mask:radial-gradient(circle,transparent 52%,#000 54%);animation:trspin .85s linear infinite}
 @keyframes trspin{to{transform:rotate(360deg)}}
+.notice{display:flex;gap:9px;align-items:flex-start;padding:4px 0;margin:2px 0;font-size:13.5px;line-height:1.5;color:var(--dim);animation:rowIn .24s ease}
+.notice .tr-ic{margin-top:3px}
+.nt-body{min-width:0;flex:1}
+.nt-title{color:var(--mut)}
+.nt-text{color:var(--sub);font-size:13px;overflow-wrap:anywhere}
+.nt-acts{display:flex;gap:6px;margin-top:6px;flex-wrap:wrap}
+.notice.warn .tr-ic{stroke:var(--gold)}
+.notice.bad .tr-ic{stroke:var(--del)}
+.notice.bad .nt-title{color:var(--del)}
 .pv-acts{display:flex;gap:6px;flex:none}
 .pv-acts[hidden]{display:none}
 .pv-btn{font:12.5px Chivo,sans-serif;color:var(--gold);background:none;border:1px solid var(--goldedge);border-radius:6px;padding:1px 10px;cursor:pointer}
@@ -950,7 +959,7 @@ tests"). Scroll the row instead of breaking words:
     <button type="button" data-set="web"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16" y2="16"/></svg>Web search</button>
     <button type="button" data-set="subs"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="14" width="7" height="7" rx="1.5"/></svg>Sub-agents</button>
     <button type="button" data-set="ctx"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/></svg>Context</button>
-    <div class="set-foot">Changes save as you make them.<br>VoxAI Coder 0.1</div>
+    <div class="set-foot">Changes save as you make them.<br><span id="setVersion">VoxAI Coder</span></div>
   </nav>
   <div class="set-main">
     <button type="button" class="set-x" id="btnClose" aria-label="Close settings">✕</button>
@@ -2292,6 +2301,8 @@ const ROW_ICON = {
   eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
   ask: '<path d="M21 12a8 8 0 0 1-11.5 7.2L4 20l1-4.6A8 8 0 1 1 21 12z"/>',
   tool: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>',
+  alert: '<path d="M12 3l9.5 17h-19z"/><path d="M12 10v4M12 17.5h.01"/>',
+  pause: '<circle cx="12" cy="12" r="9"/><path d="M10 9v6M14 9v6"/>',
 };
 function trIcon(key){
   const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -2579,6 +2590,31 @@ function markPreviewRows(st){
   if (!st || !st.open || !st.url) return;
   document.querySelectorAll('.pv-row').forEach((row) => { if (row._opened && samePreviewUrl(st.url, row.dataset.url)) row._opened(true); });
 }
+/**
+ * A run stopping or warning, in the thread's own shape: an icon, a line saying what
+ * happened, a quieter line of detail, and small buttons when there is something to do.
+ * These were bordered boxes in the old style -- the last of them.
+ */
+function noticeRow({ tone, icon, title, text, actions }){
+  const box = el('div', 'notice' + (tone ? ' ' + tone : ''));
+  box.appendChild(trIcon(icon || 'alert'));
+  const body = el('div', 'nt-body');
+  const t = el('div', 'nt-title'); t.textContent = title || ''; body.appendChild(t);
+  if (text) { const x = el('div', 'nt-text'); x.textContent = text; body.appendChild(x); }
+  if (actions && actions.length) {
+    const a = el('div', 'nt-acts');
+    for (const ac of actions) {
+      const b = el('button', 'pv-btn' + (ac.ghost ? ' ghost' : '')); b.type = 'button'; b.textContent = ac.label;
+      b.onclick = () => ac.onClick(b, box);
+      a.appendChild(b);
+    }
+    body.appendChild(a);
+  }
+  box.appendChild(body);
+  return box;
+}
+/** Carry on after a stop: the same as typing "continue". */
+function continueRun(b){ if (b) b.disabled = true; const p = $('prompt'); if (p) { p.value = 'continue'; send(); } }
 /** A quiet row that is not a tool call: a notice in the same shape as the rest. */
 function noteRow({ icon, verb, chip, meta, bad }){
   const row = el('div', 'toolrow note-row' + (bad ? ' fail' : ''));
@@ -3958,14 +3994,12 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     clearTimeout(v.statusTimer);
     finalizeStream(); finalizeRunCard();
     clearStatus();
-    const box = el('div', 'md');
-    box.style.cssText = 'border:1px solid var(--edge2);border-left:3px solid var(--del);border-radius:0 6px 6px 0;padding:10px 12px';
-    const txt = document.createElement('div');
-    txt.textContent = event.message || 'Run stopped at its spend limit.';
-    const hint = document.createElement('div');
-    hint.style.cssText = 'font-size:12px;color:var(--faint);margin-top:6px';
-    hint.textContent = 'Raise SPEND LIMIT PER RUN in Settings, then send "continue".';
-    box.appendChild(txt); box.appendChild(hint);
+    const money = (x, d) => '$' + Number(x || 0).toFixed(d);
+    const box = noticeRow({
+      tone: 'warn', icon: 'pause', title: 'Stopped at the spend limit',
+      text: (event.budget != null ? 'Spent ' + money(event.spent, 4) + ' of the ' + money(event.budget, Number(event.budget) < 0.01 ? 5 : 2) + ' limit per run. ' : '') + 'Work so far is saved.',
+      actions: [{ label: 'Continue', onClick: continueRun }, { label: 'Change the limit', ghost: true, onClick: () => openModal('spend') }],
+    });
     const rr = RR(); if (rr) { rr.appendChild(box); followThread(); }
     v.busy = false; v.activity = '';
     v.runKeys.delete(runKey);
@@ -3978,20 +4012,11 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     clearTimeout(v.statusTimer);
     finalizeStream(); finalizeRunCard();
     clearStatus();
-    const box = el('div', 'md');
-    box.style.cssText = 'border:1px solid var(--edge2);border-left:3px solid var(--gold);border-radius:0 6px 6px 0;padding:10px 12px';
-    const txt = document.createElement('div');
-    txt.textContent = event.message || ('Paused after ' + (event.turns || '') + ' turns.');
-    const go = document.createElement('button');
-    go.className = 'btn';
-    go.textContent = 'Continue';
-    go.style.marginTop = '8px';
-    go.onclick = () => {
-      go.disabled = true;
-      const p = $('prompt');
-      if (p) { p.value = 'continue'; send(); }
-    };
-    box.appendChild(txt); box.appendChild(go);
+    const box = noticeRow({
+      tone: 'warn', icon: 'pause', title: event.turns ? 'Paused after ' + event.turns + ' turns' : 'Paused',
+      text: 'A guard against runaway loops, not an error. Work so far is saved.',
+      actions: [{ label: 'Continue', onClick: continueRun }],
+    });
     const rr = RR(); if (rr) { rr.appendChild(box); followThread(); }
     v.busy = false; v.activity = '';
     v.runKeys.delete(runKey);
@@ -4003,7 +4028,7 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     finalizeStream(); sealThinking(v); finalizeRunCard();
     clearStatus();
     if (event.type === 'cancelled') { const r = RR(); if (r) r.appendChild(el('div', 'fold', 'stopped')); }
-    else addMsg('Error: ' + event.message);
+    else { const r = RR(); if (r) { r.appendChild(noticeRow({ tone: 'bad', icon: 'alert', title: 'Something went wrong', text: tidyPaths(String(event.message || 'The run stopped with an error.')) })); followThread(); } }
     v.busy = false; v.activity = '';
     v.runKeys.delete(runKey);
     if (sid === activeId) { $('runDot').style.display = 'none'; updateSendState(); paintShelf(); }
@@ -4072,8 +4097,7 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     // directly in the thread so the user is told BEFORE a request hangs.
     // Only genuine breakage gets the red treatment.
     const severe = ['context-over-hard-limit', 'budget-unenforceable'].includes(event.code);
-    const box = el('div', 'msg warn' + (severe ? ' severe' : ''));
-    box.textContent = event.message || (event.code || 'warning');
+    const box = noticeRow({ tone: severe ? 'bad' : 'warn', icon: 'alert', title: severe ? 'This may not work' : 'Heads-up', text: tidyPaths(String(event.message || event.code || '')) });
     const r = RR(); if (r) { r.appendChild(box); followThread(); }
   } else if (event.type === 'auto_check') {
     // Auto mode checking an action: say so on the shelf; a block shows on the tool row.
@@ -4978,7 +5002,11 @@ async function doSend(v, text, parts){
       .replace(/^(Error:\s*)+/, '');
     // Nothing was sent, so the message is not drawn as sent: it goes back in the box.
     try { if (bubble) bubble.remove(); } catch {}
-    if (cur) { T = cur; clearStatus(); addMsg('Error: ' + reason, true); T = null; cur.busy = false; paintShelf(); }
+    if (cur) {
+      T = cur; clearStatus();
+      const r = RR(); if (r) { r.appendChild(noticeRow({ tone: 'bad', icon: 'alert', title: 'Couldn’t send that', text: tidyPaths(reason) + ' Your message is back in the box.' })); followThread(); }
+      T = null; cur.busy = false; paintShelf();
+    }
     // The run never started, so nothing was sent. Hand the message back: a refusal like
     // "this model cannot read images — switch model and send again" is useless if the
     // image has already been cleared and has to be attached all over again.
@@ -5243,6 +5271,7 @@ function paintUpdate(){
     error: 'could not check: ' + (st.error || 'unknown error') + ' \u00b7 trying again in a few minutes',
   };
   if (desc) desc.textContent = ver + (lines[st.state] ? ' \u00b7 ' + lines[st.state] : '');
+  if ($('setVersion') && st.version) $('setVersion').textContent = 'VoxAI Coder ' + st.version;
   const btn = $('btnUpdCheck');
   if (btn) {
     btn.disabled = ['off', 'checking', 'downloading'].includes(st.state);
