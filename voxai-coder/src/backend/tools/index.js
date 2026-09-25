@@ -14,7 +14,7 @@
 const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
-const { execFile } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const procs = require('./procs');
 const { eolOf, toEol } = require('./eol');
 const { decodeOutput } = require('./decode');
@@ -23,7 +23,7 @@ function tool(name, description, parameters, run) {
   return { def: { type: 'function', function: { name, description, parameters } }, run };
 }
 
-const { markSeen, assertFresh } = require('./freshness');
+const { markSeen, assertFresh, wasSeen } = require('./freshness');
 const { withVerification } = require('./verify');
 
 const READ_MAX_LINES = 2000;
@@ -44,7 +44,16 @@ const read = tool('read',
     additionalProperties: false,
   }, async ({ path: p, offset, limit }, ctx) => {
     const full = resolveIn(ctx.workdir, p);
-    const text = await fsp.readFile(full, 'utf8');
+    const buf = await fsp.readFile(full);
+    // A binary file read as text came back as mangled bytes the model then reasoned
+    // about. Say what it is instead. (A NUL in the first 8 KB is what git calls binary.)
+    if (buf.subarray(0, 8192).includes(0)) {
+      const ext = path.extname(full).toLowerCase();
+      const image = /^\.(png|jpe?g|gif|webp|bmp|ico|svgz)$/.test(ext);
+      throw new Error(`${p} is a binary file (${buf.length.toLocaleString()} bytes${ext ? ', ' + ext.slice(1) : ''}), not text, so it cannot be read.`
+        + (image ? ' To look at an image, open it with the computer tool (nativePath).' : ''));
+    }
+    const text = buf.toString('utf8');
     markSeen(full, text); // arms the freshness guard for later edits
     // The newline that ends the last line does not start another: a one-line file
     // read as "2 lines". Found in a live run.
@@ -83,6 +92,12 @@ const write = tool('write', 'Create or overwrite a file (creates parent dirs).',
   // changed in a diff.
   let existing = null;
   try { existing = await fsp.readFile(full, 'utf8'); } catch { existing = null; }
+  // Overwriting a file the model has never looked at replaced "important user notes"
+  // without a word. It has to read it first -- one step, and nothing is lost unseen.
+  if (existing != null && existing.length && !wasSeen(full)) {
+    throw new Error(`${p} already exists and you have not read it yet, so it was NOT overwritten. `
+      + 'Read it first, then write it (or use edit to change part of it), so nothing in it is lost unseen.');
+  }
   if (existing != null) content = toEol(content, eolOf(existing));
   await fsp.writeFile(full, content, 'utf8');
   markSeen(full, content);
@@ -269,14 +284,28 @@ const shell = tool('shell', SHELL_DESC, {
   };
   let timedOut = false, stopped = false, heldOpen = false, left = [];
   const [exe, argv] = procs.shellArgs(command);
-  const child = execFile(exe, argv, {
-    cwd: ctx.workdir, env: procs.childEnv(), maxBuffer: 4 * 1024 * 1024, windowsHide: true, windowsVerbatimArguments: isWin, encoding: 'buffer',
-  }, async (err, stdout, stderr) => {
+  // Output is kept as a rolling tail, however much there is. A 4 MB buffer used to be
+  // the limit: a test run printing 7 MB was killed part-way and reported "exit 1", with
+  // its final "ALL TESTS PASSED" line never seen. Found in a live run.
+  const TAIL = 256 * 1024;
+  const sink = () => ({ chunks: [], size: 0, total: 0 });
+  const outS = sink(), errS = sink();
+  const keep = (s, b) => {
+    s.chunks.push(b); s.size += b.length; s.total += b.length;
+    while (s.size - s.chunks[0].length >= TAIL) s.size -= s.chunks.shift().length;
+  };
+  const child = spawn(exe, argv, { cwd: ctx.workdir, env: procs.childEnv(), windowsHide: true, windowsVerbatimArguments: isWin });
+  child.stdout.on('data', (b) => keep(outS, b));
+  child.stderr.on('data', (b) => keep(errS, b));
+  child.on('close', async (code) => {
     clearTimeout(timer); clearTimeout(graceTimer);
     if (ctx.signal) ctx.signal.removeEventListener('abort', onStop);
-    const cap = (s) => decodeOutput(s).split('\n').slice(-400).join('\n').slice(-12000);
-    const out = { command, exit: err && typeof err.code === 'number' ? err.code : (err ? 1 : 0), stdout: cap(stdout), stderr: cap(stderr),
+    const cap = (s) => decodeOutput(Buffer.concat(s.chunks)).split('\n').slice(-400).join('\n').slice(-12000);
+    const skipped = (s) => Math.max(0, s.total - Buffer.byteLength(cap(s)));
+    const out = { command, exit: typeof code === 'number' ? code : 1, stdout: cap(outS), stderr: cap(errS),
       ...(timedOut ? { timedOut: true } : {}), ...(stopped ? { stopped: true } : {}) };
+    // Say how much was left out, so a long log is not mistaken for the whole of it.
+    if (skipped(outS) > 0) out.stdoutOmitted = `${skipped(outS).toLocaleString()} earlier bytes of output are not shown; this is the end of it`;
     if (heldOpen) {
       // The shell is done but something it started is not. Say what, and keep track of
       // it so it does not outlive the app.
@@ -291,10 +320,10 @@ const shell = tool('shell', SHELL_DESC, {
     }
     resolve(out);
   });
+  let graceTimer = null;
   // When the shell itself has exited, its output is complete: anything still holding
   // the pipe is a process it left behind (a server started with start /b or &). Waiting
   // for that pipe to close is what hung the run. Give it a moment, then stop waiting.
-  let graceTimer = null;
   child.on('exit', () => {
     graceTimer = setTimeout(() => {
       heldOpen = true;

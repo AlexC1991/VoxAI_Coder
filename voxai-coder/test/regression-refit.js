@@ -658,6 +658,29 @@ async function drain(gen) {
         check('a folder listing shows accented names', d.stdout.includes('café'), d.stdout);
       }
     }
+    // A 7 MB test log hit the 4 MB buffer: killed part-way, "exit 1", verdict lost. A
+    // PNG read came back as mangled text. A write replaced a file never read.
+    {
+      const { buildTools } = require(path.join(ROOT, 'src/backend/tools/index.js'));
+      const xctx = { workdir: WD, session: { id: 'edge', workdir: WD, messages: [], todos: [] }, emit: () => {}, resolveIn: (w, p) => path.resolve(w, p), checkPermission: async () => {} };
+      const T = Object.fromEntries(buildTools(xctx).ALL.map((t) => [t.def.function.name, t]));
+      fs.writeFileSync(path.join(WD, 'loud.js'), "for (let i = 0; i < 200000; i++) console.log('line ' + i + ' xxxxxxxxxxxxxxxxxxxxxxxxxxxx'); console.log('ALL 42 TESTS PASSED');");
+      const loud = await T.shell.run({ command: 'node loud.js' }, xctx);
+      check('a command with a lot of output runs to the end, with its real exit code', loud.exit === 0 && /ALL 42 TESTS PASSED\s*$/.test(loud.stdout), { exit: loud.exit, tail: loud.stdout.slice(-40) });
+      check('and says the start of it is not shown', /earlier bytes of output are not shown/.test(loud.stdoutOmitted || ''), loud.stdoutOmitted);
+      fs.writeFileSync(path.join(WD, 'pic.png'), Buffer.from('89504e470d0a1a0a0000000d4948445200000001', 'hex'));
+      let rb = null; try { await T.read.run({ path: 'pic.png' }, xctx); } catch (e) { rb = e.message; }
+      check('a binary file is named as one, not read as text', /pic\.png is a binary file .*png.*open it with the computer tool/.test(rb || ''), rb);
+      fs.writeFileSync(path.join(WD, 'notes-user.txt'), 'important user notes\n');
+      let wb = null; try { await T.write.run({ path: 'notes-user.txt', content: 'replaced\n' }, xctx); } catch (e) { wb = e.message; }
+      check('a file never read is not overwritten', /already exists and you have not read it/.test(wb || '') && fs.readFileSync(path.join(WD, 'notes-user.txt'), 'utf8') === 'important user notes\n', wb);
+      await T.read.run({ path: 'notes-user.txt' }, xctx);
+      await T.write.run({ path: 'notes-user.txt', content: 'replaced\n' }, xctx);
+      check('once read, it can be', fs.readFileSync(path.join(WD, 'notes-user.txt'), 'utf8') === 'replaced\n', 'refused');
+      await T.write.run({ path: 'brand-new.txt', content: 'hi\n' }, xctx);
+      await T.write.run({ path: 'brand-new.txt', content: 'hi again\n' }, xctx);
+      check('a file it wrote itself can be written again', fs.readFileSync(path.join(WD, 'brand-new.txt'), 'utf8') === 'hi again\n', 'refused');
+    }
     // A server started with `start /b` held the command's output open: the call never
     // returned, the time limit and Stop killed a shell that had already gone, and the
     // server outlived everything. Found in a live run.

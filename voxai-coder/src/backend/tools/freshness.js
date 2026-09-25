@@ -30,6 +30,11 @@ function forget(fullPath) {
   seen.delete(fullPath);
 }
 
+/** Has the model read (or written) this file in this app run? */
+function wasSeen(fullPath) {
+  return seen.has(fullPath);
+}
+
 /**
  * Throw if the on-disk content no longer matches what was last read.
  * Silent no-op when the file was never read (nothing to compare against) or does
@@ -50,4 +55,4 @@ async function assertFresh(fullPath, relPath) {
   );
 }
 
-module.exports = { markSeen, assertFresh, forget, hashOf };
+module.exports = { markSeen, assertFresh, forget, hashOf, wasSeen };
