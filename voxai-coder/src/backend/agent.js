@@ -54,6 +54,17 @@ const PLAN_NUDGE_AFTER = 4;
 const { normalizeAccess, labelFor } = require('./tools/sandbox');
 const bg = require('./background');
 
+// Waits before retrying a model call that failed in a way that passes (rate limit, busy
+// provider). VOX_RETRY_WAITS_MS ("10,20") shortens them for tests.
+const retryWaits = () => (process.env.VOX_RETRY_WAITS_MS || '3000,8000').split(',').map(Number).filter((n) => n >= 0);
+/** Wait `ms`, or less if the run is stopped. */
+function pauseFor(ms, signal) {
+  return new Promise((resolve) => {
+    const t = setTimeout(resolve, ms);
+    if (signal) signal.addEventListener('abort', () => { clearTimeout(t); resolve(); }, { once: true });
+  });
+}
+
 // A runaway guard, not a budget. A real refactor across several files is routinely
 // 30-40 turns; the old ceiling of 25 cut work off mid-task and reported it as an
 // error. Hitting this now yields a resumable `limit_reached` instead.
@@ -696,22 +707,45 @@ async function* runAgent(opts) {
     const toolCalls = [];
     let finishReason = null;
     try {
-      const r = await chatCompletions({
-        apiKey, host, model, messages,
-        tools: toolList.map((t) => t.def),
-        reasoningEffort, reasoningSpec, maxTokens, signal,
-        sessionId: session.id,   // sticky routing — keeps the cache on one upstream
-        onEvent: (e) => {
-          if (e.token) {
-            content += e.token;
-            if (onLiveEvent) { try { onLiveEvent({ type: 'token', text: e.token }); } catch {} }
+      // A busy or failing provider, or a rate limit, usually passes in seconds; each one
+      // used to end the run. Retried twice, a few seconds apart -- only while nothing of
+      // the answer has been shown, and never after Stop.
+      let r = null;
+      for (let attempt = 0; ; attempt++) {
+        let streamed = false;
+        try {
+          r = await chatCompletions({
+            apiKey, host, model, messages,
+            tools: toolList.map((t) => t.def),
+            reasoningEffort, reasoningSpec, maxTokens, signal,
+            sessionId: session.id,   // sticky routing — keeps the cache on one upstream
+            onEvent: (e) => {
+              if (e.token) {
+                streamed = true;
+                content += e.token;
+                if (onLiveEvent) { try { onLiveEvent({ type: 'token', text: e.token }); } catch {} }
+              }
+              // Reasoning ("thinking") — forward so the renderer can show a thinking block.
+              if (e.reasoning) {
+                streamed = true;
+                if (onLiveEvent) { try { onLiveEvent({ type: 'reasoning', text: e.reasoning }); } catch {} }
+              }
+            },
+          });
+          break;
+        } catch (callErr) {
+          if (!callErr || !callErr.retryable || streamed || attempt >= retryWaits().length || (signal && signal.aborted)) throw callErr;
+          const wait = retryWaits()[attempt];
+          if (onLiveEvent) {
+            // What went wrong, not the advice after it: "…then send again. Trying again"
+            // contradicted itself.
+            const what = String(callErr.message).split(/(?<=\.)\s+/)[0];
+            try { onLiveEvent({ type: 'warning', code: 'retrying', message: `${what} Trying again in ${Math.round(wait / 1000)}s (${attempt + 1} of ${retryWaits().length}).` }); } catch {}
           }
-          // Reasoning ("thinking") — forward so the renderer can show a thinking block.
-          if (e.reasoning) {
-            if (onLiveEvent) { try { onLiveEvent({ type: 'reasoning', text: e.reasoning }); } catch {} }
-          }
-        },
-      });
+          await pauseFor(wait, signal);
+          if (signal && signal.aborted) throw callErr;
+        }
+      }
       content = r.content;
       toolCalls.push(...r.toolCalls);
       finishReason = r.finishReason || null;

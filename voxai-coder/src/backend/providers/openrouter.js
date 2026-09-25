@@ -22,6 +22,35 @@
 const DEFAULT_HOST = 'https://openrouter.ai';
 
 /**
+ * An error response, said the way a person needs it.
+ *
+ * They reached the user as "OpenRouter 402: {"error":{"message":"Insufficient
+ * credits…"}}" -- raw JSON to dig through for what happened and what to do. Found in
+ * a live run. `retryable` marks the ones that pass on their own (rate limits, a busy
+ * or failing provider), which the agent retries before giving up.
+ */
+function responseError(status, text) {
+  let msg = '', meta = null;
+  try { const j = JSON.parse(text); msg = String((j.error && j.error.message) || j.message || ''); meta = j.error && j.error.metadata; } catch { msg = ''; }
+  if (!msg) msg = String(text || '').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 200);
+  const provider = meta && meta.provider_name ? meta.provider_name : '';
+  let raw = '';
+  if (meta && meta.raw) { try { const r = JSON.parse(meta.raw); raw = (r.error && (r.error.message || r.error.type)) || r.type || ''; } catch { raw = String(meta.raw).slice(0, 120); } }
+  let say;
+  if (status === 401 || status === 403) say = 'OpenRouter did not accept the API key. Check it in Settings, under Account.';
+  else if (status === 402) say = 'Your OpenRouter account is out of credits. Add credits at openrouter.ai/settings/credits, then send again.';
+  else if (status === 429) say = `OpenRouter is rate-limiting requests right now${msg ? ` (${msg})` : ''}. Wait a moment and send again.`;
+  else if (status === 400 && /context length|too many tokens|maximum context/i.test(msg)) say = `This conversation is too long for the model (${msg}) Compact it with the button at the top, or pick a model with a larger context.`;
+  else if (status === 404 && /no endpoints/i.test(msg)) say = `No provider is serving this model right now (${msg}) Pick another model.`;
+  else if (status >= 500) say = `The model's provider${provider ? ` (${provider})` : ''} had a problem${raw ? `: ${raw}` : (msg ? `: ${msg}` : '')}. Try again in a moment.`;
+  else say = `OpenRouter ${status}: ${msg || 'the request was refused'}`;
+  const err = new Error(say);
+  err.status = status;
+  err.retryable = status === 429 || status === 408 || status >= 500;
+  return err;
+}
+
+/**
  * fetch() that says what went wrong when the network does.
  *
  * With OpenRouter out of reach, the run ended on "Something went wrong — fetch
@@ -46,6 +75,7 @@ async function post(host, init) {
     const err = new Error(`Could not reach OpenRouter at ${base} (${why}). Check your internet connection`
       + (base === DEFAULT_HOST ? '' : ', or the OpenRouter address in Settings') + ', then send again.');
     err.code = 'unreachable';
+    err.retryable = true;   // a dropped connection or a Wi-Fi blip usually passes in seconds
     throw err;
   }
 }
@@ -137,9 +167,7 @@ async function chatCompletions(opts) {
   });
   if (!res.ok || !res.body) {
     const text = await res.text().catch(() => '');
-    const err = new Error(`OpenRouter ${res.status}: ${text.slice(0, 1200)}`);
-    err.status = res.status;
-    throw err;
+    throw responseError(res.status, text);
   }
   return consumeSSE(res.body, onEvent);
 }
@@ -380,8 +408,8 @@ async function chatOnce({ apiKey, host = DEFAULT_HOST, model, messages, maxToken
     signal,
   });
   const text = await res.text();
-  if (!res.ok) throw new Error(`OpenRouter ${res.status}: ${text.slice(0, 1200)}`);
+  if (!res.ok) throw responseError(res.status, text);
   return JSON.parse(text);
 }
 
-module.exports = { chatCompletions, chatOnce, DEFAULT_HOST, applyCacheBreakpoints, cacheMode, reasoningParam, normalizeReasoning, nearestEffort, EFFORTS };
+module.exports = { chatCompletions, chatOnce, responseError, DEFAULT_HOST, applyCacheBreakpoints, cacheMode, reasoningParam, normalizeReasoning, nearestEffort, EFFORTS };

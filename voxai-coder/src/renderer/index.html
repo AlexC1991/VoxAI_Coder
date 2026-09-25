@@ -2680,7 +2680,18 @@ function stopNotice(ev, live){
     actions: live ? [{ label: 'Continue', onClick: continueRun }] : [],
   });
   const msg = String(ev.message || 'The run stopped with an error.');
-  return noticeRow({ tone: 'bad', icon: 'alert', title: /^Could not reach OpenRouter/.test(msg) ? 'Could not reach OpenRouter' : 'Something went wrong', text: tidyPaths(msg) });
+  // Each kind of failure says what it is in the title; the text says what to do.
+  const TITLES = [
+    [/^Could not reach OpenRouter/, 'Could not reach OpenRouter'],
+    [/^Your OpenRouter account is out of credits/, 'Out of OpenRouter credits'],
+    [/^OpenRouter did not accept the API key/, 'OpenRouter key not accepted'],
+    [/^OpenRouter is rate-limiting/, 'Rate limited'],
+    [/^This conversation is too long for the model/, 'Conversation too long for this model'],
+    [/^No provider is serving this model/, 'Model not available'],
+    [/^The model's provider.* had a problem/, 'The provider had a problem'],
+  ];
+  const hit = TITLES.find(([re]) => re.test(msg));
+  return noticeRow({ tone: 'bad', icon: 'alert', title: hit ? hit[1] : 'Something went wrong', text: tidyPaths(msg) });
 }
 /** Carry on after a stop: the same as typing "continue". */
 function continueRun(b){ if (b) b.disabled = true; const p = $('prompt'); if (p) { p.value = 'continue'; send(); } }
@@ -4208,6 +4219,11 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
       line.title = event.message || '';
       const r = RR(); if (r) { r.appendChild(line); followThread(); }
     }
+  } else if (event.type === 'warning' && event.code === 'retrying') {
+    // A busy provider or a rate limit: the run waits and tries again by itself.
+    setActivity(v, 'Trying again');
+    const box = noticeRow({ tone: 'warn', icon: 'pause', title: 'Trying again', text: tidyPaths(String(event.message || '')) });
+    const r = RR(); if (r) { r.appendChild(box); followThread(); }
   } else if (event.type === 'warning') {
     // Stall-hardening (goose post-mortem): surface compaction/cache warnings
     // directly in the thread so the user is told BEFORE a request hangs.

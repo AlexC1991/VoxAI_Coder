@@ -658,6 +658,45 @@ async function drain(gen) {
         check('a folder listing shows accented names', d.stdout.includes('café'), d.stdout);
       }
     }
+    // OpenRouter errors reached the user as raw JSON, and a busy provider or rate limit
+    // (which passes in seconds) ended the run.
+    {
+      const OR = require(path.join(ROOT, 'src/backend/providers/openrouter.js'));
+      const e402 = OR.responseError(402, JSON.stringify({ error: { message: 'Insufficient credits. Add more using https://openrouter.ai/settings/credits', code: 402 } }));
+      check('no credits says so, and where to add them', /^Your OpenRouter account is out of credits\. Add credits at openrouter\.ai/.test(e402.message) && !/\{/.test(e402.message) && !e402.retryable, e402.message);
+      const e502 = OR.responseError(502, JSON.stringify({ error: { message: 'Provider returned error', code: 502, metadata: { raw: '{"type":"overloaded_error"}', provider_name: 'Anthropic' } } }));
+      check('a provider failure names the provider and is retried', /^The model's provider \(Anthropic\) had a problem: overloaded_error/.test(e502.message) && e502.retryable, e502.message);
+      check('a bad key is not retried', OR.responseError(401, '{}').retryable === false && /did not accept the API key/.test(OR.responseError(401, '{}').message), 'retried');
+      const prevWaits = process.env.VOX_RETRY_WAITS_MS;
+      process.env.VOX_RETRY_WAITS_MS = '20,40';
+      try {
+        const busy = { ok: false, status: 502, body: null, text: async () => JSON.stringify({ error: { message: 'Provider returned error', metadata: { provider_name: 'X', raw: '{"type":"overloaded_error"}' } } }) };
+        fakeOpenRouter(() => say('recovered'));
+        const good = global.fetch;
+        let n = 0;
+        global.fetch = async (...a) => (++n === 1 ? busy : good(...a));
+        const live = [];
+        const ev = await drain(runAgent({ session: { id: 'retry1', workdir: WD, messages: [] }, userText: 'go', apiKey: 'k', model: 'm', access: 'full', askPermission: async () => true, maxTurns: 2, onLiveEvent: (e) => live.push(e) }));
+        const done = ev.find((e) => e.type === 'done');
+        check('a busy provider is retried and the run carries on', done && /recovered/.test(done.content || '') && n === 2, ev.map((e) => e.type));
+        check('and the user is told it is trying again', live.some((e) => e.type === 'warning' && e.code === 'retrying' && /Trying again in 0s \(1 of 2\)/.test(e.message)), live.map((e) => e.type + ':' + (e.code || '')));
+        let m = 0;
+        global.fetch = async () => { m++; return { ok: false, status: 401, body: null, text: async () => '{}' }; };
+        const ev2 = await drain(runAgent({ session: { id: 'retry2', workdir: WD, messages: [] }, userText: 'go', apiKey: 'k', model: 'm', access: 'full', askPermission: async () => true, maxTurns: 2 }));
+        check('a refused key ends the run at once, with the reason', m === 1 && ev2.some((e) => e.type === 'error' && /did not accept the API key/.test(e.message)), [m, ev2.map((e) => e.type)]);
+        process.env.VOX_RETRY_WAITS_MS = '5000';
+        global.fetch = async () => busy;
+        const ctl = new AbortController();
+        setTimeout(() => ctl.abort(), 150);
+        const t0 = Date.now();
+        const ev3 = await drain(runAgent({ session: { id: 'retry3', workdir: WD, messages: [] }, userText: 'go', apiKey: 'k', model: 'm', access: 'full', askPermission: async () => true, maxTurns: 2, signal: ctl.signal }));
+        check('Stop during the wait ends it at once', Date.now() - t0 < 2000 && ev3.some((e) => e.type === 'cancelled'), [Date.now() - t0, ev3.map((e) => e.type)]);
+      } finally {
+        if (prevWaits === undefined) delete process.env.VOX_RETRY_WAITS_MS; else process.env.VOX_RETRY_WAITS_MS = prevWaits;
+      }
+      const H = read('src/renderer/index.html');
+      check('out of credits is titled so', H.includes("[/^Your OpenRouter account is out of credits/, 'Out of OpenRouter credits'],"), 'generic');
+    }
     // snapshot restore writes files back, yet ran without asking under "Ask first";
     // the agent named levels the menu does not show ("Auto-edit files").
     {
@@ -928,7 +967,7 @@ async function drain(gen) {
       try { await OR.chatOnce({ apiKey: 'x', host: 'http://127.0.0.1:9', model: 'm', messages: [], signal: ac.signal }); } catch (e) { e2 = e; }
       global.fetch = faked;
       check('a Stop still reads as a stop, not as unreachable', e2 && e2.name === 'AbortError' && e2.code !== 'unreachable', e2 && (e2.name + ' ' + e2.message));
-      check('the notice is titled for it', read('src/renderer/index.html').includes("/^Could not reach OpenRouter/.test(msg) ? 'Could not reach OpenRouter' : 'Something went wrong'"), 'generic title');
+      check('the notice is titled for it', read('src/renderer/index.html').includes("[/^Could not reach OpenRouter/, 'Could not reach OpenRouter'],"), 'generic title');
     }
   }
 
