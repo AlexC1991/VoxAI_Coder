@@ -2295,7 +2295,8 @@ function rowLook(name, args, done){
     case 'snapshot': return pick('tool', 'Snapshot');
     case 'skill': return pick('tool', 'Used a skill', 'Using a skill');
     case 'mcp': return pick('tool', 'Called', 'Calling');
-    case 'build_state': return pick('list', 'Build state');
+    // Its notes for the next session: what is done, what is left.
+    case 'build_state': return (args && args.action === 'get') ? pick('list', 'Read progress notes', 'Reading progress notes') : pick('list', 'Saved progress notes', 'Saving progress notes');
     case 'fs': {
       const act = String((args && args.action) || '');
       if (act === 'remove') return pick('file', 'Deleted', 'Deleting');
@@ -2316,6 +2317,7 @@ function rowChip(name, args){
   if ((name === 'read' || name === 'write' || name === 'edit' || name === 'patch') && a.path) return { text: base(a.path), title: String(a.path) };
   if (name === 'shell') { const c = String(a.command || '').replace(/\s+/g, ' ').trim(); return c ? { text: c, title: String(a.command) } : null; }
   if (name === 'todo') return null;
+  if (name === 'build_state') return a.task ? { text: String(a.task), title: String(a.task) } : null;
   // The verb already says remove / move / mkdir; the chip is just the path.
   if (name === 'fs' && a.action === 'move' && a.source) return { text: base(a.source) + ' → ' + base(a.destination), title: a.source + ' → ' + a.destination };
   if (name === 'fs' && a.path) return { text: base(a.path), title: String(a.path) };
@@ -2521,6 +2523,7 @@ function rowMeta(rec){
     if (o.exit) return { html: 'exit ' + o.exit, bad: true };
     return { html: tv && tv.passed !== null ? tv.passed + ' passed' : '' };
   }
+  if (rec.name === 'build_state') return { html: '' };   // the verb says it; "set" says nothing
   const t = summariseResult(rec.name || '', rec.result, true);
   // A summary that is still raw JSON says nothing at a glance; it is behind the click.
   return { html: t === 'done' || t === 'ok' || /^[\[{]/.test(t) ? '' : esc(t) };
