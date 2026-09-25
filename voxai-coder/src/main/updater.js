@@ -27,6 +27,7 @@ const FIRST_CHECK_MS = 15 * 1000;
 const CHECK_EVERY_MS = 30 * 60 * 1000;
 const FOCUS_MIN_GAP_MS = 10 * 60 * 1000;    // coming back to the window checks, at most this often
 const RETRY_AFTER_ERROR_MS = 5 * 60 * 1000;  // offline, or a release still being published
+const INSTALL_WAIT_MS = 30 * 1000;            // Restart pressed and the app is still here: it did not install
 
 /**
  * The exact text that is signed -- one field per line in a fixed order, the free-text
@@ -208,6 +209,17 @@ function initUpdater({ app, send, log = () => {} }) {
       if (st.state !== 'ready' || test) return false;
       // Silent install, then start the new version.
       setImmediate(() => autoUpdater.quitAndInstall(true, true));
+      // Still running well after that: the installer did not start. 0.2.27 shipped a
+      // broken one and Restart silently did nothing. Say so, drop the download, and
+      // fetch it again. (A normal install closes the app within seconds; this timer
+      // goes with it.)
+      const t = setTimeout(() => {
+        log('the update did not install; downloading it again');
+        try { fs.rmSync(path.join(process.env.LOCALAPPDATA || '', 'voxai-coder-updater', 'pending'), { recursive: true, force: true }); } catch {}
+        set({ state: 'error', error: 'The update could not be installed. It will be downloaded again.' });
+        setTimeout(check, 5000);
+      }, INSTALL_WAIT_MS);
+      if (t.unref) t.unref();
       return true;
     },
   };

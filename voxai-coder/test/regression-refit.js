@@ -994,6 +994,10 @@ async function drain(gen) {
       for (const k of ['VOX_UPDATE_TEST', 'VOX_UPDATE_PUBKEY', 'VOX_UPDATE_RETRY_MS', 'VOX_UPDATE_FOCUS_MS', 'VOX_UPDATE_EVERY_MS', 'VOX_UPDATE_FEED']) delete process.env[k];
     }
     const UP = read('src/main/updater.js');
+    // 0.2.27 shipped a 172 KB installer; Restart did nothing and said nothing.
+    check('a Restart that does not install says so and downloads again', UP.includes("set({ state: 'error', error: 'The update could not be installed. It will be downloaded again.' });") && /setTimeout\(\(\) => \{\s*log\('the update did not install/.test(UP) && UP.includes('const INSTALL_WAIT_MS = 30 * 1000;'), 'silent');
+    const RELX = read('scripts/release.js');
+    check('a release refuses a build that did not finish', RELX.includes("if (!fs.existsSync(yml)) die('release/latest.yml is missing, so the build did not finish") && RELX.includes('does not match what the build recorded in latest.yml') && RELX.indexOf('latest.yml is missing') < RELX.indexOf('m.sig = signManifest'), 'publishes it');
     check('an open app checks every 30 minutes', /CHECK_EVERY_MS = 30 \* 60 \* 1000/.test(UP), 'every 4 hours');
     check('update.json is never a cached copy', /update\.json\?t=\$\{Date\.now\(\)\}`, \{ redirect: 'follow', cache: 'no-store' \}/.test(UP), 'cached');
     const MAIN2 = read('src/main/main.js');
