@@ -592,7 +592,11 @@ tests"). Scroll the row instead of breaking words:
   #ctxMeterPct{display:none}
 }
 @container (max-width:470px){
-  .plan-sw{font-size:0;gap:0}
+  /* Scoped to the row: the plain .plan-sw rule further down set font-size back, so the
+     label never hid -- and at 1100px with the preview open, Send (Stop, mid-run) was
+     pushed out of the box and could not be clicked. Found in a live run. */
+  .composer-row .plan-sw{font-size:0;gap:0}
+  .composer-row .chip .cv{display:none}
   #btnMic{display:none}
 }
 .box{overflow:hidden}
@@ -2331,6 +2335,23 @@ function startRunCard(){
 }
 /** Where a step's own things go: inside the open step, else the thread. */
 function flowRoot(v){ return (v && v.curRun && v.curRun.body) || (v && v.root) || null; }
+/**
+ * Each session keeps what was typed and attached in its box. There was one box for all
+ * of them: a draft started in one session followed you into the next -- one Enter from
+ * going to the wrong project -- and the first draft was lost. Found in a live run.
+ */
+function stashDraft(v){
+  if (!v) return;
+  v.draft = $('prompt').value;
+  v.draftAttach = PENDING_ATTACH.slice();
+}
+function restoreDraft(v){
+  const ta = $('prompt');
+  ta.value = (v && v.draft) || '';
+  PENDING_ATTACH = (v && v.draftAttach) ? v.draftAttach.slice() : [];
+  renderAttachTray();
+  ta.dispatchEvent(new Event('input', { bubbles: true }));
+}
 /** A screenshot the agent took, live or on reopening. Only an inline image is drawn. */
 function cuShot(title, dataUrl){
   if (!/^data:image\/(png|jpe?g|webp|gif);base64,/i.test(String(dataUrl || ''))) return null;
@@ -3631,6 +3652,10 @@ async function newSession(dir){
   v.diff = null;
   v.root.innerHTML = '';
   updateSessStats(v);
+  // What was typed in the session being left stays with it; the new one starts empty.
+  // From the start screen, what was typed is for this new session (Send made it).
+  const prevView = actView();
+  if (prevView) { stashDraft(prevView); const ta = $('prompt'); ta.value = ''; ta.dispatchEvent(new Event('input', { bubbles: true })); }
   activeId = created.id;
   $('sessTitle').textContent = created.title || 'New session'; $('sessTitle').title = $('sessTitle').textContent;
   if (window.__syncTitlebar) __syncTitlebar(created.title || 'New session');
@@ -3773,7 +3798,10 @@ async function openSession(id){
   if (v.curStream) { try { v.curStream.classList.remove('live'); } catch {} v.curStream = null; }
   if (v.curRun) { v.curRun = null; }
   v.latestTool = null;
+  const prevView = actView();
+  if (prevView && prevView !== v) stashDraft(prevView);
   activeId = id;
+  if (prevView && prevView !== v) restoreDraft(v);
   $('sessTitle').textContent = v._title || 'Session'; $('sessTitle').title = $('sessTitle').textContent;
   if (window.__syncTitlebar) __syncTitlebar(v._title || 'Session');
   $('sessSub').textContent = v._workdir || '';
@@ -3797,7 +3825,8 @@ async function openSession(id){
   v.ppIdx = (v.ppIdx === undefined) ? -1 : v.ppIdx;
   ppHistory = v.ppHistory;
   ppIdx = v.ppIdx;
-  try { clearAttachments(); } catch {}
+  // Attachments are part of the draft now: stashed with the session left, restored
+  // with this one (restoreDraft), so none crosses into the wrong conversation.
 }
 
 function folderName(workdir){
@@ -5180,6 +5209,13 @@ function stopCurrent(){
 
 async function send(){
   let v = actView();
+  // No key yet: say so first -- before a session is made for a message that cannot go.
+  // It used to be written into the thread as if the model had said it.
+  if ($('prompt').value.trim() && !S.hasOpenRouterKey) {
+    openModal('account');
+    toast('Add your OpenRouter API key first. Every model call is billed to it.');
+    return;
+  }
   // On the start screen no session is open. Typing a message there and pressing Send
   // did nothing at all -- the text sat in the box. Found in a live run. Start one in
   // the default folder, keeping what was typed and attached.
@@ -5196,7 +5232,6 @@ async function send(){
   // An empty box with messages waiting (after a Stop): send the next one.
   if (!text && !v.busy && v.queue && v.queue.length) { drainQueue(v.id, true); return; }
   if (!text) return;
-  if (!S.hasOpenRouterKey) { openModal(); T = v; addMsg('Set your OpenRouter API key in ⚙ Settings first — all agent turns bill through it.'); T = null; return; }
   const parts = pendingAttachments(); // image parts (data URLs)
   if (parts.length && imageProblem()) {
     const iw = $('shImg'); if (iw) { iw.classList.remove('flash'); void iw.offsetWidth; iw.classList.add('flash'); }

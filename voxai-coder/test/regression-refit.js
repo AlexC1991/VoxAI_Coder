@@ -790,6 +790,17 @@ async function drain(gen) {
       check('Edit does not replace a draft', H.includes("if (ta.value.trim()) { toast('Send or clear what you are typing first, then edit this message.'); return; }"), 'replaced');
       check('Edit brings back the steer note and images', H.includes("ta.value = item.steer ? raw + '\\n\\n' + item.steer : raw;") && H.includes("if (url) PENDING_ATTACH.push({ dataUrl: url, name: 'image' });"), 'dropped');
     }
+    // One box for every session: a draft followed you into another session (one Enter
+    // from the wrong project) and the first was lost. With no key, a session was made
+    // and the reminder was written as if the model said it. At 1100px with the preview
+    // open, Send (Stop, mid-run) was pushed out of the box.
+    {
+      const H = read('src/renderer/index.html');
+      check('each session keeps its own draft and attachments', H.includes('if (prevView && prevView !== v) stashDraft(prevView);') && H.includes('if (prevView && prevView !== v) restoreDraft(v);') && /function stashDraft\(v\)\{[\s\S]{0,120}v\.draftAttach = PENDING_ATTACH\.slice\(\);/.test(H), 'shared');
+      check('a new session starts with an empty box, the old draft kept', H.includes("if (prevView) { stashDraft(prevView); const ta = $('prompt'); ta.value = '';"), 'carried');
+      check('no key: said first, no session made, not as the model', /let v = actView\(\);\s*\/\/[^\n]*\n[^\n]*\n\s*if \(\$\('prompt'\)\.value\.trim\(\) && !S\.hasOpenRouterKey\) \{\s*openModal\('account'\);\s*toast\(/.test(H) && !H.includes("addMsg('Set your OpenRouter API key"), 'as a reply');
+      check('narrow, the Plan label really hides so Send stays in the box', H.includes('.composer-row .plan-sw{font-size:0;gap:0}') && H.includes('.composer-row .chip .cv{display:none}'), 'overridden');
+    }
     // Closing the preview and opening it again showed a blank page and "The model
     // hasn't shown anything yet", after two pages had been shown.
     {
