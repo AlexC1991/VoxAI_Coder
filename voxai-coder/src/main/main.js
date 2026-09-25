@@ -1252,3 +1252,6 @@ ipcMain.handle('openrouter:generations', async (_e, { limit = 40, cursor } = {})
 });
 
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
+// Servers and watchers the agent left running end with the app, not after it. A
+// python http.server started for a preview was still listening once the app was gone.
+app.on('will-quit', () => { try { require('../backend/tools/procs').stopAll(); } catch {} });

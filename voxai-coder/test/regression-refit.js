@@ -620,6 +620,33 @@ async function drain(gen) {
     let err = null;
     try { await cdp.withTimeout(new Promise(() => {}), 'Runtime.evaluate', 200); } catch (e) { err = e; }
     check('a browser command that never answers fails after its limit', err && /did not answer \(Runtime\.evaluate\)/.test(err.message) && Date.now() - t1 < 1500, err && err.message);
+    // A server started with `start /b` held the command's output open: the call never
+    // returned, the time limit and Stop killed a shell that had already gone, and the
+    // server outlived everything. Found in a live run.
+    {
+      const { buildTools } = require(path.join(ROOT, 'src/backend/tools/index.js'));
+      const procs = require(path.join(ROOT, 'src/backend/tools/procs.js'));
+      const pctx = { workdir: WD, session: { id: 'bg1', workdir: WD, messages: [], todos: [] }, emit: () => {}, resolveIn: (w, p) => path.resolve(w, p), checkPermission: async () => {} };
+      const sh = buildTools(pctx).ALL.find((t) => t.def.function.name === 'shell');
+      const nodeExe = JSON.stringify(process.execPath);
+      const idle = `${nodeExe} -e "setInterval(()=>{},1000)"`;
+      const t0 = Date.now();
+      const held = await sh.run({ command: process.platform === 'win32' ? `start "" /b ${idle} && echo started` : `${idle} & echo started` }, pctx);
+      check('a command that leaves something running still returns', Date.now() - t0 < 15000 && /started/.test(held.stdout), { ms: Date.now() - t0, held });
+      check('and says what it left running', Array.isArray(held.stillRunning) && held.stillRunning.length >= 1 && /still running/.test(held.note || ''), held.stillRunning);
+      check('which is tracked', procs.list('bg1').length >= 1, procs.list('bg1'));
+      const srv = await sh.run({ background: true, command: `${nodeExe} -e "require('http').createServer((q,s)=>s.end('hi')).listen(0,()=>console.log('listening'))"` }, pctx);
+      check('background: true starts it and returns with its first output', srv.background && srv.running && srv.pid > 0 && /listening/.test(srv.output), srv);
+      const quick = await sh.run({ background: true, command: `${nodeExe} -e "console.log('bad config'); process.exit(4)"` }, pctx);
+      check('one that exits at once says it is not running, and why', quick.running === false && quick.exit === 4 && /bad config/.test(quick.output), quick);
+      const pids = procs.list().map((p) => p.pid);
+      procs.stopAll();
+      await new Promise((r) => setTimeout(r, 1500));
+      const stillAlive = pids.filter((p) => { try { process.kill(p, 0); return true; } catch { return false; } });
+      check('closing the app ends them all', stillAlive.length === 0 && procs.list().length === 0, stillAlive);
+      check('the app does that when it quits', read('src/main/main.js').includes("app.on('will-quit', () => { try { require('../backend/tools/procs').stopAll(); } catch {} });"), 'left running');
+      check('the row says it is running in the background', read('src/renderer/index.html').includes("if (o.background && o.running) return { html: 'running in background' };"), 'silent');
+    }
     // Stop ends the command itself, not only the run: a stopped `ping -n 40` kept going.
     {
       const { buildTools } = require(path.join(ROOT, 'src/backend/tools/index.js'));

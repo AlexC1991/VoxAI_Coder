@@ -15,6 +15,7 @@ const fs = require('fs');
 const fsp = fs.promises;
 const path = require('path');
 const { execFile } = require('child_process');
+const procs = require('./procs');
 
 function tool(name, description, parameters, run) {
   return { def: { type: 'function', function: { name, description, parameters } }, run };
@@ -215,18 +216,27 @@ const SHELL_DESC = process.platform === 'win32'
     + 'use dir / type / where / findstr, chain with &&, env vars as %VAR%, discard output with >NUL. '
     + 'There is no ls, cat, grep, head or 2>/dev/null. Avoid nesting powershell -Command "..." — cmd '
     + 'mangles the quoting; for anything beyond one simple command, write a .py/.js/.ps1 file and run '
-    + 'that instead. Long output is truncated.'
-  : 'Run a command in the session workdir with /bin/sh. Long output is truncated.';
+    + 'that instead. Long output is truncated. '
+    + 'For a server, a watcher or anything else that keeps running, pass background: true (do not use start /b): '
+    + 'it returns once it has started and keeps running until the app closes.'
+  : 'Run a command in the session workdir with /bin/sh. Long output is truncated. '
+    + 'For a server, a watcher or anything else that keeps running, pass background: true (do not use &): '
+    + 'it returns once it has started and keeps running until the app closes.';
 const shell = tool('shell', SHELL_DESC, {
   type: 'object',
   properties: {
     command: { type: 'string' },
     timeout_secs: { type: 'number' },
+    background: { type: 'boolean', description: 'Keep it running after this call returns (servers, watchers). Returns its first output and its pid.' },
   },
   required: ['command'],
-}, ({ command, timeout_secs }, ctx) => new Promise(async (resolve, reject) => {
+}, ({ command, timeout_secs, background }, ctx) => new Promise(async (resolve, reject) => {
   try { await ctx.checkPermission('shell', command); }
   catch (e) { reject(e); return; }
+  if (background) {
+    resolve(await procs.startBackground(command, { cwd: ctx.workdir, sessionId: ctx.session && ctx.session.id }));
+    return;
+  }
   const isWin = process.platform === 'win32';
   // cmd.exe gets the command exactly as written, wrapped in the one pair of quotes /s
   // strips -- what Node's own shell:true does. Left to execFile, every " was escaped
@@ -241,18 +251,45 @@ const shell = tool('shell', SHELL_DESC, {
       else c.kill('SIGKILL');
     } catch {}
   };
-  let timedOut = false, stopped = false;
+  let timedOut = false, stopped = false, heldOpen = false, left = [];
   const child = execFile(isWin ? 'cmd.exe' : '/bin/sh', isWin ? ['/d', '/s', '/c', '"' + command + '"'] : ['-c', command], {
     cwd: ctx.workdir, maxBuffer: 4 * 1024 * 1024, windowsHide: true, windowsVerbatimArguments: isWin,
-  }, (err, stdout, stderr) => {
-    clearTimeout(timer);
+  }, async (err, stdout, stderr) => {
+    clearTimeout(timer); clearTimeout(graceTimer);
     if (ctx.signal) ctx.signal.removeEventListener('abort', onStop);
     const cap = (s) => String(s || '').split('\n').slice(-400).join('\n').slice(-12000);
-    resolve({ command, exit: err && typeof err.code === 'number' ? err.code : (err ? 1 : 0), stdout: cap(stdout), stderr: cap(stderr),
-      ...(timedOut ? { timedOut: true } : {}), ...(stopped ? { stopped: true } : {}) });
+    const out = { command, exit: err && typeof err.code === 'number' ? err.code : (err ? 1 : 0), stdout: cap(stdout), stderr: cap(stderr),
+      ...(timedOut ? { timedOut: true } : {}), ...(stopped ? { stopped: true } : {}) };
+    if (heldOpen) {
+      // The shell is done but something it started is not. Say what, and keep track of
+      // it so it does not outlive the app.
+      left = await procs.leftovers(child.pid);
+      for (const p of left) procs.track({ pid: p.pid, name: p.name, command, sessionId: ctx.session && ctx.session.id });
+      out.stillRunning = left;
+      out.note = left.length
+        ? `The command finished, but ${left.map((p) => `${p.name} (pid ${p.pid})`).join(', ')} it started is still running and kept its output open. `
+          + 'It keeps running until the app closes. For servers and watchers pass background: true instead; '
+          + `to end it now: ${isWin ? `taskkill /pid ${left[0].pid} /T /F` : `kill ${left[0].pid}`}.`
+        : 'The command finished, but something it started held its output open for a while.';
+    }
+    resolve(out);
   });
-  const timer = setTimeout(() => { timedOut = true; killTree(child); }, Math.min(Math.max(timeout_secs || 120, 5), 600) * 1000);
-  const onStop = () => { stopped = true; killTree(child); };
+  // When the shell itself has exited, its output is complete: anything still holding
+  // the pipe is a process it left behind (a server started with start /b or &). Waiting
+  // for that pipe to close is what hung the run. Give it a moment, then stop waiting.
+  let graceTimer = null;
+  child.on('exit', () => {
+    graceTimer = setTimeout(() => {
+      heldOpen = true;
+      try { child.stdout && child.stdout.destroy(); } catch {}
+      try { child.stderr && child.stderr.destroy(); } catch {}
+    }, 1500);
+  });
+  // The time limit and Stop end what the command left behind, too: killing a shell that
+  // had already exited ended nothing.
+  const endAll = () => { killTree(child); procs.leftovers(child.pid).then((ps) => ps.forEach((p) => procs.killTree(p.pid))); };
+  const timer = setTimeout(() => { timedOut = true; endAll(); }, Math.min(Math.max(timeout_secs || 120, 5), 600) * 1000);
+  const onStop = () => { stopped = true; endAll(); };
   if (ctx.signal) { if (ctx.signal.aborted) onStop(); else ctx.signal.addEventListener('abort', onStop, { once: true }); }
   child.on('error', reject);
 }));

@@ -2478,7 +2478,14 @@ function jsonStr(s, key){
 /** A shell result's parts: {command, exit, stdout, stderr}, or the raw text. */
 function shellParts(res){
   const s = String(res || '');
-  try { const o = JSON.parse(s); if (o && typeof o === 'object') return { exit: Number(o.exit) || 0, stdout: String(o.stdout || ''), stderr: String(o.stderr || '') }; } catch {}
+  try {
+    const o = JSON.parse(s);
+    if (o && typeof o === 'object') return {
+      exit: Number(o.exit) || 0, stdout: String(o.stdout || o.output || ''), stderr: String(o.stderr || ''),
+      background: !!o.background, running: !!o.running, pid: o.pid || null, note: String(o.note || ''),
+      left: Array.isArray(o.stillRunning) ? o.stillRunning : [],
+    };
+  } catch {}
   if (/^\s*\{/.test(s)) {
     const ex = /"exit":\s*(-?\d+)/.exec(s);
     return { exit: ex ? Number(ex[1]) : 0, stdout: jsonStr(s, 'stdout') || '', stderr: jsonStr(s, 'stderr') || '' };
@@ -2694,6 +2701,9 @@ function rowMeta(rec){
   if (rec.ok === null) return { html: rec.subs && rec.subs.size ? subMeta(rec) : '' };
   if (rec.name === 'shell') {
     const o = shellParts(rec.result);
+    // Something left running says so on the row: it is still using a port, a file.
+    if (o.background && o.running) return { html: 'running in background' };
+    if (o.left && o.left.length) return { html: 'left running: ' + esc(o.left.map((p) => p.name).join(', ')) };
     const all = o.stdout + '\n' + o.stderr + '\n' + (o.raw || '');
     const tv = testVerdict(all);
     if (tv && tv.failed) return { html: tv.failed + ' failed', bad: true };
@@ -2895,6 +2905,7 @@ function fillDetail(box, rec){
     if (o.stderr.trim()) line(t, 'e', '\n' + trunc(o.stderr.replace(/\s+$/, ''), 20000));
     if (o.exit) line(t, 'e', '\nexit ' + o.exit);
     if (o.raw && o.raw.trim()) t.appendChild(document.createTextNode('\n' + trunc(o.raw, 20000)));
+    if (o.note) line(t, 'p', '\n' + o.note);
     return;
   }
   if (rec.name === 'web_fetch' && rec.display) {
