@@ -9,6 +9,7 @@ const fsp = fs.promises;
 const path = require('path');
 const { markSeen, assertFresh } = require('./freshness');
 const { withVerification } = require('./verify');
+const { eolOf, toEol } = require('./eol');
 
 function countOccurrences(s, sub) {
   let n = 0, i = s.indexOf(sub);
@@ -53,8 +54,12 @@ function makePatchTool({ resolveIn, checkPermission }) {
       const original = await fsp.readFile(full, 'utf8');
       let text = original;
       const applied = [];
-      for (const [i, e] of (args.edits || []).entries()) {
-        if (typeof e.old !== 'string' || typeof e.new !== 'string') throw new Error(`patch edit #${i} needs string old/new`);
+      // Text going in takes the file's line endings (a multi-line `old` never matched
+      // in a Windows file).
+      const eol = eolOf(original);
+      for (const [i, raw] of (args.edits || []).entries()) {
+        if (typeof raw.old !== 'string' || typeof raw.new !== 'string') throw new Error(`patch edit #${i} needs string old/new`);
+        const e = { ...raw, old: toEol(raw.old, eol), new: toEol(raw.new, eol) };
         if (e.old === '') throw new Error(`patch edit #${i}: old cannot be empty`);
         if (e.all) {
           const count = countOccurrences(text, e.old);

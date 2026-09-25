@@ -14,9 +14,20 @@ const { spawn, execFile, execFileSync } = require('child_process');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { decodeOutput } = require('./decode');
 
 const isWin = process.platform === 'win32';
 const running = new Map();   // pid -> { pid, name, command, sessionId, startedAt, log }
+
+/** How a command is run: cmd.exe on Windows, given the command exactly as written. */
+function shellArgs(command) {
+  return isWin ? ['cmd.exe', ['/d', '/s', '/c', '"' + command + '"']] : ['/bin/sh', ['-c', command]];
+}
+// Python writes to a pipe in cp1252 unless told otherwise, so "héllo" came back
+// mangled. Its output is read as UTF-8 (see decode.js for cmd.exe's own).
+function childEnv() {
+  return { ...process.env, PYTHONIOENCODING: process.env.PYTHONIOENCODING || 'utf-8', PYTHONUTF8: process.env.PYTHONUTF8 || '1' };
+}
 
 function killTree(pid) {
   try {
@@ -85,11 +96,12 @@ function startBackground(command, { cwd, sessionId, waitMs = 3000 } = {}) {
     try { fs.mkdirSync(dir, { recursive: true }); } catch {}
     const log = path.join(dir, `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.log`);
     const fd = fs.openSync(log, 'a');
-    const child = spawn(isWin ? 'cmd.exe' : '/bin/sh', isWin ? ['/d', '/s', '/c', '"' + command + '"'] : ['-c', command], {
-      cwd, windowsHide: true, windowsVerbatimArguments: isWin, stdio: ['ignore', fd, fd], detached: !isWin,
+    const [exe, argv] = shellArgs(command);
+    const child = spawn(exe, argv, {
+      cwd, env: childEnv(), windowsHide: true, windowsVerbatimArguments: isWin, stdio: ['ignore', fd, fd], detached: !isWin,
     });
     try { fs.closeSync(fd); } catch {}
-    const read = () => { try { return fs.readFileSync(log, 'utf8').split('\n').slice(-60).join('\n').slice(-4000); } catch { return ''; } };
+    const read = () => { try { return decodeOutput(fs.readFileSync(log)).split('\n').slice(-60).join('\n').slice(-4000); } catch { return ''; } };
     let settled = false;
     const done = (r) => { if (!settled) { settled = true; resolve(r); } };
     child.on('error', (e) => done({ command, background: true, running: false, error: String(e && e.message || e), output: read(), log }));
@@ -106,4 +118,4 @@ function startBackground(command, { cwd, sessionId, waitMs = 3000 } = {}) {
   });
 }
 
-module.exports = { startBackground, leftovers, track, list, stop, stopAll, killTree };
+module.exports = { startBackground, leftovers, track, list, stop, stopAll, killTree, shellArgs, childEnv };

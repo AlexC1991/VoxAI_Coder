@@ -620,6 +620,44 @@ async function drain(gen) {
     let err = null;
     try { await cdp.withTimeout(new Promise(() => {}), 'Runtime.evaluate', 200); } catch (e) { err = e; }
     check('a browser command that never answers fails after its limit', err && /did not answer \(Runtime\.evaluate\)/.test(err.message) && Date.now() - t1 < 1500, err && err.message);
+    // Windows files: an edit on a CRLF file left it with mixed line endings, a
+    // multi-line patch never matched, old_string/new_string crashed edit, and cmd's
+    // own output ("café") came back garbled. Found in a live run.
+    {
+      const { buildTools } = require(path.join(ROOT, 'src/backend/tools/index.js'));
+      const ectx = { workdir: WD, session: { id: 'eol', workdir: WD, messages: [], todos: [] }, emit: () => {}, resolveIn: (w, p) => path.resolve(w, p), checkPermission: async () => {} };
+      const T = Object.fromEntries(buildTools(ectx).ALL.map((t) => [t.def.function.name, t]));
+      const F = (n) => path.join(WD, n);
+      fs.writeFileSync(F('crlf.js'), 'function a() {\r\n  return 1;\r\n}\r\n\r\nfunction b() {\r\n  return 2;\r\n}\r\n');
+      await T.read.run({ path: 'crlf.js' }, ectx);
+      const e1 = await T.edit.run({ path: 'crlf.js', before: 'function b() {\n  return 2;\n}', after: 'function b() {\n  return 3;\n}' }, ectx);
+      const t1 = fs.readFileSync(F('crlf.js'), 'utf8');
+      check('an edit on a Windows file matches exactly and keeps its line endings', e1.match === 'exact' && t1 === 'function a() {\r\n  return 1;\r\n}\r\n\r\nfunction b() {\r\n  return 3;\r\n}\r\n', JSON.stringify(t1));
+      fs.writeFileSync(F('crlf2.js'), 'const a = 1;\r\nconst b = 2;\r\nconst c = 3;\r\n');
+      await T.read.run({ path: 'crlf2.js' }, ectx);
+      await T.patch.run({ path: 'crlf2.js', edits: [{ old: 'const a = 1;\nconst b = 2;', new: 'const a = 10;\nconst b = 20;' }] }, ectx);
+      check('a multi-line patch on a Windows file applies', fs.readFileSync(F('crlf2.js'), 'utf8') === 'const a = 10;\r\nconst b = 20;\r\nconst c = 3;\r\n', fs.readFileSync(F('crlf2.js'), 'utf8'));
+      await T.read.run({ path: 'crlf2.js' }, ectx);
+      await T.write.run({ path: 'crlf2.js', content: 'x\ny\n' }, ectx);
+      check('rewriting a Windows file keeps its endings', fs.readFileSync(F('crlf2.js'), 'utf8') === 'x\r\ny\r\n', fs.readFileSync(F('crlf2.js'), 'utf8'));
+      await T.write.run({ path: 'fresh.txt', content: 'x\ny\n' }, ectx);
+      check('a new file is written as given', fs.readFileSync(F('fresh.txt'), 'utf8') === 'x\ny\n', 'changed');
+      fs.writeFileSync(F('lf.txt'), 'alpha\nbeta\n');
+      await T.read.run({ path: 'lf.txt' }, ectx);
+      const e2 = await T.edit.run({ path: 'lf.txt', old_string: 'beta', new_string: 'gamma' }, ectx);
+      check('old_string/new_string are understood', e2.match === 'exact' && fs.readFileSync(F('lf.txt'), 'utf8') === 'alpha\ngamma\n', e2);
+      let e3 = null; try { await T.edit.run({ path: 'lf.txt' }, ectx); } catch (e) { e3 = e.message; }
+      check('and missing text is explained, not a crash', /edit needs `before`/.test(e3 || ''), e3);
+      const { decodeOutput, CP437, CP850 } = require(path.join(ROOT, 'src/backend/tools/decode.js'));
+      check('the OEM tables are complete', [...CP437].length === 128 && [...CP850].length === 128, [[...CP437].length, [...CP850].length]);
+      const mixed = Buffer.concat([Buffer.from('caf'), Buffer.from([0x82, 0x0d, 0x0a]), Buffer.from('héllo ✓\n', 'utf8')]);
+      check("cmd's own output and UTF-8 lines both read right", decodeOutput(mixed, 437) === 'café\r\nhéllo ✓\n' && decodeOutput(Buffer.from([0x82]), 850) === 'é', JSON.stringify(decodeOutput(mixed, 437)));
+      if (process.platform === 'win32') {
+        fs.mkdirSync(F('café'), { recursive: true });
+        const d = await T.shell.run({ command: 'dir /b' }, ectx);
+        check('a folder listing shows accented names', d.stdout.includes('café'), d.stdout);
+      }
+    }
     // A server started with `start /b` held the command's output open: the call never
     // returned, the time limit and Stop killed a shell that had already gone, and the
     // server outlived everything. Found in a live run.

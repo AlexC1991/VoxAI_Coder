@@ -16,6 +16,8 @@ const fsp = fs.promises;
 const path = require('path');
 const { execFile } = require('child_process');
 const procs = require('./procs');
+const { eolOf, toEol } = require('./eol');
+const { decodeOutput } = require('./decode');
 
 function tool(name, description, parameters, run) {
   return { def: { type: 'function', function: { name, description, parameters } }, run };
@@ -77,6 +79,11 @@ const write = tool('write', 'Create or overwrite a file (creates parent dirs).',
   const full = resolveIn(ctx.workdir, p);
   await assertFresh(full, p);
   await fsp.mkdir(path.dirname(full), { recursive: true });
+  // Rewriting a Windows file keeps its line endings: otherwise every line shows as
+  // changed in a diff.
+  let existing = null;
+  try { existing = await fsp.readFile(full, 'utf8'); } catch { existing = null; }
+  if (existing != null) content = toEol(content, eolOf(existing));
   await fsp.writeFile(full, content, 'utf8');
   markSeen(full, content);
   // Syntax-check what we just wrote and hand the diagnostics straight back.
@@ -121,13 +128,22 @@ const edit = tool('edit', 'Replace the first occurrence of `before` with `after`
   type: 'object',
   properties: { path: { type: 'string' }, before: { type: 'string' }, after: { type: 'string' } },
   required: ['path', 'before', 'after'],
-}, async ({ path: p, before, after }, ctx) => {
+}, async (args, ctx) => {
+  // Models trained on other tools send old_string/new_string. That crashed with
+  // "Cannot read properties of undefined (reading 'split')", which told them nothing.
+  const p = args.path;
+  const before = args.before !== undefined ? args.before : (args.old_string !== undefined ? args.old_string : args.old_str);
+  const after = args.after !== undefined ? args.after : (args.new_string !== undefined ? args.new_string : args.new_str);
+  if (typeof before !== 'string' || typeof after !== 'string') {
+    throw new Error('edit needs `before` (the exact text to replace, copied from the file) and `after` (what replaces it), both strings.');
+  }
   await ctx.checkPermission('write-file', p);
   const full = resolveIn(ctx.workdir, p);
   await assertFresh(full, p);
   const text = await fsp.readFile(full, 'utf8');
+  const eol = eolOf(text);
 
-  const hit = locate(text, before);
+  const hit = locate(text, toEol(before, eol)) || (eol === '\r\n' ? locate(text, before) : null);
   if (!hit) {
     // Give the retry something to aim at: the model cannot fix a match it cannot see.
     const firstLine = String(before).split('\n').find((l) => l.trim()) || '';
@@ -147,7 +163,7 @@ const edit = tool('edit', 'Replace the first occurrence of `before` with `after`
     );
   }
 
-  const next = text.slice(0, hit.start) + after + text.slice(hit.end);
+  const next = text.slice(0, hit.start) + toEol(after, eol) + text.slice(hit.end);
   await fsp.writeFile(full, next, 'utf8');
   markSeen(full, next);
   return withVerification({ path: full, replaced: hit.end - hit.start, match: hit.how }, full, p);
@@ -252,12 +268,13 @@ const shell = tool('shell', SHELL_DESC, {
     } catch {}
   };
   let timedOut = false, stopped = false, heldOpen = false, left = [];
-  const child = execFile(isWin ? 'cmd.exe' : '/bin/sh', isWin ? ['/d', '/s', '/c', '"' + command + '"'] : ['-c', command], {
-    cwd: ctx.workdir, maxBuffer: 4 * 1024 * 1024, windowsHide: true, windowsVerbatimArguments: isWin,
+  const [exe, argv] = procs.shellArgs(command);
+  const child = execFile(exe, argv, {
+    cwd: ctx.workdir, env: procs.childEnv(), maxBuffer: 4 * 1024 * 1024, windowsHide: true, windowsVerbatimArguments: isWin, encoding: 'buffer',
   }, async (err, stdout, stderr) => {
     clearTimeout(timer); clearTimeout(graceTimer);
     if (ctx.signal) ctx.signal.removeEventListener('abort', onStop);
-    const cap = (s) => String(s || '').split('\n').slice(-400).join('\n').slice(-12000);
+    const cap = (s) => decodeOutput(s).split('\n').slice(-400).join('\n').slice(-12000);
     const out = { command, exit: err && typeof err.code === 'number' ? err.code : (err ? 1 : 0), stdout: cap(stdout), stderr: cap(stderr),
       ...(timedOut ? { timedOut: true } : {}), ...(stopped ? { stopped: true } : {}) };
     if (heldOpen) {
