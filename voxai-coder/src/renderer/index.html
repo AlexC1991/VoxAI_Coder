@@ -378,38 +378,6 @@ tests"). Scroll the row instead of breaking words:
 .sub-run .sr-open:hover{color:var(--gold)}
 .sub-run .sr-result{font-family:'Sometype Mono',monospace;font-size:12px;color:var(--mut);white-space:pre-wrap;margin-top:4px;max-height:140px;overflow:auto}
 /* Claude/Codex-style inline nested sub-agent card */
-/* ---- delegated runs: the fan-out ledger (study S2) ----
-   A delegated run is an OBJECT -- it has a role, a permission level, a duration, a
-   cost and an outcome -- so it gets a fill and aligned columns. Five concurrent
-   workers become five rows in ONE table rather than five stacked boxes, which is
-   the shape the work actually has. Reasoning above gets no fill and no border at
-   all; that contrast is the whole point. */
-.sub-ledger{margin:8px 0;background:var(--panel);border-radius:7px;padding:9px 12px 4px;box-shadow:inset 0 0 0 1px var(--edge)}
-.sl-cap{font-family:"Sometype Mono",monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--faint);padding-bottom:8px}
-.sl{width:100%;border-collapse:collapse;font-family:"Sometype Mono",monospace;font-size:11.5px;font-variant-numeric:tabular-nums;table-layout:auto}
-.sl th{text-align:left;font-weight:400;font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint);padding:0 10px 5px 0;border-bottom:1px solid var(--edge);white-space:nowrap}
-.sl td{padding:5px 10px 5px 0;border-bottom:1px solid var(--edge);color:var(--dim);white-space:nowrap;vertical-align:middle}
-.sl tbody tr:last-child > td{border-bottom:0}
-.sl th:last-child,.sl td.sl-out{text-align:right;padding-right:0}
-.sl-row:hover > td{background:var(--panel2)}
-.sl-disc{width:1px;color:var(--faint);cursor:pointer;padding-right:8px;user-select:none}
-.sl-disc:hover{color:var(--gold)}
-.sl-task{color:var(--mut);width:100%;max-width:1px;overflow:hidden;text-overflow:ellipsis;font-family:Chivo,sans-serif;font-size:12.5px}
-/* Role hues: low-saturation and warm, so they sit in the palette instead of
-   puncturing it. Status colour (--add/--del) stays semantic and is never a role. */
-.sl-role{font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;padding:2px 7px;border-radius:3px;white-space:nowrap}
-.sl-role.explore{color:#7fa08f;background:rgba(127,160,143,.11);box-shadow:inset 0 0 0 1px rgba(127,160,143,.26)}
-.sl-role.build{color:var(--gold);background:rgba(200,169,97,.11);box-shadow:inset 0 0 0 1px rgba(200,169,97,.28)}
-.sl-role.review{color:#b3907a;background:rgba(179,144,122,.11);box-shadow:inset 0 0 0 1px rgba(179,144,122,.26)}
-.sl-out .run{color:var(--gold)} .sl-out .ok{color:var(--add)} .sl-out .bad{color:var(--del)}
-.sl-row[data-state="running"] .sl-task{color:var(--ink)}
-.sl-det > td{padding:0 0 8px;border-bottom:1px solid var(--edge)}
-.sl-det .in{padding:8px 10px;background:var(--deep);border-radius:5px;display:flex;flex-direction:column;gap:6px}
-.sl-tools{display:flex;flex-wrap:wrap;gap:5px}
-.sl-tool{font-size:10.5px;color:var(--dim);background:var(--sel);border-radius:3px;padding:1px 6px;white-space:nowrap}
-.sl-live{font-size:11px;color:var(--faint);white-space:pre-wrap;max-height:96px;overflow:auto}
-.sl-report{font-size:11.5px;color:var(--mut);white-space:pre-wrap;max-height:260px;overflow:auto;border-left:2px solid var(--goldedge);padding-left:9px}
-.sl-err{font-size:11.5px;color:var(--del);white-space:pre-wrap}
 .reason-pill{display:inline-flex;align-items:center;gap:7px;border:1px solid var(--edge2);border-radius:999px;background:var(--panel2);padding:4px 12px;margin:6px 0;font-family:'Sometype Mono',monospace;font-size:12px;color:var(--gold)}
 .reason-pill .reason-chev{color:var(--faint);font-size:10px}
 .reason-pill.small{font-size:11px;padding:3px 10px}
@@ -476,6 +444,14 @@ tests"). Scroll the row instead of breaking words:
 .pt-step.is-now{color:var(--ink)}
 .pt-step.is-now .pt-dot{border-color:var(--gold);box-shadow:0 0 0 3px rgba(200,169,97,.18);animation:railPulse 1.6s ease-in-out infinite}
 .pt-step.is-todo{color:var(--mut)}
+/* A plan the last run left unfinished: kept, but quiet -- it is a record, not work in progress. */
+.plan-tab.stale .pt-tab{color:var(--sub)}
+.plan-tab.stale .pt-ring .arc{stroke:var(--sub)}
+.plan-tab.stale .pt-now{color:var(--sub)}
+.plan-tab.stale .pt-now b{font-weight:500;color:var(--mut)}
+.pt-step.is-stop{color:var(--mut)}
+.pt-step.is-stop .pt-dot{border-color:var(--sub);border-style:dashed}
+.pt-note{margin-top:10px;font-size:12px;color:var(--sub);line-height:1.5}
 @media (prefers-reduced-motion: reduce){ .pt-drawer,.pt-ring .arc{transition:none} .pt-step.is-now .pt-dot{animation:none} }
 .sh-warn.flash{animation:shFlash .5s ease 2}
 @keyframes shFlash{50%{opacity:.35}}
@@ -552,6 +528,17 @@ tests"). Scroll the row instead of breaking words:
 .tr-sub{display:flex;align-items:center;gap:9px;padding:5px 12px;border-bottom:1px solid var(--edge);cursor:pointer;min-width:0}
 .tr-sub:hover{background:var(--panel2)}
 .tr-card > :last-child{border-bottom:0}
+.tr-role{flex:none;font:10px "Sometype Mono",monospace;letter-spacing:.1em;text-transform:uppercase;padding:1px 6px;border-radius:4px}
+.tr-role.build{color:var(--gold);background:rgba(200,169,97,.11)}
+.tr-role.explore{color:#7fa08f;background:rgba(127,160,143,.11)}
+.tr-role.review{color:#b3907a;background:rgba(179,144,122,.11)}
+.tr-acts{display:flex;flex-direction:column;padding:4px 0}
+.tr-acts .tr-sub{border-bottom:0;padding:3px 12px;font-size:13px;color:var(--dim)}
+.tr-acts .tr-sub.fail .tr-ic{stroke:var(--del)}
+.tr-acts .tr-card.tr-inner{margin:2px 12px 6px;border:1px solid var(--edge2);border-radius:7px}
+.tr-live{padding:4px 12px 6px;font-size:12.5px;font-style:italic;line-height:1.55;color:var(--sub);white-space:pre-wrap;max-height:96px;overflow:auto}
+.tr-report{margin:6px 12px 8px;padding-left:10px;border-left:2px solid var(--goldedge);font-size:13px;line-height:1.6;color:var(--mut);max-height:320px;overflow:auto}
+.tr-report.bad{border-left-color:var(--del);color:#e3a898;white-space:pre-wrap}
 
 /* ---- the message box ---- */
 .composer{gap:6px;container-type:inline-size}
@@ -1355,6 +1342,8 @@ function paintShelf(){
   const steering = !!(v && v.steerIdx != null && steer && !steer.hidden);
   if (steer) steer.hidden = !steering;
   const busy = !!(v && v.busy);
+  // A run starting or ending changes what the plan tab means (live, or the last one).
+  if (v && v._planBusy !== busy) { v._planBusy = busy; paintPlanTray(); }
   if (work) work.hidden = steering || !busy;
   if (busy) paintWork(v);
   const img = imageProblem(), iw = $('shImg');
@@ -2106,7 +2095,7 @@ function summariseResult(name, raw, ok){
     }
     // A single sub-agent that changed nothing still did work; say what it did.
     if (o.subId && Array.isArray(o.files_changed) && !o.files_changed.length) {
-      return (o.role || 'sub-agent') + ' · ' + (o.tools !== undefined ? o.tools + ' tool calls' : (o.stopReason || 'done'))
+      return (o.role || 'sub-agent') + ' · ' + (o.tools !== undefined ? o.tools + (Number(o.tools) === 1 ? ' tool call' : ' tool calls') : (o.stopReason || 'done'))
         + (o.stopReason && o.stopReason !== 'completed' ? ' · ' + o.stopReason : '');
     }
     if (Array.isArray(o.files_changed)) {
@@ -2139,41 +2128,6 @@ function fmtElapsed(ms){
   if (m < 60) return m + 'm ' + String(rs).padStart(2, '0') + 's';
   const h = Math.floor(m / 60);
   return h + 'h ' + String(m % 60).padStart(2, '0') + 'm';
-}
-
-/**
- * The ledger's one-line verdict.
- *
- * Counted from the rows themselves rather than from the tool result, because the
- * result only lands when the LAST worker finishes -- and this line has to be honest
- * while the fan-out is still in flight.
- */
-function paintLedgerCaption(L){
-  if (!L || !L.cap) return;
-  let done = 0, failed = 0, running = 0;
-  L.rows.forEach((r) => {
-    if (r.state === 'done') done++;
-    else if (r.state === 'failed') failed++;
-    else running++;
-  });
-  const n = L.rows.size;
-  const parts = [n + (n === 1 ? ' agent' : ' agents')];
-  if (running) parts.push(running + ' running');
-  if (done) parts.push(done + '/' + n + ' ok');
-  if (failed) parts.push(failed + ' failed');
-  L.cap.textContent = parts.join(' · ');
-}
-
-/**
- * Close the ledger off so the NEXT fan-out gets its own table.
- *
- * Without this, a second delegation appended its workers to the first one's rows and
- * the two pieces of work read as one.
- */
-function sealLedger(v){
-  if (!v || !v._ledger) return;
-  if (v._ledger.timer) { try { clearInterval(v._ledger.timer); } catch {} v._ledger.timer = 0; }
-  v._ledger = null;
 }
 
 function sealThinking(v){
@@ -2328,7 +2282,14 @@ function rowLook(name, args, done){
     case 'skill': return pick('tool', 'Used a skill', 'Using a skill');
     case 'mcp': return pick('tool', 'Called', 'Calling');
     case 'build_state': return pick('list', 'Build state');
-    case 'fs': return pick('file', 'Files');
+    case 'fs': {
+      const act = String((args && args.action) || '');
+      if (act === 'remove') return pick('file', 'Deleted', 'Deleting');
+      if (act === 'move') return pick('file', 'Moved', 'Moving');
+      if (act === 'mkdir') return pick('add', 'Created folder', 'Creating folder');
+      if (act === 'stat') return pick('file', 'Checked', 'Checking');
+      return pick('file', 'Files');
+    }
   }
   if (name && (name.indexOf('cu_') === 0 || name.indexOf('browser_') === 0)) return pick('eye', 'Used the browser', 'Using the browser');
   const t = String(name || 'tool').replace(/_/g, ' ');
@@ -2341,6 +2302,9 @@ function rowChip(name, args){
   if ((name === 'read' || name === 'write' || name === 'edit' || name === 'patch') && a.path) return { text: base(a.path), title: String(a.path) };
   if (name === 'shell') { const c = String(a.command || '').replace(/\s+/g, ' ').trim(); return c ? { text: c, title: String(a.command) } : null; }
   if (name === 'todo') return null;
+  // The verb already says remove / move / mkdir; the chip is just the path.
+  if (name === 'fs' && a.action === 'move' && a.source) return { text: base(a.source) + ' → ' + base(a.destination), title: a.source + ' → ' + a.destination };
+  if (name === 'fs' && a.path) return { text: base(a.path), title: String(a.path) };
   const t = cmdFor(name, a);
   return t ? { text: t, title: t } : null;
 }
@@ -2407,6 +2371,121 @@ function shellParts(res){
   }
   return { exit: 0, stdout: '', stderr: '', raw: s };
 }
+/* ---- sub-agents, on the row that delegated them ---------------------------------- */
+function subEvent(rec, event){
+  const subs = rec.subs || (rec.subs = new Map());
+  let W = subs.get(event.subId);
+  if (!W) { W = { id: event.subId, role: 'sub-agent', label: '', t0: event.at || Date.now(), t1: 0, state: 'running', acts: [], cur: null, tok: 0, live: '', report: '', end: '' }; subs.set(event.subId, W); }
+  const ev = event.ev;
+  if (ev === 'start') { W.role = String(event.role || 'build'); W.label = String(event.label || ''); }
+  else if (ev === 'tool_start') { const act = { name: String(event.name || ''), args: event.args || {}, ok: null, result: null }; W.acts.push(act); W.cur = act; W.live = ''; }
+  else if (ev === 'tool_end') {
+    const act = [...W.acts].reverse().find((x) => x.ok === null && x.name === event.name) || W.cur;
+    if (act) { act.ok = !!event.ok; act.result = event.result == null ? '' : String(event.result); act.denied = !act.ok && /permission denied|blocked by Auto mode/i.test(act.result); }
+    W.cur = null;
+  }
+  // A rolling preview of what it is writing, not a transcript.
+  else if (ev === 'token') { const next = W.live + String(event.text || ''); W.live = next.length > 400 ? next.slice(-400) : next; }
+  // Each usage event is one turn; the total is their sum.
+  else if (ev === 'usage') { const u = event.usage || {}; W.tok += (Number(u.prompt_tokens) || 0) + (Number(u.completion_tokens) || 0); }
+  else if (['done', 'error', 'cancelled', 'limit_reached', 'budget_reached'].includes(ev)) {
+    W.state = ev === 'done' ? 'done' : 'failed'; W.end = ev; W.t1 = Date.now(); W.cur = null; W.live = '';
+    W.report = String(event.content || '');
+  }
+  if (rec.view && rec.view === actView() && W.state === 'running' && rec.subs.size === 1) setActivity(rec.view, W.role + ': ' + subDoing(W));
+  subTick(rec);
+  // An open row follows along, at most a few times a second.
+  const g = rec.group;
+  if (g && g.open && !rec._subRefill) rec._subRefill = setTimeout(() => { rec._subRefill = 0; if (g.open) fillRowCard(g); }, 300);
+}
+/** What a worker is doing right now, in a few words. */
+function subDoing(W){
+  if (W.state !== 'running') return W.state === 'done' ? 'done' : (W.end === 'cancelled' ? 'stopped' : 'failed');
+  if (W.cur) return toolActivity(W.cur.name, W.cur.args);
+  return W.live.trim() ? 'Writing' : 'Thinking';
+}
+/** Keep the row's note current; one timer per row, and it stops when nothing runs. */
+function subTick(rec){
+  paintRowMeta(rec.group);
+  const running = [...rec.subs.values()].some((W) => W.state === 'running');
+  if (running && !rec._subTimer) {
+    rec._subTimer = setInterval(() => {
+      const live = [...rec.subs.values()].some((W) => W.state === 'running');
+      if (!live || !(rec.view && rec.view.busy)) { clearInterval(rec._subTimer); rec._subTimer = 0; }
+      paintRowMeta(rec.group);
+    }, 1000);
+  }
+}
+/** The row's note while workers run: "review · Reading todo.js · 2 tools · 41s". */
+function subMeta(rec){
+  const ws = [...rec.subs.values()];
+  const t0 = Math.min(...ws.map((W) => W.t0));
+  const took = fmtElapsed(Math.max(0, Date.now() - t0));
+  if (ws.length === 1) {
+    const W = ws[0], n = W.acts.length;
+    return esc(W.role + ' \u00b7 ' + subDoing(W)) + (n ? ' \u00b7 ' + n + (n === 1 ? ' tool' : ' tools') : '') + ' \u00b7 ' + took;
+  }
+  const run = ws.filter((W) => W.state === 'running').length, done = ws.filter((W) => W.state === 'done').length, bad = ws.length - run - done;
+  return ws.length + ' agents' + (run ? ' \u00b7 ' + run + ' running' : '') + (done ? ' \u00b7 ' + done + ' done' : '') + (bad ? ' \u00b7 <span class="tr-d">' + bad + ' failed</span>' : '') + ' \u00b7 ' + took;
+}
+/** Inside the row: each worker, its actions as rows, then what it is writing or its report. */
+function fillSubs(box, rec){
+  for (const W of rec.subs.values()) {
+    const h = el('div', 'tr-ch');
+    h.appendChild(el('span', 'tr-role ' + (W.role === 'explore' || W.role === 'review' ? W.role : 'build'), esc(W.role)));
+    const p = el('span', 'p'); p.textContent = W.label; p.title = W.label; h.appendChild(p);
+    h.appendChild(el('span', 'sp'));
+    const took = fmtElapsed(Math.max(0, (W.t1 || Date.now()) - W.t0));
+    h.appendChild(el('span', W.state === 'failed' ? 'tr-d' : '', esc((W.state === 'running' ? subDoing(W) + ' \u00b7 ' : W.state === 'failed' ? subDoing(W) + ' \u00b7 ' : '') + took + (W.tok ? ' \u00b7 ' + fmtNum(W.tok) + ' tokens' : ''))));
+    box.appendChild(h);
+    const list = el('div', 'tr-acts');
+    for (const act of W.acts) list.appendChild(subActRow(act));
+    if (W.state === 'running' && !W.acts.length && !W.live) list.appendChild(el('div', 'tr-live', 'Thinking\u2026'));
+    if (W.live) { const lv = el('div', 'tr-live'); lv.textContent = W.live; list.appendChild(lv); }
+    if (W.report) { const rp = el('div', W.state === 'done' ? 'tr-report md' : 'tr-report bad'); if (W.state === 'done') rp.innerHTML = renderVTE(W.report.slice(0, 8000)); else rp.textContent = W.report.slice(0, 4000); list.appendChild(rp); }
+    box.appendChild(list);
+  }
+}
+/** One of a worker's actions: the same quiet row, its detail one more click away. */
+function subActRow(act){
+  const wrap = el('div', 'tr-subact');
+  const line = el('div', 'tr-sub');
+  const look = rowLook(act.name, act.args, act.ok !== null);
+  line.appendChild(act.ok === null ? el('span', 'tr-spin') : trIcon(look.icon));
+  const vb = el('span', 'tr-verb'); vb.textContent = look.verb; line.appendChild(vb);
+  const c = rowChip(act.name, act.args);
+  if (c) { const ch = el('span', 'tr-chip'); ch.textContent = c.text; ch.title = c.title || c.text; line.appendChild(ch); }
+  line.appendChild(el('span', 'tr-sp'));
+  const m = rowMeta(act);
+  line.appendChild(el('span', 'tr-meta' + (m.bad ? ' bad' : ''), m.html));
+  if (act.ok === false && !act.denied) line.classList.add('fail');
+  const inner = el('div', 'tr-card tr-inner'); inner.hidden = true;
+  line.onclick = () => { if (inner.hidden) fillDetail(inner, act); inner.hidden = !inner.hidden; };
+  wrap.appendChild(line); wrap.appendChild(inner);
+  return wrap;
+}
+/** Replayed from disk the live events are gone; the worker's report is in the result. */
+function fillSubReport(box, res){
+  let o = null; try { o = JSON.parse(res); } catch { /* cut short */ }
+  const text = o ? (o.result || o.error || '') : (jsonStr(res, 'result') || '');
+  if (!text) return false;
+  const rp = el('div', 'tr-report md'); rp.innerHTML = renderVTE(String(text).slice(0, 8000));
+  const list = el('div', 'tr-acts'); list.appendChild(rp); box.appendChild(list);
+  return true;
+}
+/**
+ * A test run's counts from its output, or null when it was not one. Runners say it
+ * differently: "9 passed, 1 failed" (pytest), "Tests: 9 passed" (jest), "9 passing /
+ * 1 failing" (mocha), "# pass 9 / # fail 1" (node --test), "24 tests passed." -- the
+ * last read as nothing until a live run showed it.
+ */
+function testVerdict(text){
+  const s = String(text || '');
+  const num = (res) => { for (const re of res) { const m = re.exec(s); if (m) return Number(m[1]); } return null; };
+  const passed = num([/(\d+)\s+(?:tests?\s+)?(?:passed|passing)\b/i, /(?:^|\n)\s*(?:#|ℹ)\s*pass\s+(\d+)/i]);
+  const failed = num([/(\d+)\s+(?:tests?\s+)?(?:failed|failing)\b/i, /(?:^|\n)\s*(?:#|ℹ)\s*fail\s+(\d+)/i]);
+  return passed === null && failed === null ? null : { passed, failed: failed || 0 };
+}
 /** The note at the row's right edge: +/- lines, "1 failed", "143 lines". */
 function rowMeta(rec){
   if (rec.ok === false) {
@@ -2419,14 +2498,14 @@ function rowMeta(rec){
     if (rec.name === 'write') return { html: c.add + (c.add === 1 ? ' line' : ' lines') };
     return { html: '<span class="tr-a">+' + c.add + '</span><span class="tr-d">\u2212' + c.del + '</span>' };
   }
-  if (rec.ok === null) return { html: '' };
+  if (rec.ok === null) return { html: rec.subs && rec.subs.size ? subMeta(rec) : '' };
   if (rec.name === 'shell') {
     const o = shellParts(rec.result);
     const all = o.stdout + '\n' + o.stderr + '\n' + (o.raw || '');
-    const f = /(\d+)\s+failed/.exec(all), p = /(\d+)\s+passed/.exec(all);
-    if (f && Number(f[1]) > 0) return { html: f[1] + ' failed', bad: true };
+    const tv = testVerdict(all);
+    if (tv && tv.failed) return { html: tv.failed + ' failed', bad: true };
     if (o.exit) return { html: 'exit ' + o.exit, bad: true };
-    return { html: p ? p[1] + ' passed' : '' };
+    return { html: tv && tv.passed !== null ? tv.passed + ' passed' : '' };
   }
   const t = summariseResult(rec.name || '', rec.result, true);
   // A summary that is still raw JSON says nothing at a glance; it is behind the click.
@@ -2466,7 +2545,7 @@ function paintRow(g){
   const running = items.some((r) => r.ok === null && !r.instant);
   const fail = items.some((r) => (r.ok === false && !r.denied) || r.bad);
   const look = rowLook(g.name, first.args, !running);
-  const canOpen = items.length > 1 || !!rowDiffs(first) || first.ok === false || !!(first.result && String(first.result).trim());
+  const canOpen = items.length > 1 || !!rowDiffs(first) || first.ok === false || !!(first.result && String(first.result).trim()) || !!(first.subs && first.subs.size);
   g.row.classList.toggle('running', running);
   g.row.classList.toggle('fail', fail);
   g.row.classList.toggle('can-open', canOpen);
@@ -2490,6 +2569,7 @@ function paintRow(g){
   const m = items.length > 1 ? { html: items.length + ' files' + (fail ? ' \u00b7 <span class="tr-d">' + items.filter((r) => r.ok === false && !r.denied).length + ' failed</span>' : '') } : rowMeta(first);
   const meta = el('span', 'tr-meta' + (m.bad ? ' bad' : ''), m.html);
   top.appendChild(meta);
+  g.metaEl = meta;
   const chev = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   chev.setAttribute('viewBox', '0 0 24 24'); chev.setAttribute('class', 'tr-chev');
   chev.innerHTML = '<path d="M9 6l6 6-6 6"/>';
@@ -2497,6 +2577,15 @@ function paintRow(g){
   top.title = canOpen ? (g.open ? 'Hide the detail' : 'Show the detail') : '';
   top.setAttribute('role', canOpen ? 'button' : 'group');
   top.setAttribute('aria-expanded', String(!!g.open));
+}
+function paintRowMeta(g){
+  if (!g || !g.metaEl || g.items.length !== 1) return;
+  const first = g.items[0];
+  const m = rowMeta(first);
+  g.metaEl.className = 'tr-meta' + (m.bad ? ' bad' : '');
+  g.metaEl.innerHTML = m.html;
+  const canOpen = g.row.classList.contains('can-open') || !!(first.subs && first.subs.size);
+  g.row.classList.toggle('can-open', canOpen);
 }
 function toggleRow(g){
   if (!g.row.classList.contains('can-open')) return;
@@ -2540,6 +2629,12 @@ function fillDetail(box, rec){
   box.appendChild(body);
   const term = (text) => { const t = el('div', 'tr-term'); if (text != null) t.textContent = text; body.appendChild(t); return t; };
   const line = (t, cls, text) => { const sp = el('span', cls); sp.textContent = text; t.appendChild(sp); };
+  if (rec.name === 'spawn_agent' || rec.name === 'spawn_parallel') {
+    box.removeChild(body);
+    if (rec.subs && rec.subs.size) { fillSubs(box, rec); return; }
+    if (rec.ok !== false && fillSubReport(box, res)) return;
+    box.appendChild(body);
+  }
   if (rec.ok === false) {
     const t = term();
     if (rec.name === 'shell' && a.command) { line(t, 'p', '$ ' + a.command); t.appendChild(document.createTextNode('\n')); }
@@ -2624,16 +2719,15 @@ function setToolResult(rec, ok, resultText){
     if (rec.card.counts[k]) rec.card.counts[k]--;
   } else if (!ok) st.errors = (st.errors || 0) + 1;
   const a = rec.args || {};
-  if (ok && a.path && (rec.name === 'write' || rec.name === 'edit' || rec.name === 'patch'
-    || (rec.name === 'fs' && !/^(list|read|stat|exists|search|find)/i.test(String(a.action || ''))))) {
-    (st.files || (st.files = new Set())).add(String(a.path).replace(/\\/g, '/').replace(/^\.\//, ''));
-  }
+  const changedPath = rec.name === 'fs' ? (a.action === 'move' ? a.destination : (a.action === 'remove' || a.action === 'mkdir' ? a.path : null))
+    : (rec.name === 'write' || rec.name === 'edit' || rec.name === 'patch') ? a.path : null;
+  if (ok && changedPath) (st.files || (st.files = new Set())).add(String(changedPath).replace(/\\/g, '/').replace(/^\.\//, ''));
   // The latest test run is the verdict: 12 failed, then 19 passed, reads "19 passed".
-  const passed = /(\d+)\s+passed/.exec(txt);
-  const failed = /(\d+)\s+failed/.exec(txt);
-  if (passed || failed) {
-    st.verdict = passed ? passed[1] + ' passed' : '';
-    st.failed = failed ? Number(failed[1]) : 0;
+  // Only a command's output: a sub-agent's report that mentions "3 passed" ran nothing.
+  const tv = rec.name === 'shell' && ok ? testVerdict(txt) : null;
+  if (tv) {
+    st.verdict = tv.passed !== null ? tv.passed + ' passed' : '';
+    st.failed = tv.failed;
   }
   rec.card.t1 = Date.now();
   paintMeta(rec.card);
@@ -2681,17 +2775,27 @@ function paintPlanTray(){
   const complete = done === n;
   let cur = list.findIndex((t) => t.active && !t.done);
   if (cur < 0) cur = list.findIndex((t) => !t.done);
+  // Nothing is running and steps are still open: the run ended without finishing
+  // them (or without ticking them off). Showing "3/5 Run npm test" then read as work
+  // still going on. Found in a live run; the plan stays, marked as the last one.
+  // Live only while a run is going AND that run set or moved the plan: a new, unrelated
+  // request must not bring an old plan back to life.
+  const stale = !complete && !(v.busy && v.planLive);
   const open = !!v.planOpen;
   tab.classList.toggle('open', open);
   tab.classList.toggle('complete', complete);
+  tab.classList.toggle('stale', stale);
   $('planHead').setAttribute('aria-expanded', String(open));
   $('planHead').title = open ? 'Hide the plan' : 'Show the plan';
   $('planArc').setAttribute('stroke-dashoffset', String(43.98 * (1 - done / n)));
   $('planCount').textContent = done + '/' + n;
-  $('planNow').textContent = complete ? 'Plan complete' : (cur >= 0 ? list[cur].text : '');
-  $('planList').innerHTML = '<div class="pt-dh"><b>Plan</b><span>' + done + ' of ' + n + ' done</span></div>'
-    + list.map((t, i) => '<div class="pt-step ' + (t.done ? 'is-done' : (!complete && i === cur ? 'is-now' : 'is-todo')) + '" role="listitem">'
-      + '<span class="pt-dot"></span><span>' + esc(t.text || '') + '</span></div>').join('');
+  if (stale) $('planNow').innerHTML = '<b>Last plan</b>' + (cur >= 0 ? ' · stopped at ' + esc(list[cur].text || '') : '');
+  else $('planNow').textContent = complete ? 'Plan complete' : (cur >= 0 ? list[cur].text : '');
+  const stepCls = (t, i) => t.done ? 'is-done' : (i === cur && !complete ? (stale ? 'is-stop' : 'is-now') : 'is-todo');
+  $('planList').innerHTML = '<div class="pt-dh"><b>' + (stale ? 'Last plan' : 'Plan') + '</b><span>' + done + ' of ' + n + ' done</span></div>'
+    + list.map((t, i) => '<div class="pt-step ' + stepCls(t, i) + '" role="listitem">'
+      + '<span class="pt-dot"></span><span>' + esc(t.text || '') + '</span></div>').join('')
+    + (stale ? '<div class="pt-note">The last run ended with ' + (n - done) + (n - done === 1 ? ' step' : ' steps') + ' not marked done.</div>' : '');
 }
 $('planHead').onclick = (e) => { e.stopPropagation(); const v = actView(); if (!v) return; v.planOpen = !v.planOpen; paintPlanTray(); };
 // The drawer tucks away on a click elsewhere or Esc, like the menus.
@@ -3500,7 +3604,6 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     // A new model call. The step carries on across turns; only the text is closed off.
     finalizeStream();
     sealThinking(v);
-    sealLedger(v);          // backstop, if a spawn ended without a tool_end
     setActivity(v, 'Thinking');
   } else if (event.type === 'reasoning') {
     // A real thinking BOX, the way Codex and Claude Code show it: a collapsed
@@ -3553,13 +3656,11 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     else if (said) finalizeRunCard();
     const rec = addToolRow(event.name, event.args || {});
     v.latestTool = rec || null;
+    // Its workers report here, even after it returns (a background fan-out).
+    if (rec && (event.name === 'spawn_agent' || event.name === 'spawn_parallel')) v._subHost = rec;
   } else if (event.type === 'tool_end') {
     if (v.latestTool) { setToolResult(v.latestTool, !!event.ok, event.result); v.latestTool = null; }
     if (event.mutated && event.mutated.path) noteTouched(sid, event.mutated.path);
-    // The spawn returning is the exact edge of one fan-out. Seal here, or a second
-    // delegation appends its workers to the first one's table and the two pieces of
-    // work read as one.
-    if (event.name === 'spawn_agent' || event.name === 'spawn_parallel') sealLedger(v);
     // debounce 'thinking…' — only show if the model is actually slow
     clearTimeout(v.statusTimer);
     if (v.runKeys.size) setActivity(v, 'Thinking');
@@ -3574,145 +3675,12 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     wrap.appendChild(cap); wrap.appendChild(img);
     const r = flowRoot(v); if (r) { r.appendChild(wrap); followThread(); }
   } else if (event.type === 'sub') {
-    // ---- delegated runs: one ledger per fan-out, one row per worker ----
-    //
-    // Five concurrent workers used to be five identical stacked boxes, each titled
-    // with a running list of the tools it happened to call. They belong to ONE piece
-    // of work, so they go in one table, aligned, with the numbers in tabular figures.
-    const rr = flowRoot(v);
-    if (!rr) return;
-    let L = v._ledger;
-    if (!L || !L.box.isConnected) {
-      const box = el('div', 'sub-ledger');
-      const cap = el('div', 'sl-cap', 'Delegating…');
-      const table = document.createElement('table');
-      table.className = 'sl';
-      const thead = document.createElement('thead');
-      const hr = document.createElement('tr');
-      for (const h of ['', 'Role', 'Task', 'Tools', 'Tokens', 'Elapsed', 'Outcome']) {
-        const th = document.createElement('th');
-        th.textContent = h;
-        hr.appendChild(th);
-      }
-      thead.appendChild(hr);
-      const tbody = document.createElement('tbody');
-      table.appendChild(thead); table.appendChild(tbody);
-      box.appendChild(cap); box.appendChild(table);
-      rr.appendChild(box);
-      followThread();
-      L = v._ledger = { box, cap, tbody, rows: new Map(), timer: 0 };
-    }
-
-    let R = L.rows.get(event.subId);
-    if (!R) {
-      const tr = document.createElement('tr');
-      tr.className = 'sl-row';
-      tr.dataset.state = 'running';
-      const mk = (cls) => { const td = document.createElement('td'); if (cls) td.className = cls; tr.appendChild(td); return td; };
-      const disc = mk('sl-disc'); disc.textContent = '▸';
-      const roleTd = mk('');
-      const taskTd = mk('sl-task');
-      const toolsTd = mk(''); toolsTd.textContent = '0';
-      const tokTd = mk(''); tokTd.textContent = '—';
-      const elTd = mk(''); elTd.textContent = '0s';
-      const outTd = mk('sl-out'); outTd.innerHTML = '<span class="run">running</span>';
-
-      // Detail sits in its own row spanning the table, so opening one worker never
-      // disturbs the column alignment of the others.
-      const det = document.createElement('tr');
-      det.className = 'sl-det';
-      det.style.display = 'none';
-      const dtd = document.createElement('td');
-      dtd.colSpan = 7;
-      const din = el('div', 'in');
-      const dtools = el('div', 'sl-tools');
-      const dlive = el('div', 'sl-live');
-      const dreport = el('div', 'sl-report');
-      dreport.style.display = 'none';
-      din.appendChild(dtools); din.appendChild(dlive); din.appendChild(dreport);
-      dtd.appendChild(din); det.appendChild(dtd);
-
-      disc.onclick = () => {
-        const open = det.style.display !== 'none';
-        det.style.display = open ? 'none' : 'table-row';
-        disc.textContent = open ? '▸' : '▾';
-      };
-
-      L.tbody.appendChild(tr);
-      L.tbody.appendChild(det);
-      R = {
-        tr, det, roleTd, taskTd, toolsTd, tokTd, elTd, outTd,
-        dtools, dlive, dreport,
-        t0: Date.now(), tools: 0, counts: new Map(), liveBuf: '', state: 'running',
-      };
-      L.rows.set(event.subId, R);
-
-      // One timer for the whole ledger, not one per row, and it stops the moment
-      // nothing is running -- an interval left behind keeps a dead card repainting.
-      if (!L.timer) {
-        L.timer = setInterval(() => {
-          let live = 0;
-          L.rows.forEach((row) => {
-            if (row.state !== 'running') return;
-            live++;
-            row.elTd.textContent = fmtElapsed(Date.now() - row.t0);
-          });
-          if (!live) { clearInterval(L.timer); L.timer = 0; }
-        }, 1000);
-      }
-    }
-
-    if (event.ev === 'start') {
-      const role = String(event.role || 'build');
-      R.roleTd.innerHTML = '';
-      const pill = el('span', 'sl-role ' + (role === 'explore' || role === 'review' ? role : 'build'), role);
-      R.roleTd.appendChild(pill);
-      R.taskTd.textContent = String(event.label || '');
-      R.taskTd.title = String(event.label || '');
-      paintLedgerCaption(L);
-    } else if (event.ev === 'tool_start') {
-      R.tools++;
-      R.toolsTd.textContent = String(R.tools);
-      const nm = String(event.name || '');
-      R.counts.set(nm, (R.counts.get(nm) || 0) + 1);
-      // A worker reading thirty files produced thirty identical rows. Chips with a
-      // count say the same thing in one line.
-      R.dtools.innerHTML = '';
-      R.counts.forEach((n, name) => {
-        R.dtools.appendChild(el('span', 'sl-tool', n > 1 ? name + ' ×' + n : name));
-      });
-    } else if (event.ev === 'token') {
-      // A rolling preview, not a transcript.
-      const next = R.liveBuf + String(event.text || '');
-      R.liveBuf = next.length > 400 ? next.slice(-400) : next;
-      R.dlive.textContent = R.liveBuf;
-    } else if (event.ev === 'usage') {
-      const u = event.usage || {};
-      const tot = (Number(u.prompt_tokens) || 0) + (Number(u.completion_tokens) || 0);
-      // Each usage event is ONE turn. Showing the latest replaced the total with the
-      // last turn's figure (4,337 shown for a worker that used 9,973).
-      if (tot) { R.tok = (R.tok || 0) + tot; R.tokTd.textContent = fmtNum(R.tok); }
-    } else if (event.ev === 'done' || event.ev === 'error' || event.ev === 'cancelled'
-            || event.ev === 'limit_reached' || event.ev === 'budget_reached') {
-      R.state = event.ev === 'done' ? 'done' : 'failed';
-      R.tr.dataset.state = R.state;
-      R.elTd.textContent = fmtElapsed(Date.now() - R.t0);
-      const label = event.ev === 'done' ? '✓ done'
-        : (event.ev === 'cancelled' ? 'cancelled'
-        : (event.ev === 'limit_reached' ? 'turn limit'
-        : (event.ev === 'budget_reached' ? 'budget' : '✗ failed')));
-      R.outTd.innerHTML = '';
-      R.outTd.appendChild(el('span', event.ev === 'done' ? 'ok' : 'bad', label));
-      // The preview was a progress indicator; the report says it properly.
-      R.dlive.textContent = ''; R.liveBuf = '';
-      const content = String(event.content || '');
-      if (content) {
-        R.dreport.style.display = 'block';
-        R.dreport.className = event.ev === 'done' ? 'sl-report' : 'sl-err';
-        R.dreport.textContent = content.slice(0, 4000);
-      }
-      paintLedgerCaption(L);
-    }
+    // A sub-agent's progress belongs to the row that delegated it: live on the row's
+    // note while it works, its own actions and report behind the row's click. It used
+    // to be a separate table, and while a reviewer thought for three minutes the row
+    // said only "Delegating". Found in a live run.
+    const host = v._subHost;
+    if (host) subEvent(host, event);
   } else if (event.type === 'todos') {
     renderTodos(event.todos);
   } else if (event.type === 'usage') {

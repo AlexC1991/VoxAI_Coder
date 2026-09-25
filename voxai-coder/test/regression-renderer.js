@@ -239,32 +239,30 @@ check('a lost wake-up cannot stall the run', /emitWake = res; setTimeout\(res,/.
 check('the tool error still propagates', AG3.includes('if (outcome.error) throw outcome.error;'), 'errors swallowed');
 // Five concurrent workers were five identical unlabelled boxes.
 check('a sub-agent announces what it is', SPAWN.includes("broadcast(sub.id, 'start'"), 'anonymous');
-check('the card labels itself from that', /event\.ev === 'start'[\s\S]{0,300}event\.label/.test(HTML), 'ignored');
+check('the row labels its worker from that', /ev === 'start'\) \{ W\.role = [^\n]*W\.label = String\(event\.label/.test(HTML), 'ignored');
 check('the title is not a list of tool names', !HTML.includes("card._title.textContent + ' / '"), 'header fills with tool names');
-// A worker reading thirty files emitted thirty identical rows.
-check('repeated tool calls coalesce', HTML.includes('R.counts.set(nm') && HTML.includes("name + ' \u00d7' + n"), 'one row each');
+// A worker's actions are the same quiet rows as the thread's, each opening on click.
+check('a worker\'s actions are rows', HTML.includes('function subActRow(act)') && /line\.onclick = \(\) => \{ if \(inner\.hidden\) fillDetail\(inner, act\)/.test(HTML), 'no rows');
 check('the live preview is bounded', HTML.includes('next.slice(-400)'), 'unbounded wall of text');
-check('the preview goes when the report lands', /R\.dlive\.textContent = '';/.test(HTML), 'same text twice');
-check('worker detail starts collapsed', /det\.style\.display = 'none'/.test(HTML), 'opens expanded');
+check('the preview goes when the report lands', /W\.state = ev === 'done'[^\n]*W\.live = '';/.test(HTML), 'same text twice');
+check('worker detail starts collapsed', HTML.includes("const inner = el('div', 'tr-card tr-inner'); inner.hidden = true;"), 'opens expanded');
 
-console.log('\n[AM] T1 rail + S2 ledger: reasoning and delegation must not look alike');
+console.log('\n[AM] T1 rail; delegation lives on the row that delegated it');
 // They were the same object: 1px border, 8px radius, --panel fill, chevron, title,
 // right-aligned status. Two different things in one costume.
 check('reasoning has no border, fill or radius', /\.think\{display:grid;grid-template-columns:9px/.test(HTML), 'still a box');
 check('the rail replaces the chrome', HTML.includes('.think-rail{') && HTML.includes("el('div', 'think-rail')"), 'no rail');
 check('the rail settles when thinking stops', HTML.includes('.think.sealed .think-rail{'), 'pulses forever');
-check('a delegated run DOES get a fill', /\.sub-ledger\{[^}]*background:var\(--panel\)/.test(HTML), 'no weight');
-// Five workers belong to one piece of work, so they belong in one table.
-check('a fan-out is one table, not N boxes', HTML.includes("el('div', 'sub-ledger')") && HTML.includes('L.rows.get(event.subId)'), 'still stacked cards');
-check('columns are tabular figures', /\.sl\{[^}]*tabular-nums/.test(HTML), 'numbers do not line up');
-check('detail spans the table', HTML.includes('dtd.colSpan = 7'), 'breaks column alignment');
-check('the next fan-out gets its own table', HTML.includes('function sealLedger') && HTML.includes("event.name === 'spawn_agent' || event.name === 'spawn_parallel') sealLedger"), 'runs merge');
-// An interval left running keeps repainting a finished card forever.
-check('the elapsed timer stops when nothing runs', /if \(!live\) \{ clearInterval\(L\.timer\)/.test(HTML), 'leaks');
-check('one timer per ledger, not per row', HTML.includes('if (!L.timer) {'), 'timer per worker');
-// The caption must be honest while the fan-out is still in flight.
-check('the verdict counts rows, not the tool result', HTML.includes('function paintLedgerCaption'), 'waits for the last worker');
-check('role colour is separate from status colour', HTML.includes('.sl-role.explore{') && HTML.includes('.sl-out .ok{color:var(--add)}'), 'role doubles as status');
+// A sub-agent's progress was a separate table; while a reviewer thought for three
+// minutes the row that started it said only "Delegating". Found in a live run.
+check('sub-agent events reach the delegating row', HTML.includes('if (host) subEvent(host, event);') && HTML.includes('v._subHost = rec;'), 'separate table');
+check('the row says what the worker is doing', HTML.includes("return { html: rec.subs && rec.subs.size ? subMeta(rec) : '' };") && HTML.includes('function subDoing(W)'), 'just Delegating');
+check('a fan-out is one row, its workers inside', /ws\.length \+ ' agents'/.test(HTML) && HTML.includes('function fillSubs(box, rec)'), 'row per worker');
+// An interval left running keeps repainting a finished row forever.
+check('one timer per row, stopped when nothing runs', HTML.includes('if (running && !rec._subTimer) {') && /if \(!live \|\| !\(rec\.view && rec\.view\.busy\)\) \{ clearInterval\(rec\._subTimer\)/.test(HTML), 'leaks');
+check('the note repaints alone, the spinner keeps turning', HTML.includes('function paintRowMeta(g)'), 'whole row every second');
+check('role colour is separate from status colour', HTML.includes('.tr-role.explore{') && HTML.includes('.tr-role.review{'), 'role doubles as status');
+check('the old table is gone', !HTML.includes('sub-ledger') && !HTML.includes('sealLedger'), 'still there');
 
 console.log('\n[AN] the message queue can be reordered');
 check('every queued row has a grip', HTML.includes("el('button', 'q-grip')") && HTML.includes("icon('grip'"), 'no handle');

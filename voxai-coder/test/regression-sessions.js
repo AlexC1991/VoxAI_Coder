@@ -448,7 +448,7 @@ function loadWith(file, stubs) {
     check("preview:open is judged against the session's folder", MAIN.includes('atlasOpenUrl(arg.url, arg.workdir)') && /b\.open\(url, wd\)/.test(HTML), 'global folder');
 
     // The ledger showed the worker's LAST turn, not its total (4,337 of 9,973).
-    check('ledger tokens accumulate', HTML.includes('R.tok = (R.tok || 0) + tot;'), 'last turn only');
+    check('a worker\'s tokens accumulate', HTML.includes("W.tok += (Number(u.prompt_tokens) || 0) + (Number(u.completion_tokens) || 0);"), 'last turn only');
     check('the shell row is not labelled BASH on Windows', !HTML.includes("if (name==='shell') return 'BASH';"), 'BASH');
   }
 

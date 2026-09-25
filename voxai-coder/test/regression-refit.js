@@ -423,6 +423,15 @@ async function drain(gen) {
     const sm = stepSummary({ EDIT: 5, READ: 2, SHELL: 1 }, { files: new Set(['notes.js', 'test.js']), errors: 2, verdict: '19 passed', failed: 0 });
     check('a step counts the files it changed, not its edit calls', sm.head === 'Changed 2 files', sm.head);
     check('an edit that errored is not a failing test', sm.failed === 0 && sm.errors === 2, sm);
+    const tvSrc = /function testVerdict\(text\)\{[\s\S]*?\n\}/.exec(HTML);
+    const testVerdict = tvSrc && new vm.Script('(' + tvSrc[0] + ')').runInNewContext({});
+    const v = (s) => JSON.stringify(testVerdict(s));
+    check('test counts from every common runner', v('24 tests passed.') === '{"passed":24,"failed":0}'
+      && v('==== 9 passed, 1 failed in 0.5s ====') === '{"passed":9,"failed":1}'
+      && v('  9 passing (12ms)\n  1 failing') === '{"passed":9,"failed":1}'
+      && v('# tests 5\n# pass 5\n# fail 0') === '{"passed":5,"failed":0}'
+      && v('Build finished') === 'null', [v('24 tests passed.'), v('  9 passing (12ms)\n  1 failing'), v('# pass 5\n# fail 0')]);
+    check('an unfinished plan after the run reads as the last plan', HTML.includes('const stale = !complete && !(v.busy && v.planLive);') && HTML.includes("'<b>Last plan</b>'") && HTML.includes('if (v && v._planBusy !== busy) { v._planBusy = busy; paintPlanTray(); }'), 'looks live');
     check('every tool has a verb', ['search', 'agents', 'sandbox_status', 'artifact_publish'].every((t) => HTML.includes("case '" + t + "'")), 'missing');
   }
 
