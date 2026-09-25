@@ -2524,6 +2524,13 @@ function rowMeta(rec){
     return { html: tv && tv.passed !== null ? tv.passed + ' passed' : '' };
   }
   if (rec.name === 'build_state') return { html: '' };   // the verb says it; "set" says nothing
+  // A question's row carries the answer.
+  if (rec.name === 'ask_user' || rec.name === 'ask_confirm') {
+    let o = null; try { o = JSON.parse(rec.result); } catch { /* plain */ }
+    if (!o) return { html: '' };
+    if (rec.name === 'ask_confirm') return { html: o.cancelled ? 'no answer' : (o.confirmed ? 'confirmed' : 'denied') };
+    return { html: o.cancelled || o.answer == null || o.answer === '' ? 'no answer' : esc(trunc(String(o.answer), 60)) };
+  }
   const t = summariseResult(rec.name || '', rec.result, true);
   // A summary that is still raw JSON says nothing at a glance; it is behind the click.
   return { html: t === 'done' || t === 'ok' || /^[\[{]/.test(t) ? '' : esc(t) };
@@ -2764,7 +2771,9 @@ function finalizeRunCard(){
   if (!v || !v.curRun) return;
   const card = v.curRun;
   v.curRun = null;
-  v.latestTool = null;
+  // An action still running keeps its row: a question closes the step so it can sit
+  // below it, and dropping the row here lost the answer -- it read "Asking" for good.
+  if (!(v.latestTool && v.latestTool.ok === null)) v.latestTool = null;
   // A card that never received a row is an artefact of the boundary, not a step the
   // agent took — drop it rather than leaving an empty header in the transcript.
   if (!card.body || !card.body.querySelector('.toolrow')) {

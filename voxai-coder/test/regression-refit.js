@@ -435,6 +435,24 @@ async function drain(gen) {
     check('every tool has a verb', ['search', 'agents', 'sandbox_status', 'artifact_publish'].every((t) => HTML.includes("case '" + t + "'")), 'missing');
   }
 
+  // ------------------------------------------------------------------ [CQ]
+  console.log('\n[CQ] questions come with buttons, and their row takes the answer');
+  {
+    const { buildTools } = require(path.join(ROOT, 'src/backend/tools/index.js'));
+    let asked = null;
+    const ctx = { workdir: WD, session: { id: 'cq', workdir: WD, messages: [], todos: [] }, emit: () => {}, resolveIn: (wd, p) => path.resolve(wd, p), checkPermission: async () => {}, userInput: async (q) => { asked = q; return { answer: 'kg <-> lb' }; } };
+    const ask = buildTools(ctx).ALL.find((t) => t.def.function.name === 'ask_user');
+    const schema = ask.def.function.parameters.properties.options;
+    check('options are plain strings to the model', schema.items.type === 'string', schema.items);
+    await ask.run({ question: 'Which next?', options: ['inches <-> cm', 'kg <-> lb'] }, ctx);
+    check('each string becomes a button', JSON.stringify(asked.options) === JSON.stringify([{ label: 'inches <-> cm', value: 'inches <-> cm' }, { label: 'kg <-> lb', value: 'kg <-> lb' }]), asked.options);
+    await ask.run({ question: 'Which next?', options: [{ label: 'A', value: 'a' }] }, ctx);
+    check('the older {label, value} form still works', JSON.stringify(asked.options) === JSON.stringify([{ label: 'A', value: 'a' }]), asked.options);
+    const HTML = read('src/renderer/index.html');
+    check('a question closing the step keeps its row', HTML.includes('if (!(v.latestTool && v.latestTool.ok === null)) v.latestTool = null;'), 'row stuck on Asking');
+    check('the row shows the answer', /if \(rec\.name === 'ask_user' \|\| rec\.name === 'ask_confirm'\) \{/.test(HTML), 'no answer');
+  }
+
   // ------------------------------------------------------------------ [CP]
   console.log('\n[CP] updates come from CodeRook, and only signed ones install');
   {

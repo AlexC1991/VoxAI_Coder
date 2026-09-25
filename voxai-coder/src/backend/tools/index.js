@@ -436,16 +436,22 @@ function buildTools(opts) {
 
   // ask_user / ask_confirm: the model pauses and asks the user (Codex / Claude
   // Code / goose style) when it needs a decision. Returns the chosen option.
-  const askUser = tool('ask_user', 'Pause and ask the user a question with selectable options (for choices, plan approval, or when you need a decision). Returns the chosen option value. Only use when you genuinely need input.', {
+  // Options are plain strings. As {label, value} objects models left them out -- asked
+  // for "two options", one sent only the question and the user got a text box. Found
+  // in a live run. Objects from older prompts still work.
+  const askUser = tool('ask_user', 'Pause and ask the user a question. Returns their answer. Whenever there is a set of choices, list every one in `options` -- each becomes a button; without options the user must type. Only use when you genuinely need input.', {
     type: 'object',
     properties: {
       question: { type: 'string', description: 'The question to ask the user.' },
-      options: { type: 'array', items: { type: 'object', properties: { label: { type: 'string' }, value: { type: 'string' } }, required: ['label', 'value'] }, description: 'Options to show the user. Leave empty to get free-text input.' },
+      options: { type: 'array', items: { type: 'string' }, description: 'The choices, one button each, e.g. ["inches <-> cm", "kg <-> lb"]. Leave out only for a free-text answer.' },
       default: { type: 'string', description: 'Optional default answer if the user dismisses.' },
     },
     required: ['question'], additionalProperties: false,
   }, async (args, c) => {
-    const res = await c.userInput({ question: String(args.question || ''), options: args.options || [], kind: 'ask' });
+    const options = (Array.isArray(args.options) ? args.options : [])
+      .map((o) => (o && typeof o === 'object' ? { label: String(o.label || o.value || ''), value: String(o.value || o.label || '') } : { label: String(o), value: String(o) }))
+      .filter((o) => o.label);
+    const res = await c.userInput({ question: String(args.question || ''), options, kind: 'ask' });
     return { answer: res ? res.answer : (args.default || null), cancelled: res ? !!res.cancelled : true };
   });
 
