@@ -770,6 +770,26 @@ async function drain(gen) {
       check('and nothing else is loaded as one', cs('x', 'https://evil.test/p.png') === null && cs('x', 'javascript:alert(1)') === null, 'loaded');
       check('reopening draws the screenshots, above their line', /cuShot\('screen', p\.image_url && p\.image_url\.url\)[\s\S]{0,120}\}\s*r\.appendChild\(note\);/.test(H), 'line only');
     }
+    // The queue: steering followed a position, not the message -- remove an earlier one,
+    // or let the front one go out, and the instruction landed on the next message. Edit
+    // replaced a draft in the box and dropped the message's steer note and images.
+    {
+      const H = read('src/renderer/index.html');
+      const sync = new vm.Script('(' + /function syncSteer\(v\)\{[\s\S]*?\n\}/.exec(H)[0] + ')').runInNewContext({ actView: () => null, $: () => null, paintShelf: () => {}, updateSteerHint: () => {} });
+      const A = { text: 'A' }, B = { text: 'B' }, C = { text: 'C' };
+      const v = { queue: [A, B, C], steerIdx: 1, steerItem: B };
+      v.queue.splice(0, 1); sync(v);
+      const afterRemove = v.steerIdx;
+      v.queue.shift(); sync(v);
+      check('steering stays on its message when the queue changes', afterRemove === 0 && v.steerIdx === null && v.steerItem === null, [afterRemove, v.steerIdx]);
+      const v2 = { queue: [A, B, C], steerIdx: 2, steerItem: C };
+      v2.queue.shift(); sync(v2);
+      check('and follows it as it moves up', v2.steerIdx === 1 && v2.queue[v2.steerIdx] === C, v2.steerIdx);
+      check('a message going out re-finds the one being steered', H.includes('const next = v.queue.shift();\n  syncSteer(v);'), 'index kept');
+      check('Send on the start screen starts a session instead of doing nothing', /async function send\(\)\{\s*let v = actView\(\);[\s\S]{0,400}if \(!v\) \{\s*if \(!\$\('prompt'\)\.value\.trim\(\)\) return;[\s\S]{0,120}try \{ await newSession\(\); \}/.test(H), 'nothing');
+      check('Edit does not replace a draft', H.includes("if (ta.value.trim()) { toast('Send or clear what you are typing first, then edit this message.'); return; }"), 'replaced');
+      check('Edit brings back the steer note and images', H.includes("ta.value = item.steer ? raw + '\\n\\n' + item.steer : raw;") && H.includes("if (url) PENDING_ATTACH.push({ dataUrl: url, name: 'image' });"), 'dropped');
+    }
     // Closing the preview and opening it again showed a blank page and "The model
     // hasn't shown anything yet", after two pages had been shown.
     {

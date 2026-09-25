@@ -1216,7 +1216,7 @@ function RR(){ return RT() ? RT().root : null; }
 
 // ---- follow-up queue (Codex-style) ----
 $('steerHintCancel').onclick = () => {
-  const v = actView(); if (v) v.steerIdx = null;
+  const v = actView(); if (v) { v.steerIdx = null; v.steerItem = null; }
   const hint = $('steerHint'); if (hint) hint.hidden = true;
   paintShelf();
   updateSendState();
@@ -1265,7 +1265,7 @@ function renderQueue(v){
   const clearBtn = el('button', 'q-clear', 'Clear all');
   clearBtn.type = 'button';
   clearBtn.title = 'Cancel all queued messages';
-  clearBtn.onclick = (e) => { e.stopPropagation(); v.queue.length = 0; const hint = $('steerHint'); if (hint) hint.hidden = true; v.steerIdx = null; renderQueue(v); paintShelf(); updateSendState(); };
+  clearBtn.onclick = (e) => { e.stopPropagation(); v.queue.length = 0; const hint = $('steerHint'); if (hint) hint.hidden = true; v.steerIdx = null; v.steerItem = null; renderQueue(v); paintShelf(); updateSendState(); };
   head.appendChild(clearBtn);
   qb.appendChild(head);
 
@@ -1350,15 +1350,30 @@ function renderQueue(v){
     const steerBtn = el('button', 'q-act q-steer-btn', 'Steer');
     steerBtn.type = 'button';
     steerBtn.title = 'Steer this queued message (adds an instruction on top)';
-    steerBtn.onclick = (e) => { e.stopPropagation(); v.steerIdx = idx; updateSteerHint(v); $('prompt').focus(); };
+    steerBtn.onclick = (e) => { e.stopPropagation(); v.steerIdx = idx; v.steerItem = item; updateSteerHint(v); $('prompt').focus(); };
     const editBtn = el('button', 'q-act q-edit', 'Edit');
     editBtn.type = 'button';
     editBtn.title = 'Edit this queued message';
-    editBtn.onclick = (e) => { e.stopPropagation(); v.queue.splice(idx, 1); clearSteerIdx(v, idx); $('prompt').value = raw; $('prompt').focus(); renderQueue(v); };
+    editBtn.onclick = (e) => {
+      e.stopPropagation();
+      // Not over what is being typed: Edit replaced a draft in the box without a word.
+      const ta = $('prompt');
+      if (ta.value.trim()) { toast('Send or clear what you are typing first, then edit this message.'); return; }
+      v.queue.splice(idx, 1); syncSteer(v);
+      // Back into the box whole: its steering note and its images went missing.
+      ta.value = item.steer ? raw + '\n\n' + item.steer : raw;
+      for (const p of (item.parts || [])) {
+        const url = p && p.type === 'image_url' && p.image_url && p.image_url.url;
+        if (url) PENDING_ATTACH.push({ dataUrl: url, name: 'image' });
+      }
+      if ((item.parts || []).length) renderAttachTray();
+      ta.dispatchEvent(new Event('input', { bubbles: true }));
+      ta.focus(); renderQueue(v);
+    };
     const cancelBtn = el('button', 'q-act q-cancel', '\u2715');
     cancelBtn.title = 'Remove this queued message';
     cancelBtn.setAttribute('aria-label', 'Remove queued message ' + (idx + 1));
-    cancelBtn.onclick = (e) => { e.stopPropagation(); v.queue.splice(idx, 1); clearSteerIdx(v, idx); renderQueue(v); };
+    cancelBtn.onclick = (e) => { e.stopPropagation(); v.queue.splice(idx, 1); syncSteer(v); renderQueue(v); };
     pill.appendChild(steerBtn); pill.appendChild(editBtn); pill.appendChild(cancelBtn);
     list.appendChild(pill);
   });
@@ -1375,7 +1390,25 @@ function focusGrip(v, idx){
   if (grips[idx]) grips[idx].focus();
 }
 function clearSteerIdx(v, idx){
-  if (v.steerIdx === idx) { v.steerIdx = null; const hint = $('steerHint'); if (hint) hint.hidden = true; paintShelf(); }
+  syncSteer(v);
+}
+/**
+ * The message being steered is a message, not a place in the queue. Removing an earlier
+ * one, or the front one going out when a run finished, shifted the queue under a bare
+ * index -- and the instruction the user then typed was attached to the NEXT message.
+ * Found in a live run. Every change to the queue re-finds it.
+ */
+function syncSteer(v){
+  if (!v) return;
+  const at = v.steerItem && Array.isArray(v.queue) ? v.queue.indexOf(v.steerItem) : -1;
+  if (at === -1) {
+    const was = v.steerIdx != null;
+    v.steerIdx = null; v.steerItem = null;
+    if (was && v === actView()) { const hint = $('steerHint'); if (hint) hint.hidden = true; paintShelf(); }
+  } else {
+    v.steerIdx = at;
+    if (v === actView()) updateSteerHint(v);
+  }
 }
 function updateSteerHint(v){
   const hint = $('steerHint');
@@ -1524,6 +1557,7 @@ function drainQueue(sid, byHand){
   if (v) v.stopRequested = false;
   if (!v || v.busy || !(v.queue && v.queue.length)) return false;
   const next = v.queue.shift();
+  syncSteer(v);   // the one being steered may have just gone out, or moved up
   renderQueue(v);
   // Steering is part of the message: it was shown on the queued row and then dropped
   // when the message went out, so "answer in three words" never reached the agent.
@@ -5145,8 +5179,19 @@ function stopCurrent(){
 }
 
 async function send(){
-  const v = actView();
-  if (!v) return;
+  let v = actView();
+  // On the start screen no session is open. Typing a message there and pressing Send
+  // did nothing at all -- the text sat in the box. Found in a live run. Start one in
+  // the default folder, keeping what was typed and attached.
+  if (!v) {
+    if (!$('prompt').value.trim()) return;
+    const staged = PENDING_ATTACH.slice();
+    try { await newSession(); }
+    catch (e) { toast(String((e && e.message) || e) + ' Pick a folder with New session.'); return; }
+    if (staged.length) { PENDING_ATTACH = staged; renderAttachTray(); }
+    v = actView();
+    if (!v) return;
+  }
   const text = $('prompt').value.trim();
   // An empty box with messages waiting (after a Stop): send the next one.
   if (!text && !v.busy && v.queue && v.queue.length) { drainQueue(v.id, true); return; }
@@ -5159,10 +5204,11 @@ async function send(){
   }
   if (v.busy) {
     // Codex-style follow-up queue: hold it, show Steer/Edit/Cancel, auto-send after the turn.
+    syncSteer(v);
     if (v.steerIdx != null && v.steerIdx >= 0 && v.steerIdx < v.queue.length && text) {
       // steering: attach direction on top of the queued message
       v.queue[v.steerIdx].steer = text;
-      v.steerIdx = null;
+      v.steerIdx = null; v.steerItem = null;
       const hint = $('steerHint'); if (hint) hint.hidden = true;
       paintShelf();
       $('prompt').value = '';
