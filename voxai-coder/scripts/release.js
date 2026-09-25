@@ -43,6 +43,20 @@ if (!fs.existsSync(PRIV)) die(`no release key at ${PRIV}; run npm run release-ke
 
 // ---- 1. the signed manifest
 const bytes = fs.readFileSync(installer);
+// Only a finished build. 0.2.27 went out as a 172 KB installer: the build had stopped
+// part-way through NSIS, and signing it made the feed "check out" against the broken
+// file. electron-builder writes latest.yml last, with the installer's size and hash, so
+// a build that did not finish has none -- or one that does not match.
+{
+  const yml = path.join(ROOT, 'release', 'latest.yml');
+  if (!fs.existsSync(yml)) die('release/latest.yml is missing, so the build did not finish; run npm run dist again');
+  const t = fs.readFileSync(yml, 'utf8');
+  const ySize = Number((/^\s*size:\s*(\d+)/m.exec(t) || [])[1]);
+  const ySha = ((/^sha512:\s*'?([^'\n]+)'?/m.exec(t) || [])[1] || '').trim();
+  const sha = crypto.createHash('sha512').update(bytes).digest('base64');
+  if (ySize !== bytes.length || ySha !== sha) die(`the installer (${bytes.length} bytes) does not match what the build recorded in latest.yml (${ySize} bytes); run npm run dist again`);
+  if (bytes.length < 20 * 1024 * 1024) die(`the installer is only ${bytes.length} bytes, far too small to be the app; run npm run dist again`);
+}
 const m = {
   app: 'voxai-coder', version, file, size: bytes.length,
   sha512: crypto.createHash('sha512').update(bytes).digest('base64'),
