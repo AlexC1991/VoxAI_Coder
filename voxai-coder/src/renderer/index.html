@@ -1133,7 +1133,8 @@ function inlineMd(t){
     .replace(/\*\*([^*]+)\*\*/g,'<strong>$1</strong>')
     .replace(/\*([^*]+)\*/g,'<em>$1</em>')
     .replace(/~~([^~]+)~~/g,'<s>$1</s>')
-    .replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
+    // Web links only: a javascript: href here would run in the app's own page.
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g,'<a href="$2" target="_blank" rel="noopener">$1</a>');
 }
 function renderMarkdown(mdRaw){
   let src = esc(String(mdRaw == null ? '' : mdRaw));
@@ -1293,7 +1294,9 @@ function renderQueue(v){
 
     const num = el('span', 'q-idx', String(idx + 1));
     const raw = String(item.text || '');
-    const t = el('span', 'q-text', raw.slice(0, 64) + (raw.length > 64 ? '…' : ''));
+    // Text, not HTML: a pasted snippet with an onerror handler ran in the app's page
+    // while it waited here. Found in a live run.
+    const t = el('span', 'q-text', esc(raw.slice(0, 64) + (raw.length > 64 ? '…' : '')));
     t.title = raw;
     pill.appendChild(grip);
     pill.appendChild(num);
@@ -1336,7 +1339,7 @@ function renderQueue(v){
     };
     // attached steering instruction (added via Steer)
     if (item.steer) {
-      const st = el('span', 'q-steer', '\u21b3 ' + String(item.steer).slice(0, 44));
+      const st = el('span', 'q-steer', '\u21b3 ' + esc(String(item.steer).slice(0, 44)));
       st.title = item.steer;
       const stX = el('button', 'q-steer-x', '\u00d7');
       stX.title = 'Remove steering';
@@ -4685,7 +4688,7 @@ async function loadUsage(reset){
     if (!g.rows.length) { const d = el('div','usage-hint','No usage in the last 30 days.'); box.appendChild(d); }
     g.rows.forEach((r) => {
       const row = el('div','ug-row');
-      const m = el('span','m', r.model);
+      const m = el('span','m', esc(r.model || ''));
       const tk = el('span','tk', (fmtNum(r.nativeTotal)) + ' tok');
       const t = el('span','t', r.requestCount ? (fmtNum(r.requestCount) + ' req') : '');
       const cost = el('span','cost', r.cost != null ? fmtUsdD(r.cost) : '');
@@ -5194,7 +5197,7 @@ async function loadSubRuns(){
     const card = el('div', 'sub-run');
     const head = el('div', 'sr-head');
     head.appendChild(el('span', 'sr-badge', 'sub'));
-    head.appendChild(el('span', 'sr-model', r.model || ''));
+    head.appendChild(el('span', 'sr-model', esc(r.model || '')));
     const meta = el('span', 'sr-meta', fmtTime(r.updatedAt || ''));
     head.appendChild(meta);
     const openBtn = el('button', 'sr-open', 'open \u2197');

@@ -683,6 +683,15 @@ async function drain(gen) {
       const H = read('src/renderer/index.html');
       check('a clicked link never navigates the page', H.includes("const a = e.target && e.target.closest && e.target.closest('a[href]');") && H.includes("if (/^https?:\\/\\//i.test(href) && window.voxai && window.voxai.openExternal)"), 'navigates');
     }
+    // Text that is not ours is text, not HTML: a queued message with an onerror
+    // handler ran in the app's page (which holds the bridge).
+    {
+      const H = read('src/renderer/index.html');
+      check('a queued message is drawn as text', H.includes("const t = el('span', 'q-text', esc(raw.slice(0, 64)") && H.includes("el('span', 'q-steer', '\\u21b3 ' + esc(String(item.steer)"), 'as HTML');
+      check('model names from outside are drawn as text', H.includes("el('span','m', esc(r.model || ''))") && H.includes("el('span', 'sr-model', esc(r.model || ''))"), 'as HTML');
+      const inl = new vm.Script('(' + /function inlineMd\(t\)\{[\s\S]*?\n\}/.exec(H)[0] + ')').runInNewContext({});
+      check('a markdown link is only ever a web link', inl('[x](javascript:alert(1))').indexOf('<a') < 0 && inl('[x](https://a.test/p)') === '<a href="https://a.test/p" target="_blank" rel="noopener">x</a>', inl('[x](javascript:alert(1))'));
+    }
     // The session menu: Export wrote out the OPEN session, not the one right-clicked,
     // and said so nowhere visible; Delete erased the file for good.
     {
