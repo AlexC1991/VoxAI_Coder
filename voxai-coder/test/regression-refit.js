@@ -418,6 +418,12 @@ async function drain(gen) {
     check('a result never opens its row', !/setToolResult[\s\S]{0,1600}classList\.toggle\('open', !ok\)/.test(HTML) && !/out\.hidden = false/.test(HTML), 'opens itself');
     check('a finished step closes, failures too', HTML.includes('if (card.running === false && card.setOpen) card.setOpen(false);'), 'failed step stays open');
     check('the row answers the real record, not a copy', HTML.includes('v.latestTool = rec || null;'), 'copy');
+    const sumSrc = /function stepSummary\(counts, stats\)\{[\s\S]*?\n\}/.exec(HTML);
+    const stepSummary = sumSrc && new vm.Script('(' + sumSrc[0] + ')').runInNewContext({});
+    const sm = stepSummary({ EDIT: 5, READ: 2, SHELL: 1 }, { files: new Set(['notes.js', 'test.js']), errors: 2, verdict: '19 passed', failed: 0 });
+    check('a step counts the files it changed, not its edit calls', sm.head === 'Changed 2 files', sm.head);
+    check('an edit that errored is not a failing test', sm.failed === 0 && sm.errors === 2, sm);
+    check('every tool has a verb', ['search', 'agents', 'sandbox_status', 'artifact_publish'].every((t) => HTML.includes("case '" + t + "'")), 'missing');
   }
 
   try { fs.rmSync(WD, { recursive: true, force: true }); } catch {}

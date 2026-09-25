@@ -2199,7 +2199,9 @@ function stepSummary(counts, stats){
   const c = counts || {}, st = stats || {};
   const n = (k) => c[k] || 0;
   const plural = (x, one, many) => x + ' ' + (x === 1 ? one : many);
-  const reads = n('READ'), writes = n('WRITE') + n('EDIT') + n('PATCH') + n('FS');
+  // Files, not calls: five edits to two files, two of which failed, changed 2 files.
+  // Until a result names a path, the calls are all there is to count.
+  const reads = n('READ'), writes = st.files ? st.files.size : n('WRITE') + n('EDIT') + n('PATCH') + n('FS');
   const cmds = n('CMD') + n('SHELL'), finds = n('GREP') + n('TREE') + n('RAG');
   const web = n('WEB') + n('FIND'), subs = n('SUB') + n('SUBx'), eye = n('EYE');
   let head, used = {};
@@ -2221,7 +2223,9 @@ function stepSummary(counts, stats){
   if (st.verdict) meta.push(st.verdict);
   if (st.denied && !used.d) meta.push(st.denied + ' denied');
   if (st.blocked && !used.b) meta.push(st.blocked + ' held back by Auto');
-  return { head, meta, failed: st.failed || 0 };
+  // Tests that failed and actions that errored are different news: an edit the agent
+  // had to retry is not a failing test.
+  return { head, meta, failed: st.failed || 0, errors: st.errors || 0 };
 }
 function startRunCard(){
   const v = RT(); if(!v) return null;
@@ -2306,7 +2310,10 @@ function rowLook(name, args, done){
     case 'edit': case 'patch': return pick('edit', 'Edited', 'Editing');
     case 'shell': return pick('term', 'Ran', 'Running');
     case 'node_repl': return pick('term', 'Ran JavaScript', 'Running JavaScript');
-    case 'grep': case 'rag': case 'doc_rag': return pick('search', 'Searched', 'Searching');
+    case 'grep': case 'search': case 'rag': case 'doc_rag': return pick('search', 'Searched', 'Searching');
+    case 'agents': return pick('people', 'Checked sub-agents', 'Checking sub-agents');
+    case 'sandbox_status': return pick('tool', 'Checked access', 'Checking access');
+    case 'artifact_publish': return pick('globe', 'Published', 'Publishing');
     case 'glob': return pick('search', 'Listed', 'Listing');
     case 'lsp': return pick('search', 'Checked types', 'Checking types');
     case 'web_search': return pick('globe', 'Searched the web', 'Searching the web');
@@ -2584,9 +2591,13 @@ function paintMeta(card){
   const sm = stepSummary(card.counts, card.stats);
   // While it runs the header shows the current action, so the files written so far
   // belong in the counts (once it is done, "Changed N files" becomes the name).
-  const c = card.counts || {}, wrote = (c.WRITE || 0) + (c.EDIT || 0) + (c.PATCH || 0) + (c.FS || 0);
+  const c = card.counts || {}, st = card.stats || {};
+  const wrote = st.files ? st.files.size : (c.WRITE || 0) + (c.EDIT || 0) + (c.PATCH || 0) + (c.FS || 0);
   if (card.running && wrote) sm.meta.unshift(wrote + (wrote === 1 ? ' file changed' : ' files changed'));
-  card.meta.innerHTML = sm.meta.map(esc).join(' \u00b7 ') + (sm.failed ? (sm.meta.length ? ' \u00b7 ' : '') + '<span class="bad">' + sm.failed + ' failed</span>' : '');
+  const bad = [];
+  if (sm.failed) bad.push(sm.failed + ' failed');
+  if (sm.errors) bad.push(sm.errors + (sm.errors === 1 ? ' error' : ' errors'));
+  card.meta.innerHTML = sm.meta.filter(Boolean).map(esc).join(' \u00b7 ') + bad.map((b, i) => (i || sm.meta.length ? ' \u00b7 ' : '') + '<span class="bad">' + b + '</span>').join('');
   const end = card.running ? Date.now() : (card.t1 || 0);
   // Under a second is not worth a number.
   card.delta.textContent = card.t0 && end && end - card.t0 >= 1000 ? fmtElapsed(end - card.t0) : '';
@@ -2611,11 +2622,19 @@ function setToolResult(rec, ok, resultText){
     if (blocked) st.blocked = (st.blocked || 0) + 1; else st.denied = (st.denied || 0) + 1;
     const k = kindName(rec.name || '');
     if (rec.card.counts[k]) rec.card.counts[k]--;
-  } else if (!ok) st.failed = (st.failed || 0) + 1;
+  } else if (!ok) st.errors = (st.errors || 0) + 1;
+  const a = rec.args || {};
+  if (ok && a.path && (rec.name === 'write' || rec.name === 'edit' || rec.name === 'patch'
+    || (rec.name === 'fs' && !/^(list|read|stat|exists|search|find)/i.test(String(a.action || ''))))) {
+    (st.files || (st.files = new Set())).add(String(a.path).replace(/\\/g, '/').replace(/^\.\//, ''));
+  }
+  // The latest test run is the verdict: 12 failed, then 19 passed, reads "19 passed".
   const passed = /(\d+)\s+passed/.exec(txt);
-  if (passed) st.verdict = passed[1] + ' passed';
   const failed = /(\d+)\s+failed/.exec(txt);
-  if (failed && Number(failed[1]) > 0) st.failed = Number(failed[1]);
+  if (passed || failed) {
+    st.verdict = passed ? passed[1] + ' passed' : '';
+    st.failed = failed ? Number(failed[1]) : 0;
+  }
   rec.card.t1 = Date.now();
   paintMeta(rec.card);
 }
