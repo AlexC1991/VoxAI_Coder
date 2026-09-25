@@ -658,6 +658,19 @@ async function drain(gen) {
         check('a folder listing shows accented names', d.stdout.includes('café'), d.stdout);
       }
     }
+    // snapshot restore writes files back, yet ran without asking under "Ask first";
+    // the agent named levels the menu does not show ("Auto-edit files").
+    {
+      const SB = require(path.join(ROOT, 'src/backend/tools/sandbox.js'));
+      const rs = SB.checkToolAllowed('snapshot', 'ask', { action: 'restore' });
+      check('restoring a snapshot asks under "Ask first"', !rs.allowed && rs.needsPermission, rs);
+      check('saving one does not', SB.checkToolAllowed('snapshot', 'ask', { action: 'create' }).allowed, 'asks');
+      check('and it runs by itself once edits do', SB.checkToolAllowed('snapshot', 'edit', { action: 'restore' }).allowed, 'asks');
+      const H = read('src/renderer/index.html');
+      const ui = new vm.Script('(' + /\{ ask:'Ask first'[^}]*\}/.exec(H)[0] + ')').runInNewContext({});
+      const same = Object.keys(ui).every((k) => SB.ACCESS_LABELS && SB.ACCESS_LABELS[k] === ui[k]);
+      check('the agent names the levels as the menu does', same, [ui, SB.ACCESS_LABELS]);
+    }
     // node_repl dropped the value of any snippet with a statement, and ran a failing
     // expression twice; rag given a folder said only "cannot read .".
     {

@@ -7,14 +7,16 @@
 // New canonical keys (stored in settings) + user-facing labels + migration.
 // Old keys map to the new canonical form so previously-saved settings keep working.
 const ACCESS_LEVELS = ['ask', 'edit', 'test', 'full'];
+// The names the app shows (index.html ACCESS_LABELS), so what the agent tells the user
+// to pick is what the menu says.
 const ACCESS_LABELS = {
-  ask: 'Ask before changes',
-  edit: 'Auto-edit files',
-  test: 'Auto-edit + tests',
+  ask: 'Ask first',
+  edit: 'Edit files',
+  test: 'Edit and test',
   // Like Claude Code's auto mode: edits and tests run as in "test", and anything that
   // would ask goes to a safety check first (agent.js autoCheck). Not on the ladder of
   // ACCESS_LEVELS: it is a different way of deciding, not a bigger allowance.
-  auto: 'Auto with a safety check',
+  auto: 'Auto',
   full: 'Full access',
 };
 // Old value -> new canonical value (migration for previously-saved settings)
@@ -53,6 +55,9 @@ const AUTO_LEVEL = {
   fs: 1,
   'fs:stat': 0,
   'fs:mkdir': 1, 'fs:move': 1, 'fs:remove': 1,
+  // Restoring writes files back over what is there now: a change, like any edit. It ran
+  // without asking under "Ask first". Saving and listing change nothing.
+  'snapshot:restore': 1, 'snapshot:create': 0, 'snapshot:list': 0,
   skill: 0, 'skill:list': 0, 'skill:load': 0,
   mcp: 3, 'mcp:list_tools': 0, 'mcp:call': 3,
   computer: 3,
