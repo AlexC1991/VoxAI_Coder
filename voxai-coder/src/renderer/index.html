@@ -2343,7 +2343,9 @@ function rowLook(name, args, done){
     case 'grep': case 'search': case 'rag': case 'doc_rag': return pick('search', 'Searched', 'Searching');
     case 'agents': return pick('people', 'Checked sub-agents', 'Checking sub-agents');
     case 'sandbox_status': return pick('tool', 'Checked access', 'Checking access');
-    case 'artifact_publish': return pick('globe', 'Published', 'Publishing');
+    // It keeps a copy in the app's own folder; nothing leaves the machine. 'Published'
+    // under a globe read as if the user's code had been put online.
+    case 'artifact_publish': return pick('file', 'Kept a copy of', 'Keeping a copy of');
     case 'glob': return pick('search', 'Listed', 'Listing');
     case 'lsp': return pick('search', 'Checked types', 'Checking types');
     case 'web_search': return pick('globe', 'Searched the web', 'Searching the web');
@@ -2602,6 +2604,16 @@ function fillSubReport(box, res){
  */
 function testVerdict(text){
   const s = String(text || '');
+  // Python's unittest: 'Ran 11 tests in 0.004s' then 'OK' or 'FAILED (failures=2, errors=1)'.
+  // It matched neither pattern below, so a passing run said nothing and a failing one
+  // said 'exit 1'. Found in a live run.
+  const ran = /\bRan (\d+) tests? in [\d.]+s/.exec(s);
+  if (ran) {
+    const fm = /\bFAILED \(([^)]*)\)/.exec(s);
+    let f = 0;
+    if (fm) for (const m of fm[1].matchAll(/(?:failures|errors)=(\d+)/g)) f += Number(m[1]);
+    if (fm || /(?:^|\n)\s*OK\b/.test(s)) return { passed: Number(ran[1]) - f, failed: f };
+  }
   const num = (res) => { for (const re of res) { const m = re.exec(s); if (m) return Number(m[1]); } return null; };
   const passed = num([/(\d+)\s+(?:tests?\s+)?(?:passed|passing)\b/i, /(?:^|\n)\s*(?:#|ℹ)\s*pass\s+(\d+)/i]);
   const failed = num([/(\d+)\s+(?:tests?\s+)?(?:failed|failing)\b/i, /(?:^|\n)\s*(?:#|ℹ)\s*fail\s+(\d+)/i]);

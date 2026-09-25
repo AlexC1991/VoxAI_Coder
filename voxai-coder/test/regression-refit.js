@@ -658,6 +658,23 @@ async function drain(gen) {
         check('a folder listing shows accented names', d.stdout.includes('café'), d.stdout);
       }
     }
+    // The page's own scripts compile: a broken regex in index.html shows up as a blank
+    // app, not a failing test, unless something checks.
+    {
+      const H = read('src/renderer/index.html');
+      const blocks = [...H.matchAll(/<script(?![^>]*\bsrc=)[^>]*>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+      const bad = [];
+      blocks.forEach((b, i) => { try { new vm.Script(b); } catch (e) { bad.push(i + ': ' + e.message); } });
+      check('every script in the page compiles', blocks.length > 0 && bad.length === 0, bad);
+      // Python's unittest ("Ran 11 tests ... OK") matched no pattern: a passing run
+      // said nothing and a failing one said "exit 1".
+      const tv = new vm.Script('(' + /function testVerdict\(text\)\{[\s\S]*?\n\}/.exec(H)[0] + ')').runInNewContext({});
+      const ok = tv('test_a ... ok\n\n----------------------------------------------------------------------\nRan 11 tests in 0.004s\n\nOK\n');
+      const bad2 = tv('FAIL: test_x\n----------------------------------------------------------------------\nRan 11 tests in 0.005s\n\nFAILED (failures=2, errors=1)\n');
+      check('a unittest run is counted', ok && ok.passed === 11 && ok.failed === 0 && bad2 && bad2.passed === 8 && bad2.failed === 3, [ok, bad2]);
+      check('pytest still is', JSON.stringify(tv('==== 5 passed, 2 failed in 0.12s ====')) === '{"passed":5,"failed":2}', tv('==== 5 passed, 2 failed in 0.12s ===='));
+      check("keeping a copy is not called publishing", H.includes("case 'artifact_publish': return pick('file', 'Kept a copy of', 'Keeping a copy of');"), 'Published');
+    }
     // Argument names from other tools: grep with `pattern` searched for "undefined"
     // (93 meaningless hits); read with `file_path` died on 'paths[1]'.
     {
