@@ -59,7 +59,7 @@ function makeFsOpsTool({ resolveIn, checkPermission }) {
         type: 'function',
         function: {
           name: 'remove',
-          description: 'Remove a file, or a directory (recursive=true).',
+          description: 'Remove a file, or a directory (recursive=true). It goes to the Recycle Bin, so it can be restored.',
           parameters: {
             type: 'object',
             properties: { path: { type: 'string' }, recursive: { type: 'boolean' } },
@@ -102,12 +102,17 @@ function makeFsOpsTool({ resolveIn, checkPermission }) {
         await checkPermission('write-file', args.path);
         const full = resolveIn(ctx.workdir, args.path);
         const st = await fsp.lstat(full);
-        if (st.isDirectory()) {
-          if (!args.recursive) throw new Error('remove: directory needs recursive=true');
-          await fsp.rm(full, { recursive: true });
-        } else {
-          await fsp.unlink(full);
+        if (st.isDirectory() && !args.recursive) throw new Error('remove: directory needs recursive=true');
+        // To the Recycle Bin, not erased: a wrong remove of someone's source files could
+        // not be undone. Outside Electron (tests, a plain node run) there is no bin.
+        let trash = null;
+        try { const e = require('electron'); trash = e && e.shell && typeof e.shell.trashItem === 'function' ? e.shell : null; } catch { trash = null; }
+        if (trash) {
+          await trash.trashItem(full);
+          return { path: args.path, ok: true, recycled: true, note: 'Moved to the Recycle Bin; it can be restored from there.' };
         }
+        if (st.isDirectory()) await fsp.rm(full, { recursive: true });
+        else await fsp.unlink(full);
         return { path: args.path, ok: true };
       }
       if (name === 'search') {

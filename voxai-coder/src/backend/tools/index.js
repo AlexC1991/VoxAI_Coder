@@ -19,8 +19,15 @@ const procs = require('./procs');
 const { eolOf, toEol } = require('./eol');
 const { decodeOutput } = require('./decode');
 
+// Models trained on other tools name the file `file_path`. With `path` missing, node
+// answered 'The "paths[1]" argument must be of type string', which told them nothing.
+function withPathAlias(args) {
+  if (!args || typeof args !== 'object' || args.path !== undefined) return args;
+  const alt = args.file_path !== undefined ? args.file_path : (args.filepath !== undefined ? args.filepath : args.filename);
+  return alt === undefined ? args : { ...args, path: alt };
+}
 function tool(name, description, parameters, run) {
-  return { def: { type: 'function', function: { name, description, parameters } }, run };
+  return { def: { type: 'function', function: { name, description, parameters } }, run: (args, ctx) => run(withPathAlias(args), ctx) };
 }
 
 const { markSeen, assertFresh, wasSeen } = require('./freshness');
@@ -203,14 +210,23 @@ const glob = tool('glob', 'List files matching a glob-ish pattern (supports * an
   return { pattern, files: out.slice(0, 200), total: out.length };
 });
 
-const grep = tool('grep', 'Search file contents for a substring or /regex/flags.', {
+const grep = tool('grep', 'Search file contents. `query` is a plain substring, or /regex/flags; `pattern` is a regular expression. `include` filters file names (e.g. *.js).', {
   type: 'object',
-  properties: { query: { type: 'string' }, include: { type: 'string' } },
-  required: ['query'],
-}, async ({ query, include }, ctx) => {
-  let re;
-  const m = /^\/(.*)\/([gimsuy]*)$/.exec(query);
-  re = m ? new RegExp(m[1], m[2].includes('g') ? m[2] : m[2] + 'g') : null;
+  properties: { query: { type: 'string' }, pattern: { type: 'string', description: 'A regular expression (instead of query).' }, include: { type: 'string' } },
+}, async (args, ctx) => {
+  // Models trained on other tools send `pattern`. With `query` missing, this searched
+  // for the text "undefined" and returned every line containing it -- 93 confident,
+  // meaningless hits. Found in a live run.
+  const { include } = args;
+  let query = typeof args.query === 'string' && args.query !== '' ? args.query : null;
+  let re = null;
+  if (query == null && typeof args.pattern === 'string' && args.pattern !== '') {
+    try { re = new RegExp(args.pattern, 'g'); } catch { query = args.pattern; }
+    if (re) query = args.pattern;
+  }
+  if (query == null) throw new Error('grep needs `query` (text to find, or /regex/flags) or `pattern` (a regular expression).');
+  const m = re ? null : /^\/(.*)\/([gimsuy]*)$/.exec(query);
+  if (m) re = new RegExp(m[1], m[2].includes('g') ? m[2] : m[2] + 'g');
   const hits = [];
   async function walk(dir, depth) {
     if (depth > 10 || hits.length > 200) return;
@@ -225,7 +241,9 @@ const grep = tool('grep', 'Search file contents for a substring or /regex/flags.
       try {
         const st = await fsp.stat(full);
         if (st.size > 512 * 1024) continue;
-        text = await fsp.readFile(full, 'utf8');
+        const buf = await fsp.readFile(full);
+        if (buf.subarray(0, 8192).includes(0)) continue;   // binary: its "lines" are noise
+        text = buf.toString('utf8');
       } catch { continue; }
       const lines = text.split('\n');
       lines.forEach((ln, i) => {
@@ -235,7 +253,8 @@ const grep = tool('grep', 'Search file contents for a substring or /regex/flags.
     }
   }
   await walk(ctx.workdir, 0);
-  return { query, hits };
+  // Say when the list stopped at 200: a cut list read as the whole of it.
+  return hits.length >= 200 ? { query, hits, truncated: true, note: 'Stopped at 200 matches; there are more. Narrow it with include, or a more specific query.' } : { query, hits };
 });
 
 // Name the shell. Without this the model assumes bash: in one session its FIRST

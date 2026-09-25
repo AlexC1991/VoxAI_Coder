@@ -658,6 +658,36 @@ async function drain(gen) {
         check('a folder listing shows accented names', d.stdout.includes('café'), d.stdout);
       }
     }
+    // Argument names from other tools: grep with `pattern` searched for "undefined"
+    // (93 meaningless hits); read with `file_path` died on 'paths[1]'.
+    {
+      const { buildTools } = require(path.join(ROOT, 'src/backend/tools/index.js'));
+      const gctx = { workdir: WD, session: { id: 'g', workdir: WD, messages: [], todos: [] }, emit: () => {}, resolveIn: (w, p) => path.resolve(w, p), checkPermission: async () => {} };
+      const T = Object.fromEntries(buildTools(gctx).ALL.map((t) => [t.def.function.name, t]));
+      fs.mkdirSync(path.join(WD, 'gsrc'), { recursive: true });
+      fs.writeFileSync(path.join(WD, 'gsrc', 'one.js'), 'function finalizeStream() {}\nconst x = undefined;\n');
+      fs.writeFileSync(path.join(WD, 'gsrc', 'blob.bin'), Buffer.from([0, 1, 2, 102, 105, 110, 97, 108, 105, 122, 101, 83, 116, 114, 101, 97, 109]));
+      const g1 = await T.grep.run({ pattern: 'function finalizeStream', include: '*.js' }, gctx);
+      check('grep understands `pattern`', g1.hits.length === 1 && g1.hits[0].line === 1, g1.hits);
+      const g2 = await T.grep.run({ pattern: 'final\\w+Stream\\(' }, gctx);
+      check('and treats it as a regular expression', g2.hits.some((h) => /one\.js$/.test(h.file)), g2.hits);
+      check('binary files are not searched', !g2.hits.some((h) => /blob\.bin$/.test(h.file)), g2.hits);
+      let g3 = null; try { await T.grep.run({}, gctx); } catch (e) { g3 = e.message; }
+      check('nothing to find is explained, not a search for "undefined"', /grep needs `query`/.test(g3 || ''), g3);
+      const r1 = await T.read.run({ file_path: 'gsrc/one.js' }, gctx);
+      check('file_path works as path', r1.lines === 2, r1);
+    }
+    // The agent's remove erased files for good (unlink / rm -r).
+    {
+      const FS = read('src/backend/tools/fsops.js');
+      check("the agent's remove goes to the Recycle Bin", FS.includes('await trash.trashItem(full);') && FS.includes("recycled: true") && FS.indexOf('await trash.trashItem(full);') < FS.indexOf('await fsp.unlink(full);'), 'erased');
+      const { buildTools } = require(path.join(ROOT, 'src/backend/tools/index.js'));
+      const rctx = { workdir: WD, session: { id: 'rm', workdir: WD, messages: [], todos: [] }, emit: () => {}, resolveIn: (w, p) => path.resolve(w, p), checkPermission: async () => {} };
+      const fsT = buildTools(rctx).ALL.find((t) => t.def.function.name === 'fs');
+      fs.writeFileSync(path.join(WD, 'gone.txt'), 'x');
+      const r = await fsT.run({ action: 'remove', path: 'gone.txt' }, rctx);
+      check('outside Electron it still removes', r.ok && !fs.existsSync(path.join(WD, 'gone.txt')), r);
+    }
     // A 7 MB test log hit the 4 MB buffer: killed part-way, "exit 1", verdict lost. A
     // PNG read came back as mangled text. A write replaced a file never read.
     {
