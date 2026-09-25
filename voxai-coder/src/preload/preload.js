@@ -91,7 +91,7 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
   agentSend: (sessionId, text, attachments) => ipcRenderer.invoke('agent:send', { sessionId, text, attachments: attachments || [] }),
   agentCancel: (runKey) => ipcRenderer.invoke('agent:cancel', runKey),
   agentPermission: (permId, allowed, always) => ipcRenderer.invoke('agent:permission', { permId, allowed, always: !!always }),
-  agentAnswer: (inputId, answer) => ipcRenderer.invoke('agent:user-input-answer', { inputId, answer }),
+  agentAnswer: (inputId, answer, cancelled) => ipcRenderer.invoke('agent:user-input-answer', { inputId, answer, cancelled: !!cancelled }),
   agentCompact: (sessionId) => ipcRenderer.invoke('agent:compact', { sessionId }),
   sessionsExport: (id) => ipcRenderer.invoke('sessions:export', { id }),
   sessionsShowExport: (id) => ipcRenderer.invoke('sessions:showExport', id),

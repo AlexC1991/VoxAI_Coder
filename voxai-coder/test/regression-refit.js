@@ -801,6 +801,36 @@ async function drain(gen) {
       check('no key: said first, no session made, not as the model', /let v = actView\(\);\s*\/\/[^\n]*\n[^\n]*\n\s*if \(\$\('prompt'\)\.value\.trim\(\) && !S\.hasOpenRouterKey\) \{\s*openModal\('account'\);\s*toast\(/.test(H) && !H.includes("addMsg('Set your OpenRouter API key"), 'as a reply');
       check('narrow, the Plan label really hides so Send stays in the box', H.includes('.composer-row .plan-sw{font-size:0;gap:0}') && H.includes('.composer-row .chip .cv{display:none}'), 'overridden');
     }
+    // ask_user, the way Claude Code asks: up to 4 questions, described options, one or
+    // several picks, always a way to type your own; skip says so; typed answers count.
+    {
+      const { buildTools } = require(path.join(ROOT, 'src/backend/tools/index.js'));
+      let asked = null, reply = null;
+      const actx = { workdir: WD, session: { id: 'ask2', workdir: WD, messages: [], todos: [] }, emit: () => {}, resolveIn: (w, p) => path.resolve(w, p), checkPermission: async () => {}, userInput: async (q) => { asked = q; return reply; } };
+      const ask = buildTools(actx).ALL.find((t) => t.def.function.name === 'ask_user');
+      const qsSchema = ask.def.function.parameters.properties.questions;
+      check('the model can ask up to 4 questions at once', qsSchema && qsSchema.maxItems === 4 && qsSchema.items.properties.multiSelect && qsSchema.items.properties.options.items.properties.description, qsSchema);
+      reply = { answer: { answers: { 'Which art style?': 'Pixel art (Recommended)', 'Which features?': ['Score', 'Sound'] } }, cancelled: false };
+      const r1 = await ask.run({ questions: [
+        { question: 'Which art style?', header: 'Art style', options: [{ label: 'Pixel art (Recommended)', description: 'Retro look' }, { label: 'Flat vector', description: 'Clean shapes' }] },
+        { question: 'Which features?', header: 'Features', multiSelect: true, options: ['Score', 'Sound', 'Levels'] },
+      ] }, actx);
+      check('the card gets every question with its descriptions', asked.questions.length === 2 && asked.questions[0].options[0].description === 'Retro look' && asked.questions[1].multiSelect === true, asked.questions);
+      check('answers come back per question, several where several were picked', r1.answers['Which art style?'] === 'Pixel art' && JSON.stringify(r1.answers['Which features?']) === '["Score","Sound"]' && r1.cancelled === false, r1);
+      reply = { answer: null, cancelled: true };
+      const r2 = await ask.run({ questions: [{ question: 'Colour?', options: ['red', 'green'] }] }, actx);
+      check('skipping tells the model to decide and say so', r2.cancelled && /Decide sensibly yourself/.test(r2.note || ''), r2);
+      reply = { answer: 'blue please', cancelled: false };
+      const r3 = await ask.run({ questions: [{ question: 'Colour?', options: ['red', 'green'] }] }, actx);
+      check('typing your own answer works', r3.answers['Colour?'] === 'blue please' && r3.answer === 'blue please', r3);
+      const H = read('src/renderer/index.html');
+      check('the card offers Other on every question', H.includes("const oc = addCard(q.options.length ? 'Other…' : 'Type your answer'"), 'no Other');
+      check('keys: 1-9 pick, Enter submits, Esc skips', H.includes("if (/^[1-9]$/.test(e.key) && !e.ctrlKey && !e.altKey && !isField(e.target))") && H.includes("if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); finish(null, true); return; }"), 'no keys');
+      check('the message box answers a waiting question', H.includes('if (v.pendingAsk) {\n    v.pendingAsk.answerTyped(text);'), 'queued instead');
+      check('a run that ends first leaves no live card', H.includes('if (v.pendingAsk) v.pendingAsk.expire();'), 'clickable');
+      check('Esc skips the question rather than stopping the run', H.includes('|| !!(v && v.pendingAsk) ||'), 'stops the run');
+      check('the model is told when to ask, and when not to', read('src/backend/agent.js').includes('ask with ask_user before building rather than guessing: put up to 4 related questions in one call'), 'not told');
+    }
     // 0.2.37: the Memory page back, Esc to stop, a Content-Security-Policy, Copy on code
     // blocks, and the keyboard: shortcuts, paste from anywhere, file paths.
     {

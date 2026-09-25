@@ -756,7 +756,7 @@ app.whenReady().then(() => {
       const c0 = chatWebContents(); c0 && c0.send('agent:permission', { permId, sessionId, kind, target, canAlways: true, note: note || '' });
     });
 
-    const askUserInput = ({ question, options, kind }) => new Promise((resolve) => {
+    const askUserInput = ({ question, options, kind, questions }) => new Promise((resolve) => {
       const inputId = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
       const timer = setTimeout(() => { pendingInputs.delete(inputId); resolve({ answer: null, cancelled: true }); }, 600000);
       pendingInputs.set(inputId, { resolve: (v) => { clearTimeout(timer); resolve(v); } });
@@ -764,7 +764,7 @@ app.whenReady().then(() => {
       // 'agent:user_input' channel that nothing listened to, so the agent's questions
       // never appeared and the run sat waiting ten minutes for an answer. Found in a live run.
       const c1 = chatWebContents();
-      c1 && c1.send('agent:event', { sessionId, runKey, event: { type: 'user_input', inputId, question, options: options || [], kind: kind || 'ask' } });
+      c1 && c1.send('agent:event', { sessionId, runKey, event: { type: 'user_input', inputId, question, options: options || [], kind: kind || 'ask', ...(Array.isArray(questions) ? { questions } : {}) } });
     });
 
     (async () => {
@@ -841,9 +841,10 @@ app.whenReady().then(() => {
     return false;
   });
   // ask_user / ask_confirm round-trip (model pauses and asks the user)
-  ipcMain.handle('agent:user-input-answer', (_e, { inputId, answer }) => {
+  ipcMain.handle('agent:user-input-answer', (_e, { inputId, answer, cancelled }) => {
     const p = pendingInputs.get(inputId);
-    if (p) { pendingInputs.delete(inputId); p.resolve({ answer: answer || '', cancelled: false }); return true; }
+    // Skipping a question is not an answer of "": it says the user chose not to decide.
+    if (p) { pendingInputs.delete(inputId); p.resolve(cancelled ? { answer: null, cancelled: true } : { answer: answer || '', cancelled: false }); return true; }
     return false;
   });
   // manual compact (Compass-like button): force-compact the active session now

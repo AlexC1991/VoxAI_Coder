@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-fHKFl/f8iEoKbHSFOKnc98fj5r6oYtrbvAUr4csHHVw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-npa5kcLWv8TQHieR84x3t4TFaM8MHl3sgij6aLCYJVc='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -426,15 +426,55 @@ tests"). Scroll the row instead of breaking words:
 .key-row .kk{display:flex;gap:4px;flex:none}
 .key-row kbd{font-family:"Sometype Mono",monospace;font-size:11.5px;color:var(--mut);border:1px solid var(--edge2);border-bottom-width:2px;border-radius:5px;padding:2px 7px;background:var(--panel)}
 /* ---- ask_user / ask_confirm inline card ---- */
-.user-q{border:1px solid var(--goldedge);border-radius:10px;background:var(--panel2);padding:10px 14px;margin:6px 0;display:flex;flex-direction:column;gap:8px}
-.user-q .uq-head{display:flex;align-items:center;gap:6px;font-family:"Sometype Mono",monospace;font-size:10.5px;letter-spacing:.1em;color:var(--gold);text-transform:uppercase}
-.user-q .uq-question{font-size:14px;color:var(--ink);line-height:1.5}
-.user-q .uq-options{display:flex;flex-wrap:wrap;gap:7px}
-.user-q .uq-opt{border:1px solid var(--edge2);background:var(--panel);color:var(--mut);cursor:pointer;padding:6px 14px;border-radius:7px;font-size:13px;font-family:Chivo,sans-serif}
-.user-q .uq-opt:hover{color:var(--gold);border-color:var(--goldedge);background:rgba(200,169,97,.06)}
-.user-q .uq-opt.uq-ok{color:var(--add);border-color:var(--add)}
-.user-q .uq-opt.uq-no{color:var(--del);border-color:var(--del)}
-.user-q .uq-cancel{border:0;background:transparent;color:var(--faint);cursor:pointer;font-size:11.5px;text-decoration:underline}
+/* ---- the agent asks: questions and confirmations ---------------------------------
+   One card family: a gold rail on the left, the ask in the heading, choices as rows
+   with a number key, a quiet Skip and one clear action. */
+.user-q{position:relative;border:1px solid var(--edge2);border-radius:12px;background:var(--panel);padding:14px 16px 12px 19px;margin:8px 0;display:flex;flex-direction:column;gap:12px;box-shadow:0 10px 30px -18px rgba(0,0,0,.8)}
+.user-q::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:0 3px 3px 0;background:var(--gold)}
+.user-q .uq-head{display:flex;align-items:center;gap:8px;font-family:"Sometype Mono",monospace;font-size:10.5px;letter-spacing:.12em;color:var(--gold);text-transform:uppercase}
+.user-q .uq-head::after{content:"waiting for you";margin-left:auto;letter-spacing:.06em;text-transform:none;color:var(--faint);font-size:11px;padding-left:14px;background:radial-gradient(circle at 4px 50%,var(--gold) 0 3px,transparent 3.5px) no-repeat;animation:uqWait 1.6s ease-in-out infinite}
+@keyframes uqWait{0%,100%{opacity:1}50%{opacity:.45}}
+.user-q .uq-question{font-size:14.5px;color:var(--ink);line-height:1.5;font-weight:700}
+.user-q .uq-sec{display:flex;flex-direction:column;gap:8px}
+.user-q .uq-sec + .uq-sec{padding-top:12px;border-top:1px solid var(--edge)}
+.user-q .uq-top{display:flex;align-items:center;gap:8px}
+.user-q .uq-hdr{font-family:"Sometype Mono",monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);background:rgba(200,169,97,.1);border:1px solid var(--goldedge);border-radius:999px;padding:2px 9px}
+.user-q .uq-multi{font-size:11.5px;color:var(--faint)}
+.user-q .uq-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:6px}
+.user-q .uq-card{display:flex;align-items:flex-start;gap:11px;width:100%;text-align:left;border:1px solid var(--edge2);background:var(--panel2);color:var(--ink);cursor:pointer;padding:9px 12px;border-radius:9px;font:inherit;transition:border-color .12s,background .12s}
+.user-q .uq-card:hover{border-color:var(--goldedge);background:rgba(200,169,97,.05)}
+.user-q .uq-card:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+.user-q .uq-card.on{border-color:var(--gold);background:rgba(200,169,97,.1)}
+.user-q .uq-k{flex:none;width:20px;height:20px;margin-top:1px;display:flex;align-items:center;justify-content:center;border:1px solid var(--edge2);border-radius:5px;font:11px "Sometype Mono",monospace;color:var(--dim)}
+.user-q .uq-card.on .uq-k{background:var(--gold);border-color:var(--gold);color:#16130c;font-weight:700}
+.user-q .uq-card[role=checkbox].on .uq-k{font-size:0}
+.user-q .uq-card[role=checkbox].on .uq-k::before{content:"\2713";font-size:12px}
+.user-q .uq-t{display:flex;flex-direction:column;gap:2px;min-width:0}
+.user-q .uq-l{font-size:13.5px;color:var(--ink);font-weight:700;overflow-wrap:anywhere}
+.user-q .uq-desc{font-size:12.5px;color:var(--dim);line-height:1.45;overflow-wrap:anywhere}
+.user-q .uq-other-in{width:100%;border:1px solid var(--goldedge);border-radius:8px;background:var(--deep);color:var(--ink);padding:8px 11px;font:13.5px Chivo,sans-serif}
+.user-q .uq-other-in:focus{outline:none;border-color:var(--gold)}
+.user-q .uq-foot{display:flex;align-items:center;gap:10px;padding-top:2px}
+.user-q .uq-hint{flex:1;font-family:"Sometype Mono",monospace;font-size:11px;color:var(--faint)}
+.user-q .uq-skip{border:0;background:transparent;color:var(--dim);cursor:pointer;font:12.5px Chivo,sans-serif;padding:6px 8px;border-radius:7px}
+.user-q .uq-skip:hover{color:var(--ink);background:var(--sel)}
+.user-q .uq-submit{border:0;background:var(--gold);color:#16130c;font:700 13px Chivo,sans-serif;padding:7px 16px;border-radius:8px;cursor:pointer}
+.user-q .uq-submit:hover{filter:brightness(1.07)}
+.user-q .uq-submit:disabled{background:var(--sel);color:var(--faint);cursor:default;filter:none}
+/* the yes/no confirmation, in the same family */
+.user-q .uq-options{display:flex;flex-wrap:wrap;gap:8px}
+.user-q .uq-opt{border:1px solid var(--edge2);background:var(--panel2);color:var(--ink);cursor:pointer;padding:7px 16px;border-radius:8px;font:13px Chivo,sans-serif}
+.user-q .uq-opt:hover{border-color:var(--goldedge);background:rgba(200,169,97,.06)}
+.user-q .uq-opt.uq-ok{background:var(--add);border-color:var(--add);color:#101a0c;font-weight:700}
+.user-q .uq-opt.uq-ok:hover{filter:brightness(1.07)}
+.user-q .uq-opt.uq-no{color:var(--del);border-color:var(--edge2);background:transparent}
+.user-q .uq-opt.uq-no:hover{border-color:var(--del)}
+.user-q .uq-cancel{align-self:flex-start;border:0;background:transparent;color:var(--faint);cursor:pointer;font-size:12px;padding:2px 0}
+.user-q .uq-cancel:hover{color:var(--mut)}
+/* answered: one line per question, kept in the thread */
+.ask2-done{flex-direction:column;align-items:stretch;gap:3px}
+.ask2-done .uq-line{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.ask2-done .uq-line .uq-q{font-family:"Sometype Mono",monospace;font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:var(--gold);min-width:0}
 
 
 .pp-empty{color:var(--faint);font-size:14px;line-height:1.7;text-align:center;margin-top:60px}
@@ -2106,7 +2146,11 @@ function kindName(name){
 function kindSt(name){ return (name==='write'||name==='edit') ? 'write' : 'read'; }
 function cmdFor(name, args){
   if (!args) return '';
-  if (name === 'ask_user') return String(args.question || '').replace(/\s+/g, ' ');
+  if (name === 'ask_user') {
+    const qs = Array.isArray(args.questions) ? args.questions : [];
+    if (qs.length > 1) return qs.length + ' questions: ' + qs.map((q) => (q && (q.header || q.question)) || '').filter(Boolean).join(', ');
+    return String((qs[0] && qs[0].question) || args.question || '').replace(/\s+/g, ' ');
+  }
   if (name === 'ask_confirm') return String(args.message || '').replace(/\s+/g, ' ');
   if (name === 'todo') {
     const items = Array.isArray(args.items) ? args.items : (Array.isArray(args.todos) ? args.todos : null);
@@ -2861,7 +2905,10 @@ function rowMeta(rec){
     let o = null; try { o = JSON.parse(rec.result); } catch { /* plain */ }
     if (!o) return { html: '' };
     if (rec.name === 'ask_confirm') return { html: o.cancelled ? 'no answer' : (o.confirmed ? 'confirmed' : 'denied') };
-    return { html: o.cancelled || o.answer == null || o.answer === '' ? 'no answer' : esc(trunc(String(o.answer), 60)) };
+    if (o.cancelled) return { html: 'skipped' };
+    if (o.answer != null && o.answer !== '') return { html: esc(trunc(String(o.answer), 60)) };
+    const n = Object.keys(o.answers || {}).length;
+    return { html: n ? n + (n === 1 ? ' answer' : ' answers') : 'no answer' };
   }
   const t = summariseResult(rec.name || '', rec.result, true);
   // A summary that is still raw JSON says nothing at a glance; it is behind the click.
@@ -4264,6 +4311,7 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     drainQueue(sid);
   } else if (event.type === 'error' || event.type === 'cancelled') {
     clearTimeout(v.statusTimer);
+    if (v.pendingAsk) v.pendingAsk.expire();
     finalizeStream(); sealThinking(v); finalizeRunCard();
     clearStatus();
     if (event.type === 'cancelled') { const r = RR(); if (r) r.appendChild(el('div', 'fold', 'stopped')); }
@@ -4273,6 +4321,12 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     if (sid === activeId) { $('runDot').style.display = 'none'; updateSendState(); paintShelf(); }
     refreshSessionList(); refreshUsage();
     drainQueue(sid);
+  } else if (event.type === 'user_input' && Array.isArray(event.questions) && event.questions.length) {
+    finalizeStream(); finalizeRunCard();
+    const box = askCard(v, event);
+    setActivity(v, 'Waiting for your answer');
+    if (v === actView()) updateSendState();
+    const rq = RR(); if (rq) { rq.appendChild(box); followThread(); }
   } else if (event.type === 'user_input') {
     finalizeStream(); finalizeRunCard();
     // Codex/Claude-style: the model asks the user a question with options.
@@ -5226,13 +5280,15 @@ function updateSendState(){
   const keys = $('cmpKeys');
   if (keys) {
     const k = (v && v.perm) ? ['\u21b5 allow once', 'Esc deny']
+      : (v && v.pendingAsk) ? (hasText ? ['\u21b5 answer the question'] : ['pick an option above, or type an answer', 'Esc skip'])
       : busy ? (hasText ? ['\u21b5 queue', '\u21e7\u21b5 new line'] : ['\u21b5 stop', 'type to queue a message'])
       : (!hasText && queued) ? ['\u21b5 send the next queued message']
       : ['\u21b5 send', '\u21e7\u21b5 new line'];
     keys.innerHTML = k.map((x) => '<span>' + esc(x) + '</span>').join('');
   }
   const p = $('prompt');
-  if (p) p.placeholder = busy ? (queued ? 'Type to queue another\u2026' : 'Type to queue a message\u2026') : 'Ask anything';
+  // While the agent waits on a question, the box answers it (send() routes it there).
+  if (p) p.placeholder = (v && v.pendingAsk) ? 'Type your answer, or pick above\u2026' : busy ? (queued ? 'Type to queue another\u2026' : 'Type to queue a message\u2026') : 'Ask anything';
 }
 function stopCurrent(){
   const v = actView();
@@ -5271,6 +5327,13 @@ async function send(){
   // An empty box with messages waiting (after a Stop): send the next one.
   if (!text && !v.busy && v.queue && v.queue.length) { drainQueue(v.id, true); return; }
   if (!text) return;
+  // The agent is waiting on a question: what was typed is the answer, not a new message
+  // queued behind a run that is waiting for it.
+  if (v.pendingAsk) {
+    v.pendingAsk.answerTyped(text);
+    $('prompt').value = ''; $('prompt').dispatchEvent(new Event('input', { bubbles: true }));
+    return;
+  }
   const parts = pendingAttachments(); // image parts (data URLs)
   if (parts.length && imageProblem()) {
     const iw = $('shImg'); if (iw) { iw.classList.remove('flash'); void iw.offsetWidth; iw.classList.add('flash'); }
@@ -5588,7 +5651,7 @@ function overlayOpen(){
   const v = actView();
   return ['modalBg', 'newSessModalBg', 'usageModalBg'].some((id) => $(id) && $(id).classList.contains('show'))
     || !!document.querySelector('.chip.open') || ($('sessMenu') && $('sessMenu').style.display !== 'none')
-    || !!(v && v.perm) || !!(v && v.planOpen) || !!document.querySelector('input.sess-rename');
+    || !!(v && v.perm) || !!(v && v.planOpen) || !!(v && v.pendingAsk) || !!document.querySelector('input.sess-rename');
 }
 /** The last thing you sent in this session, for Up in an empty box. */
 function lastSentText(v){
@@ -5682,6 +5745,172 @@ document.addEventListener('paste', (e) => {
   }
   $('prompt').focus();
 });
+/**
+ * The agent's questions, the way Claude Code asks them: up to four at once, each with
+ * described choices, one or several picks, and always "Other" to type your own. One
+ * question with one pick answers on the click; otherwise pick, then Submit. Keys: 1-9
+ * pick, Enter submits, Esc skips; typing in the message box answers too.
+ */
+function askCard(v, event){
+  const qs = event.questions;
+  const box = el('div', 'user-q ask2');
+  box.setAttribute('role', 'group');
+  box.setAttribute('aria-label', 'The agent is asking');
+  const head = el('div', 'uq-head');
+  head.textContent = '✴ ' + (qs.length === 1 ? 'Question' : qs.length + ' questions');
+  box.appendChild(head);
+  const picks = qs.map(() => new Set());   // chosen labels per question
+  const others = qs.map(() => '');         // typed "Other" per question
+  const secs = [];
+  let current = 0;
+  const instant = qs.length === 1 && !qs[0].multiSelect;
+  let done = false;
+  const answered = (i) => picks[i].size > 0 || !!others[i].trim();
+  const submitBtn = el('button', 'uq-submit', 'Submit');
+  submitBtn.type = 'button';
+  const refresh = () => {
+    secs.forEach((s, i) => {
+      s.cards.forEach((c) => {
+        const on = c.dataset.other ? s.otherOpen : picks[i].has(c.dataset.label);
+        c.classList.toggle('on', !!on);
+        c.setAttribute('aria-checked', String(!!on));
+      });
+      s.sec.classList.toggle('current', i === current && !instant);
+    });
+    submitBtn.disabled = !qs.every((_, i) => answered(i));
+  };
+  const finish = (payload, cancelled) => {
+    if (done) return; done = true;
+    v.pendingAsk = null;
+    try { window.voxai.agentAnswer(event.inputId, cancelled ? null : payload, cancelled); } catch {}
+    const rec = el('div', 'uq-done ask2-done');
+    if (cancelled) { rec.appendChild(el('span', 'uq-q', esc(qs.length === 1 ? qs[0].question : qs.length + ' questions'))); rec.appendChild(el('span', 'uq-a', 'Skipped')); }
+    else if (typeof payload === 'string') { rec.appendChild(el('span', 'uq-q', esc(qs[0].question))); rec.appendChild(el('span', 'uq-a', esc(payload))); }
+    else qs.forEach((q) => {
+      const a = payload.answers[q.question];
+      const line = el('div', 'uq-line');
+      line.appendChild(el('span', 'uq-q', esc(q.header || q.question)));
+      // "(Recommended)" was the agent's note to you, not part of your answer.
+      const shown = (Array.isArray(a) ? a : [a]).filter(Boolean).map((x) => String(x).replace(/\s*\(Recommended\)\s*$/i, ''));
+      line.appendChild(el('span', 'uq-a', esc(shown.join(', ') || '—')));
+      rec.appendChild(line);
+    });
+    box.replaceWith(rec);
+    document.removeEventListener('keydown', onKey, true);
+    setActivity(v, 'Working');
+    updateSendState();
+  };
+  const collect = () => {
+    const answers = {};
+    qs.forEach((q, i) => {
+      const chosen = [...picks[i]];
+      const typed = others[i].trim();
+      if (typed) chosen.push(typed);
+      answers[q.question] = q.multiSelect ? chosen : (typed || chosen[0] || '');
+    });
+    return { answers };
+  };
+  const submit = () => { if (!submitBtn.disabled) finish(collect(), false); };
+  const choose = (i, label) => {
+    const q = qs[i];
+    current = i;
+    if (q.multiSelect) { if (picks[i].has(label)) picks[i].delete(label); else picks[i].add(label); }
+    else { picks[i] = new Set([label]); others[i] = ''; secs[i].otherOpen = false; secs[i].otherIn.value = ''; secs[i].otherIn.hidden = true; }
+    refresh();
+    if (instant) { submit(); return; }
+    // A single-pick question is done once picked: move on to the next one.
+    if (!q.multiSelect) { const n = qs.findIndex((_, k) => !answered(k)); if (n !== -1) { current = n; refresh(); } }
+  };
+  qs.forEach((q, i) => {
+    const sec = el('div', 'uq-sec');
+    const top = el('div', 'uq-top');
+    if (q.header) top.appendChild(el('span', 'uq-hdr', esc(q.header)));
+    if (q.multiSelect) top.appendChild(el('span', 'uq-multi', 'choose any'));
+    if (top.children.length) sec.appendChild(top);
+    sec.appendChild(el('div', 'uq-question', esc(q.question)));
+    const list = el('div', 'uq-list');
+    list.setAttribute('role', q.multiSelect ? 'group' : 'radiogroup');
+    const cards = [];
+    const addCard = (label, desc, n, isOther) => {
+      const c = el('button', 'uq-card');
+      c.type = 'button';
+      c.setAttribute('role', q.multiSelect ? 'checkbox' : 'radio');
+      if (isOther) c.dataset.other = '1'; else c.dataset.label = label;
+      c.appendChild(el('span', 'uq-k', String(n)));
+      const t = el('span', 'uq-t');
+      t.appendChild(el('span', 'uq-l', esc(label)));
+      if (desc) t.appendChild(el('span', 'uq-desc', esc(desc)));
+      c.appendChild(t);
+      list.appendChild(c); cards.push(c);
+      return c;
+    };
+    q.options.forEach((o, k) => {
+      const c = addCard(o.label, o.description, k + 1, false);
+      c.onclick = () => choose(i, o.label);
+    });
+    const oc = addCard(q.options.length ? 'Other…' : 'Type your answer', q.options.length ? 'Type your own answer' : '', q.options.length + 1, true);
+    const otherIn = document.createElement('input');
+    otherIn.className = 'uq-other-in';
+    otherIn.placeholder = 'Your answer';
+    otherIn.setAttribute('aria-label', 'Your own answer to: ' + q.question);
+    otherIn.hidden = true;
+    const s = { sec, cards, otherIn, otherOpen: false };
+    oc.onclick = () => {
+      current = i;
+      if (!q.multiSelect) picks[i].clear();
+      s.otherOpen = true; otherIn.hidden = false; otherIn.focus(); refresh();
+    };
+    otherIn.addEventListener('input', () => { others[i] = otherIn.value; refresh(); });
+    otherIn.addEventListener('keydown', (e) => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); if (instant) { if (otherIn.value.trim()) finish(collect(), false); } else submit(); }
+      else if (e.key === 'Escape') { e.preventDefault(); otherIn.blur(); }
+    });
+    sec.appendChild(list); sec.appendChild(otherIn);
+    sec.addEventListener('focusin', () => { current = i; refresh(); });
+    box.appendChild(sec);
+    if (!q.options.length) { s.otherOpen = true; otherIn.hidden = false; }
+    secs.push(s);
+  });
+  const foot = el('div', 'uq-foot');
+  const skip = el('button', 'uq-skip', 'Skip');
+  skip.type = 'button';
+  skip.title = 'Let the agent decide (Esc)';
+  skip.onclick = () => finish(null, true);
+  foot.appendChild(el('span', 'uq-hint', instant ? 'Pick one, or type in the message box · 1–' + (qs[0].options.length + 1) + ' to choose' : 'Enter to submit · Esc to skip'));
+  foot.appendChild(skip);
+  if (!instant || !qs[0].options.length) { submitBtn.onclick = submit; foot.appendChild(submitBtn); }
+  box.appendChild(foot);
+  // Keys while the card waits: 1-9 pick in the current question, Enter submits, Esc skips.
+  function onKey(e){
+    if (done || v !== actView() || !box.isConnected) return;
+    if (e.target && e.target.classList && e.target.classList.contains('uq-other-in')) return;
+    if (isField(e.target) && e.target.id === 'prompt' && e.target.value) return;   // typing an answer there
+    if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); finish(null, true); return; }
+    if (e.key === 'Enter' && !isField(e.target)) { e.preventDefault(); e.stopImmediatePropagation(); submit(); return; }
+    if (/^[1-9]$/.test(e.key) && !e.ctrlKey && !e.altKey && !isField(e.target)) {
+      const s = secs[current]; const c = s && s.cards[Number(e.key) - 1];
+      if (c) { e.preventDefault(); e.stopImmediatePropagation(); c.click(); }
+    }
+  }
+  document.addEventListener('keydown', onKey, true);
+  // Typed in the message box and sent: that is the answer.
+  v.pendingAsk = {
+    answerTyped: (text) => finish(qs.length === 1 ? { answers: { [qs[0].question]: text } } : text, false),
+    // The run ended (Stop, an error) before an answer: the card must not stay clickable.
+    expire: () => {
+      if (done) return; done = true; v.pendingAsk = null;
+      document.removeEventListener('keydown', onKey, true);
+      const rec = el('div', 'uq-done');
+      rec.appendChild(el('span', 'uq-q', esc(qs.length === 1 ? qs[0].question : qs.length + ' questions')));
+      rec.appendChild(el('span', 'uq-a', 'Not answered — the run ended'));
+      box.replaceWith(rec);
+      updateSendState();
+    },
+  };
+  refresh();
+  return box;
+}
 /** Settings > Keyboard, drawn from the same table. */
 function renderKeys(){
   const box = $('keysBody'); if (!box) return;

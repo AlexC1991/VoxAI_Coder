@@ -26,6 +26,45 @@ function withPathAlias(args) {
   const alt = args.file_path !== undefined ? args.file_path : (args.filepath !== undefined ? args.filepath : args.filename);
   return alt === undefined ? args : { ...args, path: alt };
 }
+/**
+ * ask_user's questions, whatever shape they came in: the new list, the old single
+ * question, options as strings or {label, value, description}. Up to 4 questions.
+ */
+function normalizeQuestions(args) {
+  const opt = (o) => (o && typeof o === 'object'
+    ? { label: String(o.label || o.value || '').trim(), description: String(o.description || '').trim(), ...(o.value != null && String(o.value) !== String(o.label) ? { value: String(o.value) } : {}) }
+    : { label: String(o == null ? '' : o).trim(), description: '' });
+  const one = (q) => ({
+    question: String((q && q.question) || '').trim(),
+    header: String((q && q.header) || '').trim().slice(0, 24),
+    options: (Array.isArray(q && q.options) ? q.options : []).map(opt).filter((o) => o.label).slice(0, 6),
+    multiSelect: !!(q && q.multiSelect),
+  });
+  const list = Array.isArray(args && args.questions) && args.questions.length ? args.questions.map(one)
+    : (args && args.question ? [one({ question: args.question, options: args.options })] : []);
+  return list.filter((q) => q.question).slice(0, 4);
+}
+/** What the user answered, as the model reads it. */
+function askResult(qs, res, dflt) {
+  const clean = (s) => String(s).replace(/\s*\(Recommended\)\s*$/i, '');
+  if (!res || res.cancelled || res.answer == null || res.answer === '') return { answers: {}, cancelled: true, answer: dflt || null, note: 'The user closed the question without answering. Decide sensibly yourself, and say what you chose.' };
+  let answers = {};
+  let note = '';
+  const a = res.answer;
+  if (typeof a === 'string') {
+    // Typed in the message box instead of picking.
+    if (qs.length === 1) answers[qs[0].question] = a; else note = a;
+  } else if (a && typeof a === 'object') {
+    // An option given as {label, value} answers with its value, as it always did.
+    const valueOf = (qText, label) => { const q = qs.find((x) => x.question === qText); const o = q && q.options.find((x) => x.label === label); return o && o.value != null ? o.value : clean(label); };
+    for (const [k, v] of Object.entries(a.answers || {})) answers[k] = Array.isArray(v) ? v.map((x) => valueOf(k, x)) : valueOf(k, v);
+    note = String(a.note || '');
+  }
+  const out = { answers, cancelled: false };
+  if (note) out.note = note;
+  if (qs.length === 1) { const v = answers[qs[0].question]; out.answer = Array.isArray(v) ? v.join(', ') : (v != null ? v : note || null); }
+  return out;
+}
 function tool(name, description, parameters, run) {
   return { def: { type: 'function', function: { name, description, parameters } }, run: (args, ctx) => run(withPathAlias(args), ctx) };
 }
@@ -559,21 +598,54 @@ function buildTools(opts) {
   // Options are plain strings. As {label, value} objects models left them out -- asked
   // for "two options", one sent only the question and the user got a text box. Found
   // in a live run. Objects from older prompts still work.
-  const askUser = tool('ask_user', 'Pause and ask the user a question. Returns their answer. Whenever there is a set of choices, list every one in `options` -- each becomes a button; without options the user must type. Only use when you genuinely need input.', {
-    type: 'object',
-    properties: {
-      question: { type: 'string', description: 'The question to ask the user.' },
-      options: { type: 'array', items: { type: 'string' }, description: 'The choices, one button each, e.g. ["inches <-> cm", "kg <-> lb"]. Leave out only for a free-text answer.' },
-      default: { type: 'string', description: 'Optional default answer if the user dismisses.' },
-    },
-    required: ['question'], additionalProperties: false,
-  }, async (args, c) => {
-    const options = (Array.isArray(args.options) ? args.options : [])
-      .map((o) => (o && typeof o === 'object' ? { label: String(o.label || o.value || ''), value: String(o.value || o.label || '') } : { label: String(o), value: String(o) }))
-      .filter((o) => o.label);
-    const res = await c.userInput({ question: String(args.question || ''), options, kind: 'ask' });
-    return { answer: res ? res.answer : (args.default || null), cancelled: res ? !!res.cancelled : true };
-  });
+  // Up to four questions at once, each with described choices, one or several picks,
+  // and always a way to type something else -- the way Claude Code asks. It used to be
+  // one question with bare labels, and either buttons or a text box, never both.
+  const askUser = tool('ask_user',
+    'Ask the user when a decision is theirs to make and you cannot settle it from the request or the code: '
+    + 'a preference (style, look, feel, naming), a trade-off (scope, speed vs. quality), or a missing requirement. '
+    + 'Put up to 4 related questions in ONE call. Give each 2-4 concrete options with a short description of what '
+    + 'choosing it means; list your recommended option first and end its label with " (Recommended)". The user can '
+    + 'always type their own answer instead, so do not add an "Other" option. Set multiSelect when several can apply. '
+    + 'Do not ask about things you can decide sensibly yourself or find out by reading the project. '
+    + 'Returns { answers: { "<question>": "<label>" | ["<label>", …] | "<their own words>" } }.', {
+      type: 'object',
+      properties: {
+        questions: {
+          type: 'array', minItems: 1, maxItems: 4,
+          description: '1-4 questions, shown together.',
+          items: {
+            type: 'object',
+            properties: {
+              question: { type: 'string', description: 'The full question, ending in "?".' },
+              header: { type: 'string', description: 'A tag of 1-3 words shown above it, e.g. "Art style".' },
+              options: {
+                type: 'array', minItems: 2, maxItems: 4,
+                items: {
+                  type: 'object',
+                  properties: {
+                    label: { type: 'string', description: '1-5 words.' },
+                    description: { type: 'string', description: 'What choosing this means, in one short sentence.' },
+                  },
+                  required: ['label'],
+                },
+              },
+              multiSelect: { type: 'boolean', description: 'true when more than one option can be chosen.' },
+            },
+            required: ['question', 'options'],
+          },
+        },
+        // The older single-question form still works.
+        question: { type: 'string' },
+        options: { type: 'array', items: { type: 'string' } },
+        default: { type: 'string' },
+      },
+    }, async (args, c) => {
+      const qs = normalizeQuestions(args);
+      if (!qs.length) throw new Error('ask_user needs `questions`: 1-4 items, each with a `question` and 2-4 `options` ({label, description}).');
+      const res = await c.userInput({ kind: 'ask', questions: qs, question: qs[0].question, options: qs[0].options.map((o) => ({ label: o.label, value: o.value != null ? o.value : o.label })) });
+      return askResult(qs, res, args.default);
+    });
 
   const askConfirm = tool('ask_confirm', 'Pause and ask the user to confirm / deny a single action. Returns {confirmed: true|false}. Use for risky or destructive operations.', {
     type: 'object',
