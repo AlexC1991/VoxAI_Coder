@@ -309,7 +309,6 @@ tests"). Scroll the row instead of breaking words:
 .think.sealed .think-title{color:var(--faint)}
 .think-body{grid-column:2;padding:4px 0 2px 12px;font-size:13.5px;font-style:italic;line-height:1.7;color:var(--dim);white-space:pre-wrap;max-width:66ch;max-height:340px;overflow:auto}
 @keyframes railPulse{0%,100%{opacity:.5}50%{opacity:1}}
-.preview-offer{border:1px solid var(--edge2);border-left:3px solid var(--gold);border-radius:0 6px 6px 0;padding:10px 12px;background:var(--panel)}
 .mini.ic,.pp-btn.ic,.pp-toggle.ic{display:inline-flex;align-items:center;justify-content:center}
 /* The browser view is composited OVER this element, so the body is just a measured
    hole. The placeholder only shows while nothing is loaded. */
@@ -518,6 +517,14 @@ tests"). Scroll the row instead of breaking words:
 .toolrow.open > .top .tr-chev{transform:rotate(90deg)}
 .tr-spin{width:13px;height:13px;flex:none;margin:0 1px;border-radius:50%;background:conic-gradient(var(--gold) 0 90deg,rgba(200,169,97,.18) 90deg 360deg);-webkit-mask:radial-gradient(circle,transparent 52%,#000 54%);mask:radial-gradient(circle,transparent 52%,#000 54%);animation:trspin .85s linear infinite}
 @keyframes trspin{to{transform:rotate(360deg)}}
+.pv-acts{display:flex;gap:6px;flex:none}
+.pv-acts[hidden]{display:none}
+.pv-btn{font:12.5px Chivo,sans-serif;color:var(--gold);background:none;border:1px solid var(--goldedge);border-radius:6px;padding:1px 10px;cursor:pointer}
+.pv-btn:hover{background:rgba(200,169,97,.1)}
+.pv-btn.ghost{color:var(--mut);border-color:var(--edge2)}
+.pv-btn.ghost:hover{color:var(--ink);background:var(--panel2)}
+.pv-row:not(.opened) .top{cursor:default}
+.pv-row:not(.opened) .top:hover{background:transparent;color:var(--dim)}
 .tr-card{margin:4px 0 8px;border:1px solid var(--edge2);border-radius:9px;overflow:hidden;background:var(--deep);min-width:0}
 .tr-card[hidden]{display:none}
 .tr-card.bad{border-color:rgba(207,122,102,.45)}
@@ -1061,7 +1068,25 @@ function icon(name, size){
     + 'style="display:block">' + d + '</svg>';
 }
 
+/**
+ * The agent's text names files by their full path, often as a file:/// address --
+ * "opened it at file:///C:/Users/.../scratchpad/units-cli/hello.html". Inside the
+ * project that is just "hello.html". Found in a live run.
+ */
+let TIDY = { wd: null, re: null };
+function tidyPaths(t){
+  // The session being drawn, which is not the one on screen while a session reopens.
+  const v = RT(); const wd = viewDir(v);
+  if (!wd) return t;
+  if (TIDY.wd !== wd) {
+    const fwd = String(wd).replace(/\\/g, '/').replace(/\/+$/, '');
+    const rx = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    TIDY = { wd, re: new RegExp('(?:file:/{2,3})?(?:' + rx(fwd) + '|' + rx(fwd.replace(/\//g, '\\')) + ')[\\\\/]', 'gi') };
+  }
+  return String(t).replace(TIDY.re, '');
+}
 function renderVTE(t){
+  t = tidyPaths(t == null ? '' : t);
   try {
     const V = window.VTE;
     if (V && V.process) return V.process({ content: String(t == null ? '' : t), surface: 'ide', format: 'html' }).text;
@@ -1505,6 +1530,8 @@ function ppSetUrl(url){
   if (!hst) return;
   let label = '';
   try { label = url ? (new URL(url).host || url.replace(/^file:[/][/][/]?/i, '')) : ''; } catch { label = url || ''; }
+  // A page in the project is named as the project names it: sun.html, not C:/Users/...
+  if (/^file:/i.test(url || '')) { let p = label; try { p = decodeURIComponent(label); } catch {} label = relPath(p, viewDir(actView())); }
   hst.textContent = label || '—';
   hst.title = url || '';
 }
@@ -1578,7 +1605,7 @@ function ppOpen(url){
   // address bar reading "http://localhost" while a different page was loading.
   if (url) ppSetUrl(url);
   ppSetOpen(true);
-  const wd = (actView() && actView().workdir) || '';
+  const wd = viewDir(actView());
   if (b) { try { b.open(url, wd); } catch {} }
   const body = $('ppBody'); if (body && url) body.classList.add('live');
 }
@@ -1755,6 +1782,7 @@ function ppDividerSync(){
 })();
 if (window.voxai && window.voxai.preview && window.voxai.preview.onState) {
   window.voxai.preview.onState(ppSyncState);
+  window.voxai.preview.onState(markPreviewRows);
   // and adopt whatever state the app is already in at startup
   try { window.voxai.preview.state().then(ppSyncState).catch(() => {}); } catch {}
 }
@@ -2517,6 +2545,27 @@ function testVerdict(text){
   const failed = num([/(\d+)\s+(?:tests?\s+)?(?:failed|failing)\b/i, /(?:^|\n)\s*(?:#|ℹ)\s*fail\s+(\d+)/i]);
   return passed === null && failed === null ? null : { passed, failed: failed || 0 };
 }
+/**
+ * The session's project folder. After a reload a view knows it as _workdir until
+ * something fills in workdir; reading workdir alone gave "" and the preview fell back
+ * to the global folder, refusing the page. Found in a live run.
+ */
+function viewDir(v){ return (v && (v.workdir || v._workdir)) || ''; }
+/** A path as the project knows it: "src/app.js", not C:\Users\...\project\src\app.js. */
+function relPath(p, wd){
+  const f = String(p || '').replace(/\\/g, '/'), w = String(wd || '').replace(/\\/g, '/').replace(/\/+$/, '');
+  return w && f.toLowerCase().startsWith(w.toLowerCase() + '/') ? f.slice(w.length + 1) : (f.split('/').pop() || f);
+}
+function fmtBytes(n){ n = Number(n) || 0; return n < 1024 ? n + ' bytes' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB'; }
+function samePreviewUrl(a, b){
+  const norm = (u) => { let x = String(u || ''); try { x = decodeURIComponent(x); } catch {} return x.replace(/^file:\/+/i, '').replace(/\\/g, '/').replace(/[?#].*$/, '').toLowerCase(); };
+  return !!a && !!b && norm(a) === norm(b);
+}
+/** The preview opened something: any row offering that page now says it is open. */
+function markPreviewRows(st){
+  if (!st || !st.open || !st.url) return;
+  document.querySelectorAll('.pv-row').forEach((row) => { if (row._opened && samePreviewUrl(st.url, row.dataset.url)) row._opened(true); });
+}
 /** The note at the row's right edge: +/- lines, "1 failed", "143 lines". */
 function rowMeta(rec){
   if (rec.ok === false) {
@@ -2801,6 +2850,10 @@ function finalizeRunCard(){
   }
   card.running = false;
   if (!card.t1) card.t1 = card.t0 ? Date.now() : 0;
+  // A page still waiting to be previewed stays in sight: the step folds away, and the
+  // offer went with it. Opened, it stays inside with the rest.
+  let after = card.wrap;
+  card.body.querySelectorAll(':scope > .pv-row:not(.opened)').forEach((r) => { after.after(r); after = r; });
   paintLabel(card);
 }
 
@@ -3782,53 +3835,51 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     box.appendChild(head); box.appendChild(body);
     const rr = RR(); if (rr) { rr.appendChild(box); followThread(); }
   } else if (event.type === 'previewable') {
-    // Detect -> offer -> remember. The agent wrote something viewable; say so and let
-    // the user decide once per project, rather than seizing the screen on every
-    // HTML write or making them ask for it (which is what happened before).
+    // Detect -> offer -> remember, as one quiet row in the step: the file, and Open /
+    // Always. It used to be a gold box of its own, and it kept offering a page the agent
+    // had already opened in the preview. Now it says "Opened in preview" instead.
     (async () => {
       let auto = false;
-      try {
-        const pref = await window.voxai.preview.autoPref(v.workdir || '');
-        auto = !!(pref && pref.auto);
-      } catch {}
+      try { const pref = await window.voxai.preview.autoPref(viewDir(v)); auto = !!(pref && pref.auto); } catch {}
+      // Says "Opened" only once it has: an empty folder here fell back to the global
+      // one, the page was refused as outside it, and the row claimed it was open.
       const open = async (always) => {
-        try { await window.voxai.preview.openFile(event.url, v.workdir || '', !!always); } catch {}
+        let r = null;
+        try { r = await window.voxai.preview.openFile(event.url, viewDir(v), !!always); } catch (e) { r = { ok: false, error: String((e && e.message) || e) }; }
+        if (!r || !r.ok) { row._opened(false); meta.textContent = 'could not open'; meta.classList.add('bad'); meta.title = (r && r.error) || ''; }
+        return r;
       };
-      const box = el('div', 'md preview-offer');
-      const name = String(event.path || '').split(/[\/]/).pop();
-      const title = document.createElement('div');
-      title.style.cssText = 'display:flex;align-items:center;gap:8px;flex-wrap:wrap';
-      const tag = document.createElement('span');
-      tag.style.cssText = 'font-family:"Sometype Mono",monospace;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--gold)';
-      tag.textContent = auto ? 'preview opened' : 'ready to preview';
-      const fname = document.createElement('b');
-      fname.textContent = name;
-      fname.title = event.path || '';
-      title.appendChild(tag); title.appendChild(fname);
-      if (event.bytes) {
-        const sz = document.createElement('span');
-        sz.style.cssText = 'color:var(--faint);font-size:12px';
-        sz.textContent = fmtNum(event.bytes) + ' bytes';
-        title.appendChild(sz);
-      }
-      box.appendChild(title);
-
-      if (auto) {
-        open(false);
-      } else {
-        const row = document.createElement('div');
-        row.style.cssText = 'display:flex;gap:7px;margin-top:8px;flex-wrap:wrap';
-        const b1 = document.createElement('button');
-        b1.className = 'btn'; b1.textContent = 'Open preview';
-        b1.onclick = () => { b1.disabled = true; tag.textContent = 'preview opened'; row.remove(); open(false); };
-        const b2 = document.createElement('button');
-        b2.className = 'btn ghost'; b2.textContent = 'Always for this project';
-        b2.title = 'Open previews here automatically from now on';
-        b2.onclick = () => { row.remove(); tag.textContent = 'preview opened'; open(true); };
-        row.appendChild(b1); row.appendChild(b2);
-        box.appendChild(row);
-      }
-      const rr = RR(); if (rr) { rr.appendChild(box); followThread(); }
+      const row = el('div', 'toolrow pv-row can-open');
+      row.dataset.url = String(event.url || '');
+      const top = el('div', 'top');
+      top.appendChild(trIcon('eye'));
+      const verb = el('span', 'tr-verb');
+      const chip = el('span', 'tr-chip');
+      chip.textContent = relPath(event.path || '', v.workdir || v._workdir || '');
+      chip.title = event.path || '';
+      top.appendChild(verb); top.appendChild(chip); top.appendChild(el('span', 'tr-sp'));
+      const meta = el('span', 'tr-meta'); if (event.bytes) meta.textContent = fmtBytes(event.bytes);
+      const acts = el('span', 'pv-acts');
+      const b1 = el('button', 'pv-btn', 'Open'); b1.type = 'button';
+      const b2 = el('button', 'pv-btn ghost', 'Always'); b2.type = 'button';
+      b2.title = 'Open previews in this project automatically from now on';
+      acts.appendChild(b1); acts.appendChild(b2);
+      top.appendChild(meta); top.appendChild(acts);
+      row.appendChild(top);
+      row._opened = (on) => {
+        row.classList.toggle('opened', on);
+        verb.textContent = on ? 'Opened in preview' : 'Preview ready';
+        acts.hidden = on;
+        top.title = on ? 'Show it in the preview again' : '';
+      };
+      row._opened(false);
+      b1.onclick = (e) => { e.stopPropagation(); row._opened(true); open(false); };
+      b2.onclick = (e) => { e.stopPropagation(); row._opened(true); open(true); };
+      top.onclick = () => { if (row.classList.contains('opened')) open(false); };
+      const r = flowRoot(v); if (r) { r.appendChild(row); followThread(); }
+      if (auto) { row._opened(true); open(false); return; }
+      // Already showing it (the agent opened it itself)? Then there is nothing to offer.
+      try { const st = await window.voxai.preview.state(); if (st && st.open && samePreviewUrl(st.url, event.url)) row._opened(true); } catch {}
     })();
   } else if (event.type === 'artifact') {
     // artifact_publish emitted this and nothing listened, so publishing a reviewable

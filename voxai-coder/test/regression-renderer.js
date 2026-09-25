@@ -314,7 +314,7 @@ check('fixtures and deps are excluded', AGT.includes('NOT_A_DELIVERABLE'), 'no e
 check('an edit does not trigger it', AGT.includes("if (toolName !== 'write') return false"), 'edits trigger');
 check('the same file is offered once', AGT.includes('session._offered'), 'repeats');
 check('it emits an offer, not an auto-open', AGT.includes("type: 'previewable'"), 'no event');
-check('renderer offers a choice', HTML.includes('Always for this project'), 'no remember option');
+check('renderer offers a choice', HTML.includes("el('button', 'pv-btn ghost', 'Always')") && HTML.includes('Open previews in this project automatically'), 'no remember option');
 check('the choice is honoured next time', HTML.includes('preview.autoPref'), 'not remembered');
 check('main persists it per project', MAIN.includes('previewAuto'), 'not stored');
 check('file:// is allowed inside the workdir', MAIN.includes('function previewableUrl'), 'still http-only');

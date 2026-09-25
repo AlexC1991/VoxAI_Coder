@@ -474,6 +474,26 @@ async function drain(gen) {
     check('checking a file is not changing one', stepSummary2({ FS: 1, ASK: 1 }, {}).head !== 'Changed 1 file', stepSummary2({ FS: 1, ASK: 1 }, {}).head);
   }
 
+  // ------------------------------------------------------------------ [CS]
+  console.log('\n[CS] a page to preview is a row, and project paths read as project paths');
+  {
+    const HTML = read('src/renderer/index.html');
+    check('the offer is a quiet row with Open and Always', HTML.includes("const row = el('div', 'toolrow pv-row can-open');") && HTML.includes("el('button', 'pv-btn', 'Open')") && !HTML.includes("el('div', 'md preview-offer')"), 'old box');
+    check('an offer still waiting stays in sight when its step folds', HTML.includes("card.body.querySelectorAll(':scope > .pv-row:not(.opened)').forEach((r) => { after.after(r); after = r; });"), 'hidden in a closed step');
+    check('the preview always gets the session\'s folder', HTML.includes('function viewDir(v){ return (v && (v.workdir || v._workdir)) || \'\'; }') && HTML.includes('window.voxai.preview.openFile(event.url, viewDir(v), !!always)') && HTML.includes('const wd = viewDir(actView());') && !HTML.includes("preview.openFile(event.url, v.workdir || ''"), 'global folder after a reload');
+    check('the row says Opened only once it has', HTML.includes("if (!r || !r.ok) { row._opened(false); meta.textContent = 'could not open';"), 'claims success');
+    check('a page already in the preview is not offered again', HTML.includes("if (st && st.open && samePreviewUrl(st.url, event.url)) row._opened(true);") && HTML.includes('window.voxai.preview.onState(markPreviewRows);'), 'offers an open page');
+    const src = /function tidyPaths\(t\)\{[\s\S]*?\n\}/.exec(HTML)[0];
+    const WD = 'C:\\Users\\me\\proj';
+    const tidy = new Function('RT', 'viewDir', 'let TIDY = { wd: null, re: null };\n' + src + '\nreturn tidyPaths;')(() => ({ workdir: WD }), (v) => (v && (v.workdir || v._workdir)) || '');
+    check('a file:/// address in the project reads as its name', tidy('opened file:///C:/Users/me/proj/web/hello.html') === 'opened web/hello.html', tidy('opened file:///C:/Users/me/proj/web/hello.html'));
+    check('so does a Windows path, in any case', tidy('edited c:\\users\\me\\proj\\units.js') === 'edited units.js', tidy('edited c:\\users\\me\\proj\\units.js'));
+    check('paths outside the project stay whole', tidy('see C:\\Windows\\notepad.exe') === 'see C:\\Windows\\notepad.exe', 'changed');
+    check('paths are tidied for the session being drawn, not the one on screen', HTML.includes('const v = RT(); const wd = viewDir(v);'), 'wrong session on reopen');
+    check('the preview title names a project page by its project path', HTML.includes('label = relPath(p, viewDir(actView()));'), 'C:/Users/...');
+    check('the agent is told to name files by project path', read('src/backend/agent.js').includes('use its path relative to the project folder'), 'not told');
+  }
+
   // ------------------------------------------------------------------ [CP]
   console.log('\n[CP] updates come from CodeRook, and only signed ones install');
   {

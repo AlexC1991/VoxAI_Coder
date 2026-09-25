@@ -297,6 +297,7 @@ const SYSTEM = (workdir, access, planMode = false, durable = '', webSearchOn = t
   `"was written, but it does not parse", the change IS already on disk — do not re-apply it; read the ` +
   `reported error and make a corrective edit. ` +
   `Use lsp for deeper project-wide checks, snapshot before risky multi-file changes, and node_repl for quick checks. ` +
+  `When you mention a file, use its path relative to the project folder (hello.html, src/app.js) -- never a file:/// address or the full absolute path. ` +
   `For multi-step work, set out the plan with the todo tool first, then call it again with the whole list whenever a step starts or finishes (mark it active, then done); the user follows it above the message box. Explain briefly, then act. ` +
   `Prefer small verified steps: read → change → run tests → report. ` +
   `You may delegate self-contained work with spawn_agent; pass background:true to keep working while ` +
