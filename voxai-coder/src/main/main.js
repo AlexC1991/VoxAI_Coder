@@ -579,7 +579,7 @@ app.whenReady().then(() => {
       limit: Number(s.contextLimit) > 0 ? Number(s.contextLimit) : 200000,
       threshold: Number(s.compactThreshold) > 0 ? Number(s.compactThreshold) : 0.8,
     };
-    return { id: sess.id, title: sess.title, workdir: sess.workdir, model: sess.model, messages: sess.messages, todos: sess.todos, usage: sess.usage, stats: sess.stats, context };
+    return { id: sess.id, title: sess.title, workdir: sess.workdir, model: sess.model, messages: sess.messages, todos: sess.todos, usage: sess.usage, stats: sess.stats, stops: sess.stops || [], context };
   });
   ipcMain.handle('sessions:delete', async (_e, id) => {
     live.delete(id);
@@ -760,6 +760,16 @@ app.whenReady().then(() => {
           const c = chatWebContents(); c && c.send('agent:event', { sessionId, runKey, event: ev });
           // Persist in-flight messages incrementally (debounced) so nothing is
           // lost if the app is closed or crashes before the run finishes.
+          // A run that stopped at a limit or failed: remember where, so reopening the
+          // session shows the same notice instead of "this run ended before it finished".
+          if (ev.type === 'budget_reached' || ev.type === 'limit_reached' || ev.type === 'error') {
+            try {
+              const stops = sess.stops || (sess.stops = []);
+              stops.push({ at: sess.messages.length, type: ev.type, turns: ev.turns, spent: ev.spent, budget: ev.budget, message: String(ev.message || '').slice(0, 400), when: new Date().toISOString() });
+              if (stops.length > 20) stops.splice(0, stops.length - 20);
+              scheduleSessionSave(sessionId);
+            } catch {}
+          }
           if (ev.type === 'tool_end' || ev.type === 'tool_start' || ev.type === 'permission') {
             scheduleSessionSave(sessionId);
           }

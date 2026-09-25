@@ -66,6 +66,8 @@ async function saveSession(userData, session) {
     JSON.stringify({ kind: 'meta', id: session.id, title: session.title, workdir: session.workdir, model: session.model, ...(session.parentId ? { parentId: session.parentId } : {}), createdAt: session.createdAt, updatedAt: session.updatedAt }),
     ...session.messages.map((m) => JSON.stringify({ kind: 'message', message: m })),
     ...(session.usage || []).map((u) => JSON.stringify({ kind: 'usage', usage: u })),
+    // Where runs stopped at a limit or failed, so a reopened session says so.
+    ...(session.stops || []).map((st) => JSON.stringify({ kind: 'stop', stop: st })),
     JSON.stringify({ kind: 'todos', todos: session.todos }),
   ];
   await fsp.writeFile(path.join(dir, `${session.id}.jsonl`), lines.join('\n'), 'utf8');
@@ -109,6 +111,7 @@ async function loadSession(userData, id) {
     else if (o.kind === 'message') session.messages.push(o.message);
     else if (o.kind === 'usage') session.usage.push(o.usage);
     else if (o.kind === 'todos') session.todos = o.todos;
+    else if (o.kind === 'stop') (session.stops || (session.stops = [])).push(o.stop);
   }
   // rebuild accumulated stats for older sessions that predate the ledger
   session.stats = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, cost: 0, runs: session.usage.length };
@@ -160,6 +163,7 @@ function exportSession(session) {
     JSON.stringify({ kind: 'meta', id: session.id, title: session.title, workdir: session.workdir, model: session.model, ...(session.parentId ? { parentId: session.parentId } : {}), createdAt: session.createdAt, updatedAt: session.updatedAt }),
     ...(session.messages || []).map((m) => JSON.stringify({ kind: 'message', message: m })),
     ...(session.usage || []).map((u) => JSON.stringify({ kind: 'usage', usage: u })),
+    ...(session.stops || []).map((st) => JSON.stringify({ kind: 'stop', stop: st })),
     JSON.stringify({ kind: 'todos', todos: session.todos || [] }),
   ];
   return lines.join('\n');

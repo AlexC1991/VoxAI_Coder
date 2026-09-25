@@ -2226,6 +2226,7 @@ function stepSummary(counts, stats){
   // "Searched the web". Found in a live run.
   else if (web && !reads && !finds) { head = n('FIND') ? 'Searched the web' : (n('WEB') === 1 ? 'Read a web page' : 'Read ' + n('WEB') + ' web pages'); used.web = 1; }
   else if (reads || finds) { head = 'Explored the project'; }
+  else if (n('CHECK')) { head = 'Checked the code'; }
   else if (st.denied) { head = st.denied === 1 ? 'You denied a request' : 'You denied ' + st.denied + ' requests'; used.d = 1; }
   else if (st.blocked) { head = 'Auto mode held back ' + plural(st.blocked, 'action', 'actions'); used.b = 1; }
   else head = 'Worked through ' + plural(Object.values(c).reduce((a, b) => a + b, 0), 'step', 'steps');
@@ -2631,6 +2632,24 @@ function noticeRow({ tone, icon, title, text, actions }){
   box.appendChild(body);
   return box;
 }
+/**
+ * The notice for a run that stopped: at the spend limit, at the turn limit, or with an
+ * error. Live and on reopen alike; only the latest stop still offers to carry on.
+ */
+function stopNotice(ev, live){
+  const money = (x, d) => '$' + Number(x || 0).toFixed(d);
+  if (ev.type === 'budget_reached') return noticeRow({
+    tone: 'warn', icon: 'pause', title: 'Stopped at the spend limit',
+    text: (ev.budget != null ? 'Spent ' + money(ev.spent, 4) + ' of the ' + money(ev.budget, Number(ev.budget) < 0.01 ? 5 : 2) + ' limit per run. ' : '') + 'Work so far is saved.',
+    actions: live ? [{ label: 'Continue', onClick: continueRun }, { label: 'Change the limit', ghost: true, onClick: () => openModal('spend') }] : [],
+  });
+  if (ev.type === 'limit_reached') return noticeRow({
+    tone: 'warn', icon: 'pause', title: ev.turns ? 'Paused after ' + ev.turns + ' turns' : 'Paused',
+    text: 'A guard against runaway loops, not an error. Work so far is saved.',
+    actions: live ? [{ label: 'Continue', onClick: continueRun }] : [],
+  });
+  return noticeRow({ tone: 'bad', icon: 'alert', title: 'Something went wrong', text: tidyPaths(String(ev.message || 'The run stopped with an error.')) });
+}
 /** Carry on after a stop: the same as typing "continue". */
 function continueRun(b){ if (b) b.disabled = true; const p = $('prompt'); if (p) { p.value = 'continue'; send(); } }
 /** A quiet row that is not a tool call: a notice in the same shape as the rest. */
@@ -2668,6 +2687,13 @@ function rowMeta(rec){
     return { html: tv && tv.passed !== null ? tv.passed + ' passed' : '' };
   }
   if (rec.name === 'build_state') return { html: '' };   // the verb says it; "set" says nothing
+  // A type check says what it found, not how many files it looked at.
+  if (rec.name === 'lsp') {
+    let o = null; try { o = JSON.parse(rec.result); } catch { /* plain */ }
+    if (!o || o.checked === undefined) return { html: '' };
+    if (o.failed) return { html: o.failed + (o.failed === 1 ? ' file with errors' : ' files with errors'), bad: true };
+    return { html: o.checked ? 'no errors' : 'nothing to check' };
+  }
   if (rec.name === 'snapshot' || rec.name === 'worktree') {
     let o = null; try { o = JSON.parse(rec.result); } catch { /* plain */ }
     if (!o) return { html: '' };
@@ -3526,13 +3552,30 @@ async function openSession(id){
     }
     const prevT = T; T = v;
     // Tool results by call id, so each replayed tool row gets its own result.
-    const results = new Map();
-    for (const m of full.messages) {
-      if (m && m.role === 'tool' && m.tool_call_id) results.set(m.tool_call_id, typeof m.content === 'string' ? m.content : JSON.stringify(m.content));
-    }
+    // Each call's result is among the tool messages right after its assistant message.
+    // Matched by id across the whole session, a model that numbers calls call_0, call_1
+    // every turn had every call_0 row show the last call_0's result. Found in a live run.
+    const resultsAfter = (i) => {
+      const map = new Map();
+      for (let j = i + 1; j < full.messages.length && full.messages[j] && full.messages[j].role === 'tool'; j++) {
+        const t = full.messages[j];
+        if (t.tool_call_id && !map.has(t.tool_call_id)) map.set(t.tool_call_id, typeof t.content === 'string' ? t.content : JSON.stringify(t.content));
+      }
+      return map;
+    };
     let prevMsg = null;
     const unfinished = (x) => !!x && (x.role === 'tool' || (x.role === 'assistant' && Array.isArray(x.tool_calls) && x.tool_calls.length > 0));
-    for (const m of full.messages) {
+    // A run that stopped at a limit or failed says how, where it stopped; the latest
+    // one, at the very end, still offers to carry on.
+    const stops = Array.isArray(full.stops) ? full.stops : [];
+    const stopAt = (i) => stops.filter((st) => st && st.at === i).pop() || null;
+    const endOfRun = (i, before) => {
+      const st = stopAt(i);
+      if (st) { finalizeRunCard(); v.root.appendChild(stopNotice(st, i === full.messages.length)); }
+      else if (unfinished(before)) v.root.appendChild(el('div', 'fold', 'this run ended before it finished'));
+    };
+    for (let mi = 0; mi < full.messages.length; mi++) {
+      const m = full.messages[mi];
       const before = prevMsg; prevMsg = m;
       if (m.role === 'user') {
         // Some user-role messages were written by the app, not the person: the
@@ -3553,7 +3596,7 @@ async function openSession(id){
           continue;
         }
         finalizeRunCard();
-        if (unfinished(before)) v.root.appendChild(el('div', 'fold', 'this run ended before it finished'));
+        endOfRun(mi, before);
         if (typeof m.content === 'string') addUser(m.content);
         else { // multimodal content array {text, image_url}
           const text = (m.content||[]).filter(p=>p&&p.type==='text').map(p=>p.text).join(' ');
@@ -3565,6 +3608,7 @@ async function openSession(id){
         // The same steps a live run draws: narration and tool calls, with their results.
         const text = typeof m.content === 'string' ? m.content : (m.content ? JSON.stringify(m.content) : '');
         const calls = Array.isArray(m.tool_calls) ? m.tool_calls : [];
+        const results = resultsAfter(mi);
         if (!calls.length) { finalizeRunCard(); if (text.trim()) addMsg(text); continue; }
         if (text.trim()) {
           if (text.trim().length <= SAY_MAX) { const say = el('div', 'md'); say.innerHTML = renderVTE(text); foldNarration(ensureRunCard(), say); }
@@ -3575,7 +3619,7 @@ async function openSession(id){
           let args = {};
           try { args = fn.arguments ? JSON.parse(fn.arguments) : {}; } catch {}
           const rec = addToolRow(fn.name || 'tool', args, true);
-          const res = results.get(tc.id);
+          const res = results.get(tc.id);   // this message's own results (see resultsAfter)
           if (rec && res != null) setToolResult(rec, !/^\s*DENIED_OR_ERROR/.test(res), res);
         }
       }
@@ -3584,7 +3628,8 @@ async function openSession(id){
     // The app closed (or crashed) mid-run: the last thing on record is a tool call or
     // its result, with no answer after it. Say so rather than letting the thread just stop.
     const lastMsg = full.messages[full.messages.length - 1];
-    if (unfinished(lastMsg)) v.root.appendChild(el('div', 'fold', 'this run ended before it finished'));
+    finalizeRunCard();
+    endOfRun(full.messages.length, lastMsg);
     v.ctxFill = full.context || null;
     v.todos = Array.isArray(full.todos) ? full.todos : [];
     v.planKey = v.todos.map((t) => t && t.text).join('\n');
@@ -4021,12 +4066,7 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     clearTimeout(v.statusTimer);
     finalizeStream(); finalizeRunCard();
     clearStatus();
-    const money = (x, d) => '$' + Number(x || 0).toFixed(d);
-    const box = noticeRow({
-      tone: 'warn', icon: 'pause', title: 'Stopped at the spend limit',
-      text: (event.budget != null ? 'Spent ' + money(event.spent, 4) + ' of the ' + money(event.budget, Number(event.budget) < 0.01 ? 5 : 2) + ' limit per run. ' : '') + 'Work so far is saved.',
-      actions: [{ label: 'Continue', onClick: continueRun }, { label: 'Change the limit', ghost: true, onClick: () => openModal('spend') }],
-    });
+    const box = stopNotice(event, true);
     const rr = RR(); if (rr) { rr.appendChild(box); followThread(); }
     v.busy = false; v.activity = '';
     v.runKeys.delete(runKey);
@@ -4039,11 +4079,7 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     clearTimeout(v.statusTimer);
     finalizeStream(); finalizeRunCard();
     clearStatus();
-    const box = noticeRow({
-      tone: 'warn', icon: 'pause', title: event.turns ? 'Paused after ' + event.turns + ' turns' : 'Paused',
-      text: 'A guard against runaway loops, not an error. Work so far is saved.',
-      actions: [{ label: 'Continue', onClick: continueRun }],
-    });
+    const box = stopNotice(event, true);
     const rr = RR(); if (rr) { rr.appendChild(box); followThread(); }
     v.busy = false; v.activity = '';
     v.runKeys.delete(runKey);
@@ -4055,7 +4091,7 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     finalizeStream(); sealThinking(v); finalizeRunCard();
     clearStatus();
     if (event.type === 'cancelled') { const r = RR(); if (r) r.appendChild(el('div', 'fold', 'stopped')); }
-    else { const r = RR(); if (r) { r.appendChild(noticeRow({ tone: 'bad', icon: 'alert', title: 'Something went wrong', text: tidyPaths(String(event.message || 'The run stopped with an error.')) })); followThread(); } }
+    else { const r = RR(); if (r) { r.appendChild(stopNotice(event, true)); followThread(); } }
     v.busy = false; v.activity = '';
     v.runKeys.delete(runKey);
     if (sid === activeId) { $('runDot').style.display = 'none'; updateSendState(); paintShelf(); }

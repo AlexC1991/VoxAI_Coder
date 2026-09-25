@@ -29,6 +29,7 @@
 const { chatCompletions } = require('./providers/openrouter');
 const tools = require('./tools');
 const { compactSession, estimateSessionTokens } = require('./compact');
+const crypto = require('crypto');
 const { checkToolAllowed, checkShellCommand, isReadOnlyCommand } = require('./tools/sandbox');
 const { chatOnce, reasoningParam } = require('./providers/openrouter');
 
@@ -312,6 +313,38 @@ function looksLikeTestCmd(cmd) {
   return /\b(npm (test|t\b)|pytest|vitest|jest|go test|cargo test|ruff|mypy|tsc\b)/i.test(cmd);
 }
 
+/**
+ * Make every tool call id in the history unique, renaming each repeat together with
+ * its result. A result always follows its call, among the tool messages right after
+ * that assistant message, so the pairing is by position, never by the (repeated) id.
+ * Returns how many ids were renamed.
+ */
+function uniqueToolIds(messages) {
+  const seen = new Set();
+  let changed = 0;
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (!m || m.role !== 'assistant' || !Array.isArray(m.tool_calls)) continue;
+    const renamed = [];   // [old, new], in call order
+    for (const c of m.tool_calls) {
+      if (!c) continue;
+      if (!c.id || seen.has(c.id)) {
+        const old = c.id;
+        c.id = (old || 'call') + '_' + crypto.randomBytes(3).toString('hex');
+        renamed.push([old, c.id]);
+        changed++;
+      }
+      seen.add(c.id);
+    }
+    if (!renamed.length) continue;
+    for (let j = i + 1; j < messages.length && messages[j] && messages[j].role === 'tool'; j++) {
+      const k = renamed.findIndex(([old]) => old === messages[j].tool_call_id);
+      if (k >= 0) { messages[j].tool_call_id = renamed[k][1]; renamed.splice(k, 1); }
+    }
+  }
+  return changed;
+}
+
 async function* runAgent(opts) {
   const {
     session, userText, apiKey, host, model,
@@ -553,6 +586,12 @@ async function* runAgent(opts) {
   // retroactive pass rewrote history mid-prefix on every send and destroyed the
   // prompt cache; see the comment on boundToolResult.)
 
+  // Sessions saved before call ids were made unique hold repeats (call_0 every turn).
+  // Rename the repeats once, each together with the result that follows it, so a
+  // provider that requires unique ids accepts the history. Nothing changes when there
+  // are no repeats, so the prompt cache is disturbed at most once per old session.
+  uniqueToolIds(session.messages);
+
   // Build the user message, supporting image attachments (multimodal content array).
   const userParts = [];
   if (userText) userParts.push({ type: 'text', text: userText });
@@ -751,10 +790,25 @@ async function* runAgent(opts) {
       return;
     }
 
+    // Every call id unique in the session. Models number their calls call_0, call_1
+    // afresh each turn: one session held 64 calls under 2 ids, so a reopened session
+    // paired rows with the wrong results, and providers that require unique ids would
+    // refuse the conversation. Found in a live run. The id is fixed here, before the
+    // call is stored, so the call and its result always agree.
+    const usedIds = new Set();
+    for (const m of session.messages) {
+      if (m && m.role === 'assistant' && Array.isArray(m.tool_calls)) for (const c of m.tool_calls) if (c && c.id) usedIds.add(c.id);
+    }
+    toolCalls.forEach((t, i) => {
+      let id = t.id || `call_${turn}_${i}`;
+      if (usedIds.has(id)) id = `${id}_${crypto.randomBytes(3).toString('hex')}`;
+      usedIds.add(id);
+      t.id = id;
+    });
     // assistant turn with tool calls (store, then execute each)
     session.messages.push({
       role: 'assistant', content: content || null,
-      tool_calls: toolCalls.map((t, i) => ({ id: t.id || `call_${turn}_${i}`, type: 'function', function: { name: t.name, arguments: t.arguments } })),
+      tool_calls: toolCalls.map((t) => ({ id: t.id, type: 'function', function: { name: t.name, arguments: t.arguments } })),
     });
 
     const turnImages = [];
@@ -1027,4 +1081,4 @@ async function* runAgent(opts) {
 }
 
 module.exports = {
-  extractImages, TOOL_IMAGES_MARKER, runAgent, MAX_TURNS, boundToolResult, accumulateUsage };
+  extractImages, TOOL_IMAGES_MARKER, runAgent, MAX_TURNS, boundToolResult, accumulateUsage, uniqueToolIds };

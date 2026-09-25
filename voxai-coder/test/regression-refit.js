@@ -512,10 +512,10 @@ async function drain(gen) {
     check('and soon after each file change', HTML.includes('v.ctxTimer = setTimeout(refreshCtx, 700);'), 'stale during a run');
     check('the strip asks about the session\'s own folder', HTML.includes('const r = await window.voxai.workspaceContext(wd);'), 'empty after a reload');
     check('the spend limit is a notice with Continue and Change the limit', HTML.includes("title: 'Stopped at the spend limit'") && HTML.includes("{ label: 'Change the limit', ghost: true, onClick: () => openModal('spend') }"), 'old box');
-    check('the turn limit is a notice with Continue', HTML.includes("title: event.turns ? 'Paused after ' + event.turns + ' turns' : 'Paused'"), 'old box');
+    check('the turn limit is a notice with Continue', HTML.includes("title: ev.turns ? 'Paused after ' + ev.turns + ' turns' : 'Paused'"), 'old box');
     check('an error is a notice, not "Error: …" as text', HTML.includes("title: 'Something went wrong'") && !HTML.includes("addMsg('Error: ' + event.message)"), 'bare text');
     check('a message that could not be sent is a notice, and says it is back in the box', HTML.includes("title: 'Couldn’t send that', text: tidyPaths(reason) + ' Your message is back in the box.'") && !HTML.includes("addMsg('Error: ' + reason, true)"), 'bare Error: text');
-    check('a tiny spend limit is not shown as $0.00', HTML.includes('money(event.budget, Number(event.budget) < 0.01 ? 5 : 2)'), '$0.00');
+    check('a tiny spend limit is not shown as $0.00', HTML.includes('money(ev.budget, Number(ev.budget) < 0.01 ? 5 : 2)'), '$0.00');
     check('Settings shows the real version', HTML.includes('<span id="setVersion">') && !HTML.includes('VoxAI Coder 0.1</div>'), '0.1');
     const MAIN3 = read('src/main/main.js');
     check('usage history finds its rows in any of the shapes the endpoint returns', MAIN3.includes('const list = [d, d && d.rows, d && d.data, d && d.results, body && body.rows, body && body.results].find(Array.isArray);') && !MAIN3.includes('(body && body.data && body.data) || []'), '.map is not a function');
@@ -551,6 +551,52 @@ async function drain(gen) {
     const HTML = read('src/renderer/index.html');
     check('snapshot and worktree rows read as words', HTML.includes("return pick('file', 'Restored a snapshot', 'Restoring a snapshot');") && HTML.includes("create: ['Created worktree', 'Creating worktree']"), 'Snapshot · create');
     try { fs.rmSync(PROJ, { recursive: true, force: true }); fs.rmSync(UD, { recursive: true, force: true }); } catch {}
+  }
+
+  // ------------------------------------------------------------------ [CV]
+  console.log('\n[CV] a run that stopped says so when the session is reopened');
+  {
+    const store = require(path.join(ROOT, 'src/backend/sessions.js'));
+    const UD = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-stops-'));
+    const sess = store.createSession({ workdir: WD, model: 'm', title: 'stops' });
+    sess.messages.push({ role: 'user', content: 'go' }, { role: 'assistant', content: null, tool_calls: [{ id: 'a', type: 'function', function: { name: 'read', arguments: '{}' } }] }, { role: 'tool', tool_call_id: 'a', content: 'x' });
+    sess.stops = [{ at: 3, type: 'limit_reached', turns: 2 }];
+    await store.saveSession(UD, sess);
+    const back = await store.loadSession(UD, sess.id);
+    check('stops are saved and loaded with the session', Array.isArray(back.stops) && back.stops.length === 1 && back.stops[0].type === 'limit_reached' && back.stops[0].at === 3, back.stops);
+    check('and exported with it', store.exportSession(back).includes('"kind":"stop"'), 'missing');
+    const MAIN = read('src/main/main.js');
+    check('a limit or error is recorded where it happened', MAIN.includes("if (ev.type === 'budget_reached' || ev.type === 'limit_reached' || ev.type === 'error') {") && MAIN.includes('stops.push({ at: sess.messages.length, type: ev.type'), 'not recorded');
+    check('reopening hands the stops to the window', MAIN.includes('stats: sess.stats, stops: sess.stops || [], context'), 'not sent');
+    const HTML = read('src/renderer/index.html');
+    check('replay draws the notice where the run stopped; only the last can continue', HTML.includes('v.root.appendChild(stopNotice(st, i === full.messages.length));') && HTML.includes('endOfRun(full.messages.length, lastMsg);'), 'generic line');
+    check('summarising clears stops rather than misplacing them', read('src/backend/compact.js').split('session.stops = [];').length === 3, 'misplaced');
+    try { fs.rmSync(UD, { recursive: true, force: true }); } catch {}
+  }
+
+  // ------------------------------------------------------------------ [CW]
+  console.log('\n[CW] call ids stay unique; the checker runs the right program');
+  {
+    // A model that numbers its calls call_0 every turn, as DeepSeek did.
+    fakeOpenRouter((n) => (n <= 2 ? call('call_0', 'read', { path: 'a.txt' }) : say('done')));
+    fs.writeFileSync(path.join(WD, 'a.txt'), 'hi');
+    const sess = { id: 'cw', workdir: WD, messages: [] };
+    await drain(runAgent({ session: sess, userText: 'go', apiKey: 'k', model: 'm', access: 'full', askPermission: async () => true, maxTurns: 5 }));
+    const ids = sess.messages.filter((m) => m.role === 'assistant' && m.tool_calls).flatMap((m) => m.tool_calls.map((c) => c.id));
+    check('repeated call ids from the model are made unique', ids.length === 2 && new Set(ids).size === 2, ids);
+    const paired = sess.messages.every((m, i) => m.role !== 'tool' || (sess.messages[i - 1] && sess.messages[i - 1].tool_calls && sess.messages[i - 1].tool_calls.some((c) => c.id === m.tool_call_id)));
+    check('each result keeps its own call\'s id', paired, sess.messages.map((m) => m.role + ':' + (m.tool_call_id || (m.tool_calls || []).map((c) => c.id).join(','))));
+    const { uniqueToolIds } = require(path.join(ROOT, 'src/backend/agent.js'));
+    const old = [{ role: 'assistant', tool_calls: [{ id: 'call_0' }] }, { role: 'tool', tool_call_id: 'call_0', content: 'A' }, { role: 'assistant', tool_calls: [{ id: 'call_0' }] }, { role: 'tool', tool_call_id: 'call_0', content: 'B' }];
+    const renamed = uniqueToolIds(old);
+    check('an old session\'s repeats are renamed with their results', renamed === 1 && old[3].tool_call_id === old[2].tool_calls[0].id && old[1].tool_call_id === 'call_0' && uniqueToolIds(old) === 0, old);
+    const HTML = read('src/renderer/index.html');
+    check('a reopened session pairs results by position, not by id', HTML.includes('const results = resultsAfter(mi);'), 'wrong results on repeats');
+    const LSP = read('src/backend/tools/lsp.js');
+    check('node --check runs as Node, not as another copy of the app', LSP.includes("run(process.execPath, ['--check', f], ctx.workdir, 60000, { node: true })") && LSP.includes("opts.env = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };"), 'launches the app');
+    const ss4 = new vm.Script('(' + /function stepSummary\(counts, stats\)\{[\s\S]*?\n\}/.exec(HTML)[0] + ')').runInNewContext({});
+    check('a type check says what it found', HTML.includes("return { html: o.checked ? 'no errors' : 'nothing to check' };") && ss4({ CHECK: 1 }, {}).head === 'Checked the code', ss4({ CHECK: 1 }, {}).head);
+    check('a .cmd checker goes through cmd.exe (Node refuses it otherwise)', LSP.includes("if (process.platform === 'win32' && /\\.(cmd|bat)$/i.test(cmd)) {"), 'EINVAL');
   }
 
   // ------------------------------------------------------------------ [CP]

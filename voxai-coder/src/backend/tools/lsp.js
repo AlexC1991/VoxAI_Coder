@@ -7,10 +7,26 @@ const fsp = require('fs').promises;
 const path = require('path');
 const { execFile } = require('child_process');
 
-function run(cmd, args, cwd, timeoutMs = 60000) {
+/**
+ * Run a checker. Two ways it went wrong on Windows, both found in a live run:
+ *  - a .cmd launcher (npx.cmd) cannot be spawned without a shell -- Node refuses with
+ *    EINVAL -- so every TypeScript check "failed"; it now goes through cmd.exe;
+ *  - `node --check` used process.execPath, which inside the app is the app itself:
+ *    each JS file started another Electron that sat until the timeout and "failed".
+ *    Callers pass { node: true } to run it as plain Node.
+ */
+function run(cmd, args, cwd, timeoutMs = 60000, { node = false } = {}) {
   return new Promise((resolve) => {
     try {
-      execFile(cmd, args, { cwd, timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024, windowsHide: true }, (err, stdout, stderr) => {
+      const opts = { cwd, timeout: timeoutMs, maxBuffer: 8 * 1024 * 1024, windowsHide: true };
+      if (node) opts.env = { ...process.env, ELECTRON_RUN_AS_NODE: '1' };
+      if (process.platform === 'win32' && /\.(cmd|bat)$/i.test(cmd)) {
+        const q = (a) => (/[\s"&|<>^]/.test(a) ? '"' + String(a).replace(/"/g, '""') + '"' : a);
+        args = ['/d', '/s', '/c', '"' + [cmd, ...args].map(q).join(' ') + '"'];
+        cmd = 'cmd.exe';
+        opts.windowsVerbatimArguments = true;
+      }
+      execFile(cmd, args, opts, (err, stdout, stderr) => {
         resolve({ code: err && typeof err.code === 'number' ? err.code : (err ? 1 : 0), stdout: String(stdout || ''), stderr: String(stderr || '') });
       });
     } catch { resolve({ code: 1, stdout: '', stderr: 'failed to launch ' + cmd }); }
@@ -85,7 +101,7 @@ function makeLspTool() {
           for (const f of list) {
             const r = kind === 'json'
               ? await (async () => { try { JSON.parse(await fsp.readFile(f, 'utf8')); return { code: 0 }; } catch (e) { return { code: 1, stderr: e.message }; } })()
-              : await run(process.execPath, ['--check', f], ctx.workdir);
+              : await run(process.execPath, ['--check', f], ctx.workdir, 60000, { node: true });
             results.checked += 1;
             if (r.code) { results.failed += 1; results.errors.push({ kind, file: path.relative(ctx.workdir, f), output: (r.stderr || r.stdout || 'syntax error').slice(0, 1000) }); }
           }

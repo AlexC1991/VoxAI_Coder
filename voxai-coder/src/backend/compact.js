@@ -222,6 +222,7 @@ function compactSession(session, opts = {}) {
     if (fits) {
       session.compactedAt = new Date().toISOString();
       session.messages = compacted;
+      session.stops = [];   // their positions were in the old numbering
       best.session = session;
       return best;
     }
@@ -233,6 +234,7 @@ function compactSession(session, opts = {}) {
   if (best) {
     session.compactedAt = new Date().toISOString();
     session.messages = best.compactedMessages;
+    session.stops = [];
     best.session = session;
     delete best.compactedMessages;
     return best;
