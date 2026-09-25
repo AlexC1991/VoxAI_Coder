@@ -1,6 +1,6 @@
 {
   "name": "voxai-coder",
-  "version": "0.2.13",
+  "version": "0.2.14",
   "description": "VoxAI Coder — Forge-style desktop coding agent. Own Node agent loop, OpenRouter models, no external agent binary.",
   "main": "src/main/main.js",
   "scripts": {

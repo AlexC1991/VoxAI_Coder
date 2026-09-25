@@ -710,6 +710,7 @@ async function drain(gen) {
       fs.mkdirSync(pend, { recursive: true });
       for (const v of ['0.2.11', '0.2.13']) fs.writeFileSync(path.join(pend, `VoxAI-Coder-Setup-${v}.exe`), 'x');
       U.clearInstalledDownload('0.2.12', () => {}, LA);
+      check('a second pass clears what the running installer still held', read('src/main/updater.js').includes('setTimeout(() => clearInstalledDownload(app.getVersion(), log), 90 * 1000);'), 'waits for the next launch');
       check('a newer one waiting to install is kept, older ones go', JSON.stringify(fs.readdirSync(pend)) === JSON.stringify(['VoxAI-Coder-Setup-0.2.13.exe']), fs.readdirSync(pend));
       fs.rmSync(pend, { recursive: true, force: true });
       put('0.2.4');

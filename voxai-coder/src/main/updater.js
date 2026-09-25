@@ -121,7 +121,12 @@ function initUpdater({ app, send, log = () => {} }) {
     return { state: () => st, check: async () => st, install: () => false, onFocus: () => {} };
   }
 
-  if (!test) clearInstalledDownload(app.getVersion(), log);
+  if (!test) {
+    clearInstalledDownload(app.getVersion(), log);
+    // Straight after an update the installer that just ran can still hold its file,
+    // so the first pass misses it; look again once it has certainly finished.
+    setTimeout(() => clearInstalledDownload(app.getVersion(), log), 90 * 1000);
+  }
   const { autoUpdater } = require('electron-updater');
   autoUpdater.setFeedURL({ provider: 'generic', url: feed });
   autoUpdater.autoDownload = false;          // only after the signature checks out
