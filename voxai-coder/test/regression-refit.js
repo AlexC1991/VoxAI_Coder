@@ -525,6 +525,34 @@ async function drain(gen) {
     check('memory rows read as words', HTML.includes("if (act === 'add') return pick('list', 'Remembered', 'Remembering');"), 'Memory · add (2)');
   }
 
+  // ------------------------------------------------------------------ [CU]
+  console.log('\n[CU] a snapshot puts files back');
+  {
+    const snapMod = require(path.join(ROOT, 'src/backend/tools/snapshot.js'));
+    const PROJ = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-snap-'));
+    const UD = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-snapud-'));
+    fs.writeFileSync(path.join(PROJ, 'notes.md'), 'First line.\n');
+    fs.mkdirSync(path.join(PROJ, 'node_modules', 'x'), { recursive: true });
+    fs.writeFileSync(path.join(PROJ, 'node_modules', 'x', 'big.js'), 'skip me');
+    const asked = [];
+    const tool = snapMod.makeSnapshotTool({ userData: UD });
+    const ctx = { session: { id: 'cu', workdir: PROJ }, checkPermission: async (kind, target) => { asked.push(kind + ' ' + target); return true; } };
+    const made = await tool.run({ action: 'create' }, ctx);
+    check('create saves the project\'s files by itself, not node_modules', made.files === 1, made);
+    fs.writeFileSync(path.join(PROJ, 'notes.md'), 'First line.\nTemporary line.\n');
+    fs.writeFileSync(path.join(PROJ, 'new.txt'), 'made later');
+    const back = await tool.run({ action: 'restore', id: made.id }, ctx);
+    check('restore puts the file back', fs.readFileSync(path.join(PROJ, 'notes.md'), 'utf8') === 'First line.\n' && back.restored.join() === 'notes.md', back);
+    check('files made since are left in place', fs.existsSync(path.join(PROJ, 'new.txt')), 'deleted');
+    check('restoring asks like any change', asked.length === 1 && asked[0].startsWith('write-file'), asked);
+    const outside = await snapMod.createSnapshot({ userData: UD, session: { id: 'cu', workdir: PROJ }, files: ['../escape.txt'] });
+    check('paths outside the project are not saved', outside.files === 0 && outside.skipped === 1, outside);
+    check('plan mode treats a restore as a change', read('src/backend/agent.js').includes("snapshot: ['restore']"), 'restores while planning');
+    const HTML = read('src/renderer/index.html');
+    check('snapshot and worktree rows read as words', HTML.includes("return pick('file', 'Restored a snapshot', 'Restoring a snapshot');") && HTML.includes("create: ['Created worktree', 'Creating worktree']"), 'Snapshot · create');
+    try { fs.rmSync(PROJ, { recursive: true, force: true }); fs.rmSync(UD, { recursive: true, force: true }); } catch {}
+  }
+
   // ------------------------------------------------------------------ [CP]
   console.log('\n[CP] updates come from CodeRook, and only signed ones install');
   {

@@ -2215,7 +2215,7 @@ function stepSummary(counts, stats){
   // File operations count only once a result names a change: checking a file (fs stat)
   // read as "Changed 1 file" when nothing changed. Found in a live run.
   const reads = n('READ'), writes = st.files ? st.files.size : n('WRITE') + n('EDIT') + n('PATCH');
-  const cmds = n('CMD') + n('SHELL'), finds = n('GREP') + n('TREE') + n('RAG');
+  const cmds = n('CMD') + n('SHELL') + n('REPL'), finds = n('GREP') + n('TREE') + n('RAG');
   const web = n('WEB') + n('FIND'), subs = n('SUB') + n('SUBx'), eye = n('EYE');
   let head, used = {};
   if (writes) { head = 'Changed ' + plural(writes, 'file', 'files'); used.w = 1; }
@@ -2346,8 +2346,17 @@ function rowLook(name, args, done){
     case 'ask_user': case 'ask_confirm': return pick('ask', 'Asked', 'Asking');
     case 'spawn_agent': case 'spawn_parallel': return pick('people', 'Delegated', 'Delegating');
     case 'computer': return pick('eye', 'Used the browser', 'Using the browser');
-    case 'worktree': return pick('tool', 'Git');
-    case 'snapshot': return pick('tool', 'Snapshot');
+    case 'worktree': {
+      const act = String((args && args.action) || '');
+      const W = { create: ['Created worktree', 'Creating worktree'], status: ['Checked worktree', 'Checking worktree'], merge: ['Merged worktree', 'Merging worktree'], discard: ['Discarded worktree', 'Discarding worktree'] }[act] || ['Worktree', 'Worktree'];
+      return pick('tool', W[0], W[1]);
+    }
+    case 'snapshot': {
+      const act = String((args && args.action) || '');
+      if (act === 'create') return pick('file', 'Saved a snapshot', 'Saving a snapshot');
+      if (act === 'restore') return pick('file', 'Restored a snapshot', 'Restoring a snapshot');
+      return pick('list', 'Listed snapshots', 'Listing snapshots');
+    }
     case 'skill': return pick('tool', 'Used a skill', 'Using a skill');
     case 'mcp': return pick('tool', 'Called', 'Calling');
     // Its notes for the next session: what is done, what is left.
@@ -2386,6 +2395,9 @@ function rowChip(name, args){
   if (name === 'shell') { const c = String(a.command || '').replace(/\s+/g, ' ').trim(); return c ? { text: c, title: String(a.command) } : null; }
   if (name === 'todo') return null;
   if (name === 'build_state') return a.task ? { text: String(a.task), title: String(a.task) } : null;
+  // The verb carries the action; the chip is the worktree's name, or nothing.
+  if (name === 'worktree') return a.name ? { text: String(a.name), title: String(a.name) } : null;
+  if (name === 'snapshot') return null;
   if (name === 'memory') {
     const facts = Array.isArray(a.facts) ? a.facts.map((f) => (f && typeof f === 'object' ? f.text || f.fact || '' : String(f))).filter(Boolean) : [];
     const t = a.action === 'search' ? String(a.query || '') : facts.length ? facts[0] + (facts.length > 1 ? ' \u2026' : '') : '';
@@ -2656,6 +2668,15 @@ function rowMeta(rec){
     return { html: tv && tv.passed !== null ? tv.passed + ' passed' : '' };
   }
   if (rec.name === 'build_state') return { html: '' };   // the verb says it; "set" says nothing
+  if (rec.name === 'snapshot' || rec.name === 'worktree') {
+    let o = null; try { o = JSON.parse(rec.result); } catch { /* plain */ }
+    if (!o) return { html: '' };
+    const n = (x, one, many) => x + ' ' + (x === 1 ? one : many);
+    if (Array.isArray(o.restored)) return o.restored.length ? { html: n(o.restored.length, 'file', 'files') + ' put back' } : { html: 'nothing to put back' };
+    if (o.files !== undefined && o.id) return { html: n(Number(o.files), 'file', 'files') };
+    if (Array.isArray(o.snapshots)) return { html: n(o.snapshots.length, 'snapshot', 'snapshots') };
+    return { html: '' };
+  }
   if (rec.name === 'memory') {
     const facts = Array.isArray((rec.args || {}).facts) ? rec.args.facts.length : 0;
     if ((rec.args || {}).action === 'add' && facts) return { html: facts + (facts === 1 ? ' fact' : ' facts') };
@@ -5231,7 +5252,7 @@ function renderMemory(){
 // ---- session export (in the session context menu) ----
 function exportActiveSession(){
   if (!activeId) return;
-  try { window.voxai.sessionsExport(activeId).then((r) => { if (r && r.ok) setStatus('Exported to ' + (r.path || '')); }); } catch(e){}
+  try { window.voxai.sessionsExport(activeId).then((r) => { if (r && r.ok) setStatus('Exported to ' + relPath(r.path || '', viewDir(actView()))); }); } catch(e){}
 }
 
 // boot

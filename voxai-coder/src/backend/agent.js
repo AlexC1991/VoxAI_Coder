@@ -815,7 +815,7 @@ async function* runAgent(opts) {
         // enough: `fs` is only mutating for mkdir/move/remove, and `computer`
         // drives a real browser so it counts throughout.
         const MUTATING = ['write', 'edit', 'patch', 'shell', 'spawn_agent', 'spawn_parallel', 'worktree', 'computer'];
-        const MUTATING_ACTIONS = { fs: ['mkdir', 'move', 'remove'], mcp: ['call'] };
+        const MUTATING_ACTIONS = { fs: ['mkdir', 'move', 'remove'], mcp: ['call'], snapshot: ['restore'] };
         const act = args && (args.action || args.op);
         // Looking is what planning is for: `dir` or `git status` changes nothing.
         const readOnlyShell = tc.name === 'shell' && isReadOnlyCommand(String((args && args.command) || ''));
