@@ -225,9 +225,13 @@ const shell = tool('shell', SHELL_DESC, {
   try { await ctx.checkPermission('shell', command); }
   catch (e) { reject(e); return; }
   const isWin = process.platform === 'win32';
-  const child = execFile(isWin ? 'cmd.exe' : '/bin/sh', isWin ? ['/d', '/s', '/c', command] : ['-c', command], {
+  // cmd.exe gets the command exactly as written, wrapped in the one pair of quotes /s
+  // strips -- what Node's own shell:true does. Left to execFile, every " was escaped
+  // as \" first: `node -e "process.exit(3)"` evaluated a string and reported exit 0,
+  // and `node -e "console.log('hi there')"` died with a syntax error. Found in a live run.
+  const child = execFile(isWin ? 'cmd.exe' : '/bin/sh', isWin ? ['/d', '/s', '/c', '"' + command + '"'] : ['-c', command], {
     cwd: ctx.workdir, timeout: Math.min(Math.max(timeout_secs || 120, 5), 600) * 1000,
-    maxBuffer: 4 * 1024 * 1024, windowsHide: true,
+    maxBuffer: 4 * 1024 * 1024, windowsHide: true, windowsVerbatimArguments: isWin,
   }, (err, stdout, stderr) => {
     const cap = (s) => String(s || '').split('\n').slice(-400).join('\n').slice(-12000);
     resolve({ command, exit: err && typeof err.code === 'number' ? err.code : (err ? 1 : 0), stdout: cap(stdout), stderr: cap(stderr) });

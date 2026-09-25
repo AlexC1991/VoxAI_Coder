@@ -58,15 +58,27 @@ function defaultHardFraction() {
 }
 
 /** Rough tokens from chars — 4 chars/token is the standard estimate. */
+// What one image costs a request, roughly -- providers bill a screenshot at about a
+// thousand tokens, not by the length of its base64. Counting the characters made a
+// run with 13 screenshots read "163% full" and would have summarised the whole
+// conversation away. Found in a live run.
+const IMAGE_TOKENS = 1200;
 function estimateTokens(...parts) {
   let chars = 0;
+  let images = 0;
+  const skipImages = (_k, v) => {
+    if (typeof v === 'string' && v.startsWith('data:image/')) { images++; return ''; }
+    return v;
+  };
   for (const p of parts) {
-    if (typeof p === 'string') chars += p.length;
-    else if (p && typeof p === 'object') {
-      try { chars += JSON.stringify(p).length; } catch { /* skip */ }
+    if (typeof p === 'string') {
+      if (p.startsWith('data:image/')) images++;
+      else chars += p.length;
+    } else if (p && typeof p === 'object') {
+      try { chars += JSON.stringify(p, skipImages).length; } catch { /* skip */ }
     }
   }
-  return Math.ceil(chars / 4);
+  return Math.ceil(chars / 4) + images * IMAGE_TOKENS;
 }
 
 /**

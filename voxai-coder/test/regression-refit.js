@@ -10,6 +10,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
+const vm = require('vm');
 
 const ROOT = process.env.VOX_ROOT || path.join(__dirname, '..');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
@@ -336,10 +337,12 @@ async function drain(gen) {
     let r = await autoRun([{ decision: 'allow', reason: 'runs a script the user asked for' }], 1);
     check('allowed by the check: it runs, nobody is asked', r.asked.length === 0 && r.ends[0] && r.ends[0].ok === true, r);
     check('the check is paid for and counted', r.usage.length === 1 && r.usage[0].usage.cost > 0, r.usage);
-    r = await autoRun([{ decision: 'block', reason: 'not part of the request' }], 1);
-    check('blocked: it does not run, and the model is told why', r.asked.length === 0 && r.ends[0] && r.ends[0].ok === false && /blocked by Auto mode: not part of the request/.test(r.ends[0].result), r.ends[0]);
+    // Auto never blocks by itself: whatever the check is unsure of comes to you.
+    r = await autoRun([{ decision: 'ask', reason: 'this deletes data you did not ask to delete' }], 1);
+    check('unsure: you are asked, with the reason', r.asked.length === 1 && /Auto mode wants your say: this deletes data/.test(r.asked[0].note), r.asked);
+    check('and when you allow it, it runs', r.ends[0] && r.ends[0].ok === true, r.ends[0]);
     r = await autoRun([{ decision: 'block', reason: 'too risky' }], 3);
-    check('the third block in a row goes to the user, with the reason', r.asked.length === 1 && /Auto mode held this back: too risky/.test(r.asked[0].note), r.asked);
+    check('nothing is ever blocked without asking you', r.asked.length === 3 && r.ends.every((e) => e.ok === true) && !r.ends.some((e) => /blocked/.test(String(e.result))), r.asked.length);
     r = await autoRun([{ nonsense: true }], 1);
     check('no clear answer from the check: the user decides', r.asked.length === 1 && /could not check/.test(r.asked[0].note), r.asked);
 
@@ -375,6 +378,46 @@ async function drain(gen) {
     check('questions go out on the channel the thread listens to', /c1\.send\('agent:event', \{ sessionId, runKey, event: \{ type: 'user_input'/.test(MAIN) && !MAIN.includes("c1.send('agent:user_input'"), 'unheard channel');
     const HTML = read('src/renderer/index.html');
     check('an answered question stays as one line with the answer', HTML.includes("line.lastChild.textContent = label ? 'You chose: ' + label : 'No answer';"), 'vanishes');
+  }
+
+  // ------------------------------------------------------------------ [CM]
+  console.log('\n[CM] screenshots count as images, not as their base64');
+  {
+    const { estimateSessionTokens } = require(path.join(ROOT, 'src/backend/compact.js'));
+    const shot = 'data:image/png;base64,' + 'A'.repeat(400000);   // ~400 KB, a real screenshot's size
+    const sess = { messages: [
+      { role: 'user', content: 'make a game' },
+      { role: 'user', content: [{ type: 'text', text: '[VOX TOOL SCREENSHOTS] computer' }, { type: 'image_url', image_url: { url: shot } }] },
+    ] };
+    const t = estimateSessionTokens(sess, '');
+    check('one screenshot is about a thousand tokens, not a hundred thousand', t > 1000 && t < 2000, t);
+  }
+
+  // ------------------------------------------------------------------ [CN]
+  console.log('\n[CN] commands reach the shell as written');
+  {
+    const { buildTools } = require(path.join(ROOT, 'src/backend/tools/index.js'));
+    const ctx = { workdir: WD, session: { id: 'cn', workdir: WD, messages: [], todos: [] }, emit: () => {}, resolveIn: (wd, p) => path.resolve(wd, p), checkPermission: async () => {} };
+    const sh = buildTools(ctx).ALL.find((t) => t.def.function.name === 'shell');
+    const exit3 = await sh.run({ command: 'node -e "process.exit(3)"' }, ctx);
+    check('a quoted command keeps its exit code', exit3.exit === 3, exit3);
+    const hi = await sh.run({ command: 'node -e "console.log(\'hi there\')"' }, ctx);
+    check('quotes inside a command survive', hi.exit === 0 && hi.stdout.trim() === 'hi there', hi);
+  }
+
+  // ------------------------------------------------------------------ [CO]
+  console.log('\n[CO] a step\'s actions: quiet rows, opened only by the reader');
+  {
+    const HTML = read('src/renderer/index.html');
+    const src = /function lineDiff\(before, after\)\{[\s\S]*?\n\}/.exec(HTML);
+    const lineDiff = src && new vm.Script('(' + src[0] + ')').runInNewContext({});
+    const d = lineDiff ? lineDiff('a\nb\nc', 'a\nB\nc\nd') : [];
+    const ops = d.map((x) => x[0]).join('');
+    check('an edit becomes a line diff', ops === ' -+ +', ops);
+    check('rows are drawn closed', /const out = el\('div', 'tr-card'\); out\.hidden = true;/.test(HTML), 'open');
+    check('a result never opens its row', !/setToolResult[\s\S]{0,1600}classList\.toggle\('open', !ok\)/.test(HTML) && !/out\.hidden = false/.test(HTML), 'opens itself');
+    check('a finished step closes, failures too', HTML.includes('if (card.running === false && card.setOpen) card.setOpen(false);'), 'failed step stays open');
+    check('the row answers the real record, not a copy', HTML.includes('v.latestTool = rec || null;'), 'copy');
   }
 
   try { fs.rmSync(WD, { recursive: true, force: true }); } catch {}

@@ -303,20 +303,6 @@ tests"). Scroll the row instead of breaking words:
    hole. The placeholder only shows while nothing is loaded. */
 .pp-body{position:relative;min-height:120px}
 .pp-body.live .pp-empty{display:none}
-.toolrow{padding:2px 0}
-.toolrow .top{display:flex;align-items:baseline;gap:9px;padding:1px 0}
-.toolrow .top:hover{background:transparent}
-.kindb{font-weight:700;font-size:12.5px;letter-spacing:.1em;flex:none;font-family:"Sometype Mono",monospace;color:var(--dim)}
-.kindb[data-st="write"]{color:var(--gold);background:rgba(200,169,97,.12)}
-.kindb[data-st="err"]{color:var(--del);background:rgba(207,122,102,.12)}
-.kindb[data-st="ok"]{color:var(--add);background:rgba(147,184,132,.12)}
-.kindb[data-st="read"]{color:var(--mut);background:var(--sel)}
-.cmd{font-family:"Sometype Mono",monospace;font-size:13px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.res{margin-left:auto;font-family:"Sometype Mono",monospace;font-size:13px;white-space:nowrap;flex:none}
-.res.ok{color:var(--add)}.res.err{color:var(--del)}
-.toolrow.has-detail .top .cmd::after{content:' \203A';color:var(--faint);font-size:11px}
-.toolrow.open .top .cmd::after{content:' \02C5';color:var(--gold)}
-.toolout{font-family:"Sometype Mono",monospace;font-size:13px;line-height:1.65;padding:2px 0 4px;color:var(--dim);white-space:pre-wrap}
 .cmpbtn{width:26px;height:26px;flex:none;border:0;border-radius:6px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--dim)}.cmpbtn:hover,.cmpbtn.active{background:var(--sel);color:var(--ink)}.vdiv{width:1px;height:16px;background:var(--edge)}.cmpbtn.rec{color:var(--del);border-color:var(--del);animation:pulse 1s infinite}
 .usage-summary{display:flex;gap:10px;flex-wrap:wrap}.us-box{flex:1;min-width:110px;border:1px solid var(--edge2);border-radius:8px;padding:10px 12px;background:var(--panel2)}.us-k{font-size:11px;letter-spacing:.14em;color:var(--faint);font-weight:700}.us-v{font-size:19px;font-family:"Sometype Mono",monospace;color:var(--gold);margin-top:4px}.ug-row{display:flex;align-items:center;gap:10px;border:1px solid var(--edge);border-radius:8px;padding:8px 11px;margin-bottom:7px;background:var(--panel)}.ug-row .m{font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ug-row .tk{font-family:"Sometype Mono",monospace;font-size:12px;color:var(--dim);white-space:nowrap}.ug-row .cost{margin-left:auto;font-family:"Sometype Mono",monospace;font-size:13px;color:var(--add);white-space:nowrap}.ug-row .t{font-family:"Sometype Mono",monospace;font-size:11.5px;color:var(--faint);white-space:nowrap}.usage-hint{font-size:12.5px;color:var(--faint);line-height:1.6}
 .md table{border-collapse:collapse;width:100%;margin:.6em 0;font-size:13.5px}.md table th,.md table td{border:1px solid var(--edge2);padding:6px 9px;text-align:left;vertical-align:top}.md table thead th{background:var(--panel2);color:var(--gold);font-weight:700;font-family:"Sometype Mono",monospace;font-size:12px;letter-spacing:.05em}.md table tbody tr:nth-child(even){background:var(--panel)}.md blockquote{margin:.6em 0;padding:2px 0 2px 13px;border-left:3px solid var(--goldedge);color:var(--mut);font-style:italic}
@@ -328,7 +314,6 @@ tests"). Scroll the row instead of breaking words:
 
 @keyframes runIn{from{opacity:0;transform:translateY(-3px)}to{opacity:1;transform:none}}
 @keyframes rowIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
-.toolrow{animation:rowIn .24s ease}
 .statusline{animation:fadeIn .18s ease}
 .md .typewrap{white-space:pre-wrap;overflow-wrap:break-word}
 .md .cursor{display:inline-block;width:7px;height:1em;min-height:7px;background:var(--gold);margin-left:1px;vertical-align:-1px;animation:blink 1s step-end infinite}
@@ -499,28 +484,74 @@ tests"). Scroll the row instead of breaking words:
 
 /* a step: one stretch of tool work, folded to what it DID */
 .run{display:flex;flex-direction:column;animation:runIn .22s ease}
-.runhead{display:flex;align-items:center;gap:10px;font-size:13.5px;color:var(--mut);cursor:pointer;user-select:none;min-width:0}
-.runhead:hover .modelabel{color:#fff}
-.runhead .chev{width:12px;flex:none;color:var(--sub);font-size:10px;transition:transform .15s;display:inline-block}
+.runhead{display:flex;align-items:center;gap:9px;min-height:28px;padding:2px 8px;margin:0 -8px;border-radius:7px;font-size:13.5px;color:var(--mut);cursor:pointer;user-select:none;min-width:0}
+.runhead:hover{background:var(--panel2)}
+/* The chevron follows the words, like a row's -- not a gutter that makes a section. */
+.runhead .modelabel{order:0}.runhead .runmeta{order:1}.runhead .chev{order:2}.runhead .rundelta{order:3}
+.runhead:hover .modelabel{color:var(--ink)}
+.runhead .chev{width:12px;height:12px;flex:none;transition:transform .15s;display:inline-flex}
+.runhead .chev svg{width:12px;height:12px;stroke:var(--sub);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
 .run.open > .runhead .chev{transform:rotate(90deg)}
-.modelabel{font-weight:600;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:0}
+.modelabel{font-weight:500;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:0 1 auto;min-width:0}
 .run.running .modelabel::after{content:'';display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--gold);margin-left:8px;vertical-align:2px;animation:blink 1s step-end infinite}
 .runmeta{font:12px "Sometype Mono",monospace;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .runmeta .bad{color:var(--del)}
 .rundelta{margin-left:auto;flex:none;font:12px "Sometype Mono",monospace;color:var(--sub)}
-.runbody{margin:10px 0 2px 5px;padding-left:17px;border-left:1px solid var(--edge2);display:flex;flex-direction:column;gap:6px}
+/* Opened, a step's lines sit in the conversation's own column: no rail, no indent. */
+.runbody{margin:2px 0 4px;display:flex;flex-direction:column;gap:6px}
 .runbody .say{font-size:13.5px;color:var(--dim);line-height:1.5}
 .runbody .say p{margin:0}
 .runbody .think{margin:0}
-.toolrow .top{gap:10px}
-.kindb{font:500 12px "Sometype Mono",monospace;letter-spacing:0;min-width:44px;background:none!important;color:var(--sub);text-transform:lowercase}
-.kindb[data-st="write"]{color:var(--gold)}
-.kindb[data-st="err"]{color:var(--del)}
 .cmd{font-size:12.5px;color:var(--mut);flex:1 1 auto;min-width:0}
 /* a long result summary gives way instead of pushing the thread sideways */
 .res{font-size:12px;flex:0 1 auto;min-width:0;max-width:48%;overflow:hidden;text-overflow:ellipsis}
-.toolrow .top{min-width:0}
-.toolout{font-size:12px;color:var(--sub)}
+
+/* ---- a step's actions: quiet rows -- an icon, a verb and a chip -- with the detail
+   (a diff, the terminal output, the file) one click away. They never open by themselves. */
+.toolrow{animation:rowIn .24s ease;min-width:0}
+.runbody > .toolrow + .toolrow{margin-top:-4px}
+.toolrow .top{display:flex;align-items:center;gap:9px;min-height:28px;padding:2px 8px;margin:0 -8px;border-radius:7px;color:var(--dim);font-size:13.5px;min-width:0}
+.toolrow.can-open .top{cursor:pointer}
+.toolrow.can-open .top:hover{background:var(--panel2);color:var(--mut)}
+.tr-ic{width:15px;height:15px;flex:none;stroke:var(--sub);fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.toolrow.can-open .top:hover .tr-ic{stroke:var(--mut)}
+.toolrow.fail .tr-ic{stroke:var(--del)}
+.tr-verb{flex:none;white-space:nowrap}
+.toolrow.running .tr-verb{color:var(--mut)}
+.tr-chips{display:flex;align-items:center;gap:5px;min-width:0;flex:0 1 auto;overflow:hidden}
+.tr-chip{font:12.5px "Sometype Mono",monospace;color:var(--ink);background:var(--sel);border:1px solid var(--edge2);border-radius:6px;padding:1px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:100%;flex:0 1 auto}
+.tr-more{font:12px "Sometype Mono",monospace;color:var(--sub);flex:none}
+.tr-sp{flex:1;min-width:8px}
+.tr-meta{flex:none;font:12px "Sometype Mono",monospace;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%}
+.tr-meta.bad{color:var(--del)}
+.tr-a{color:var(--add)} .tr-d{color:var(--del)} .tr-a + .tr-d{margin-left:5px}
+.tr-chev{flex:none;width:12px;height:12px;stroke:var(--sub);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:0;transition:transform .15s,opacity .15s}
+.toolrow.can-open .top:hover .tr-chev,.toolrow.open > .top .tr-chev{opacity:1}
+.toolrow.open > .top .tr-chev{transform:rotate(90deg)}
+.tr-spin{width:13px;height:13px;flex:none;margin:0 1px;border-radius:50%;background:conic-gradient(var(--gold) 0 90deg,rgba(200,169,97,.18) 90deg 360deg);-webkit-mask:radial-gradient(circle,transparent 52%,#000 54%);mask:radial-gradient(circle,transparent 52%,#000 54%);animation:trspin .85s linear infinite}
+@keyframes trspin{to{transform:rotate(360deg)}}
+.tr-card{margin:4px 0 8px;border:1px solid var(--edge2);border-radius:9px;overflow:hidden;background:var(--deep);min-width:0}
+.tr-card[hidden]{display:none}
+.tr-card.bad{border-color:rgba(207,122,102,.45)}
+.tr-card.tr-inner{margin:0;border:0;border-radius:0;border-bottom:1px solid var(--edge)}
+.tr-ch{display:flex;align-items:center;gap:8px;padding:6px 12px;border-bottom:1px solid var(--edge);background:var(--panel);font:12px "Sometype Mono",monospace;color:var(--mut);min-width:0}
+.tr-ch .p{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.tr-ch .sp{flex:1}
+.tr-body{max-height:360px;overflow:auto}
+.tr-term{padding:9px 12px;font:12.5px/1.6 "Sometype Mono",monospace;color:var(--mut);white-space:pre-wrap;overflow-wrap:anywhere}
+.tr-term .p{color:var(--sub)}
+.tr-term .e{color:#e3a898}
+.tr-diff{font:12.5px/1.6 "Sometype Mono",monospace;min-width:max-content}
+.tr-diff > div{display:grid;grid-template-columns:24px 1fr;white-space:pre;padding-right:12px}
+.tr-diff .g{color:var(--faint);text-align:center}
+.tr-diff .ctx{color:var(--dim)}
+.tr-diff .del{background:rgba(207,122,102,.12);color:#eab4a6}
+.tr-diff .add{background:rgba(147,184,132,.12);color:#c4ddb8}
+.tr-diff > .hunk{display:block;padding:1px 12px;color:var(--faint);background:var(--panel)}
+.tr-note{padding:6px 12px;font:12px "Sometype Mono",monospace;color:var(--faint);border-top:1px solid var(--edge)}
+.tr-sub{display:flex;align-items:center;gap:9px;padding:5px 12px;border-bottom:1px solid var(--edge);cursor:pointer;min-width:0}
+.tr-sub:hover{background:var(--panel2)}
+.tr-card > :last-child{border-bottom:0}
 
 /* ---- the message box ---- */
 .composer{gap:6px;container-type:inline-size}
@@ -966,7 +997,7 @@ const ACCESS_NOTES = {
   ask: 'Reads and searches the project. Asks before any change.',
   edit: 'Edits files and searches the web. Asks before running commands.',
   test: 'Also runs tests and checks, like npm test or pytest. Asks before other commands.',
-  auto: 'Like Edit and test, and a safety check decides the rest: it runs what is safe for your request, holds back anything risky, and asks you after repeated holds.',
+  auto: 'Like Edit and test, and a safety check handles the rest: what is safe for your request runs, anything it is unsure of asks you first.',
   full: 'Runs any command without asking. Destructive system commands are still blocked.',
 };
 // OpenRouter's thinking levels, least to most, as the menu names them.
@@ -2196,7 +2227,7 @@ function startRunCard(){
   const v = RT(); if(!v) return null;
   const wrap = el('div','run running');
   const head = el('div','runhead'); head.className = 'runhead';
-  const chev = el('span','chev'); chev.textContent='\u25b8';
+  const chev = el('span','chev', '<svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>');
   const label = el('span','modelabel'); label.textContent='Working';
   const meta = el('span','runmeta');
   const delta = el('span','rundelta');
@@ -2239,27 +2270,314 @@ function foldNarration(card, node){
 // Narration longer than this stays in the thread as a paragraph: it is explanation, not a caption.
 const SAY_MAX = 280;
 function ensureRunCard(){ const v = RT(); if(!v) return null; if(!v.curRun) return startRunCard(); return v.curRun; }
+/* ---- a step's actions ----------------------------------------------------------
+ * Each action is one quiet row, the way the Claude desktop app draws them: an icon for
+ * the kind of action, a verb, and the file or command as a chip. The detail -- a diff,
+ * the terminal output, the file -- waits behind a click and never opens by itself:
+ * opening things is the reader's call. Reads one after another share a row.
+ */
+const ROW_ICON = {
+  file: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>',
+  edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/><path d="M13.5 6.5l4 4"/>',
+  add: '<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M12 11v6M9 14h6"/>',
+  term: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M12 15h5"/>',
+  search: '<circle cx="11" cy="11" r="6"/><path d="M20 20l-4.5-4.5"/>',
+  globe: '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14 14 0 0 1 0 18M12 3a14 14 0 0 0 0 18"/>',
+  list: '<path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01"/>',
+  people: '<circle cx="9" cy="8" r="3"/><path d="M3 20c0-3.3 2.7-6 6-6s6 2.7 6 6M16 5a3 3 0 0 1 0 6M21 20c0-2.6-1.7-4.9-4-5.7"/>',
+  eye: '<path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+  ask: '<path d="M21 12a8 8 0 0 1-11.5 7.2L4 20l1-4.6A8 8 0 1 1 21 12z"/>',
+  tool: '<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/>',
+};
+function trIcon(key){
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('viewBox', '0 0 24 24');
+  svg.setAttribute('class', 'tr-ic');
+  svg.innerHTML = ROW_ICON[key] || ROW_ICON.tool;
+  return svg;
+}
+/** The icon and the verb: "Read", "Edited", "Ran" -- "Running" while it is still going. */
+function rowLook(name, args, done){
+  const V = (past, now) => ({ verb: done ? past : now });
+  const pick = (icon, past, now) => Object.assign({ icon }, V(past, now || past));
+  switch (name) {
+    case 'read': return pick('file', 'Read', 'Reading');
+    case 'write': return pick('add', 'Wrote', 'Writing');
+    case 'edit': case 'patch': return pick('edit', 'Edited', 'Editing');
+    case 'shell': return pick('term', 'Ran', 'Running');
+    case 'node_repl': return pick('term', 'Ran JavaScript', 'Running JavaScript');
+    case 'grep': case 'rag': case 'doc_rag': return pick('search', 'Searched', 'Searching');
+    case 'glob': return pick('search', 'Listed', 'Listing');
+    case 'lsp': return pick('search', 'Checked types', 'Checking types');
+    case 'web_search': return pick('globe', 'Searched the web', 'Searching the web');
+    case 'web_fetch': return pick('globe', 'Fetched', 'Fetching');
+    case 'todo': return pick('list', 'Updated the plan', 'Updating the plan');
+    case 'memory': return pick('list', 'Memory');
+    case 'ask_user': case 'ask_confirm': return pick('ask', 'Asked', 'Asking');
+    case 'spawn_agent': case 'spawn_parallel': return pick('people', 'Delegated', 'Delegating');
+    case 'computer': return pick('eye', 'Used the browser', 'Using the browser');
+    case 'worktree': return pick('tool', 'Git');
+    case 'snapshot': return pick('tool', 'Snapshot');
+    case 'skill': return pick('tool', 'Used a skill', 'Using a skill');
+    case 'mcp': return pick('tool', 'Called', 'Calling');
+    case 'build_state': return pick('list', 'Build state');
+    case 'fs': return pick('file', 'Files');
+  }
+  if (name && (name.indexOf('cu_') === 0 || name.indexOf('browser_') === 0)) return pick('eye', 'Used the browser', 'Using the browser');
+  const t = String(name || 'tool').replace(/_/g, ' ');
+  return pick('tool', t.charAt(0).toUpperCase() + t.slice(1));
+}
+/** What goes in the chip: a file's name (its path on hover), the command, the query. */
+function rowChip(name, args){
+  const a = args || {};
+  const base = (p) => String(p || '').split(/[\\/]/).filter(Boolean).pop() || String(p || '');
+  if ((name === 'read' || name === 'write' || name === 'edit' || name === 'patch') && a.path) return { text: base(a.path), title: String(a.path) };
+  if (name === 'shell') { const c = String(a.command || '').replace(/\s+/g, ' ').trim(); return c ? { text: c, title: String(a.command) } : null; }
+  if (name === 'todo') return null;
+  const t = cmdFor(name, a);
+  return t ? { text: t, title: t } : null;
+}
+/**
+ * A line diff of two texts: common lines kept, the rest as removals and additions.
+ * Edits carry their before and after text, so the counts are the real line counts of
+ * the change -- not characters replaced, which is all the tool's result reports.
+ */
+function lineDiff(before, after){
+  const A = String(before == null ? '' : before).split('\n'), B = String(after == null ? '' : after).split('\n');
+  let s = 0; while (s < A.length && s < B.length && A[s] === B[s]) s++;
+  let e = 0; while (e < A.length - s && e < B.length - s && A[A.length - 1 - e] === B[B.length - 1 - e]) e++;
+  const am = A.slice(s, A.length - e), bm = B.slice(s, B.length - e);
+  const out = [];
+  for (let i = 0; i < s; i++) out.push([' ', A[i]]);
+  const n = am.length, m = bm.length;
+  if (n * m > 40000) { am.forEach((l) => out.push(['-', l])); bm.forEach((l) => out.push(['+', l])); }
+  else {
+    const L = []; for (let i = 0; i <= n; i++) L.push(new Uint16Array(m + 1));
+    for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = am[i] === bm[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+    let i = 0, j = 0;
+    while (i < n || j < m) {
+      if (i < n && j < m && am[i] === bm[j]) { out.push([' ', am[i]]); i++; j++; }
+      else if (i < n && (j >= m || L[i + 1][j] >= L[i][j + 1])) { out.push(['-', am[i]]); i++; }
+      else { out.push(['+', bm[j]]); j++; }
+    }
+  }
+  for (let i = A.length - e; i < A.length; i++) out.push([' ', A[i]]);
+  return out;
+}
+function rowDiffs(rec){
+  if (rec._diffs !== undefined) return rec._diffs;
+  const a = rec.args || {};
+  let d = null;
+  if (rec.name === 'edit' && typeof a.before === 'string' && typeof a.after === 'string') d = [lineDiff(a.before, a.after)];
+  else if (rec.name === 'patch' && Array.isArray(a.edits)) d = a.edits.filter(Boolean).map((x) => lineDiff(x.old, x.new));
+  else if (rec.name === 'write' && typeof a.content === 'string') d = [a.content.replace(/\n$/, '').split('\n').map((l) => ['+', l])];
+  rec._diffs = d;
+  return d;
+}
+function diffCounts(diffs){
+  let add = 0, del = 0;
+  for (const h of diffs) for (const x of h) { if (x[0] === '+') add++; else if (x[0] === '-') del++; }
+  return { add, del };
+}
+/** A string field out of a JSON result, even one cut off part-way through. */
+function jsonStr(s, key){
+  s = String(s || '');
+  const i = s.indexOf('"' + key + '":"'); if (i < 0) return null;
+  const j = i + key.length + 4;
+  let k = j;
+  while (k < s.length) { const c = s[k]; if (c === '\\') { k += 2; continue; } if (c === '"') break; k++; }
+  let raw = s.slice(j, Math.min(k, s.length));
+  if (k >= s.length) raw = raw.replace(/\\u[0-9a-fA-F]{0,3}$/, '').replace(/\\$/, '');
+  try { return JSON.parse('"' + raw + '"'); } catch { return raw; }
+}
+/** A shell result's parts: {command, exit, stdout, stderr}, or the raw text. */
+function shellParts(res){
+  const s = String(res || '');
+  try { const o = JSON.parse(s); if (o && typeof o === 'object') return { exit: Number(o.exit) || 0, stdout: String(o.stdout || ''), stderr: String(o.stderr || '') }; } catch {}
+  if (/^\s*\{/.test(s)) {
+    const ex = /"exit":\s*(-?\d+)/.exec(s);
+    return { exit: ex ? Number(ex[1]) : 0, stdout: jsonStr(s, 'stdout') || '', stderr: jsonStr(s, 'stderr') || '' };
+  }
+  return { exit: 0, stdout: '', stderr: '', raw: s };
+}
+/** The note at the row's right edge: +/- lines, "1 failed", "143 lines". */
+function rowMeta(rec){
+  if (rec.ok === false) {
+    if (rec.denied) return { html: /blocked by Auto mode/.test(rec.result || '') ? 'held back' : 'denied' };
+    return { html: 'failed', bad: true };
+  }
+  const d = rowDiffs(rec);
+  if (d) {
+    const c = diffCounts(d);
+    if (rec.name === 'write') return { html: c.add + (c.add === 1 ? ' line' : ' lines') };
+    return { html: '<span class="tr-a">+' + c.add + '</span><span class="tr-d">\u2212' + c.del + '</span>' };
+  }
+  if (rec.ok === null) return { html: '' };
+  if (rec.name === 'shell') {
+    const o = shellParts(rec.result);
+    const all = o.stdout + '\n' + o.stderr + '\n' + (o.raw || '');
+    const f = /(\d+)\s+failed/.exec(all), p = /(\d+)\s+passed/.exec(all);
+    if (f && Number(f[1]) > 0) return { html: f[1] + ' failed', bad: true };
+    if (o.exit) return { html: 'exit ' + o.exit, bad: true };
+    return { html: p ? p[1] + ' passed' : '' };
+  }
+  const t = summariseResult(rec.name || '', rec.result, true);
+  // A summary that is still raw JSON says nothing at a glance; it is behind the click.
+  return { html: t === 'done' || t === 'ok' || /^[\[{]/.test(t) ? '' : esc(t) };
+}
 function addToolRow(name, args, instant){
   const v = RT(); const card = ensureRunCard(); if(!card) return null;
   const kind = kindName(name);
   card.counts[kind] = (card.counts[kind]||0)+1;
-  const st = kindSt(name);
-  const row = el('div','toolrow');
-  const top = el('div','top');
-  const kindSp = el('span','kindb'); kindSp.dataset.st = st; kindSp.textContent = kind;
-  const cmdSp = el('span','cmd');
-  const resSp = el('span','res');
-  top.appendChild(kindSp); top.appendChild(cmdSp); top.appendChild(resSp);
-  const out = el('div','toolout'); out.style.display='none';
-  row.appendChild(top); row.appendChild(out);
-  card.body.appendChild(row);
   // A replayed step has no timing on record; show none rather than "0s".
   if (instant) card.t0 = 0;
   card.wrap.classList.toggle('running', !instant);
   if (!instant) { card.label.textContent = toolActivity(name, args); setActivity(v, toolActivity(name, args)); }
+  const rec = { card, view: v, name, kind, args: args || {}, ok: null, result: null, instant: !!instant };
+  // Reads one after another share a row: "Read  a.js  b.js  c.js   3 files".
+  const last = card.body.lastElementChild;
+  if (name === 'read' && last && last._group && last._group.name === 'read') {
+    const g = last._group;
+    g.items.push(rec); rec.group = g;
+    paintRow(g); paintMeta(card);
+    return rec;
+  }
+  const row = el('div', 'toolrow');
+  const top = el('div', 'top');
+  const out = el('div', 'tr-card'); out.hidden = true;
+  row.appendChild(top); row.appendChild(out);
+  card.body.appendChild(row);
+  const g = { name, row, top, out, items: [rec], open: false };
+  row._group = g; rec.group = g;
+  top.onclick = () => toggleRow(g);
+  paintRow(g);
   paintMeta(card);
-  if (instant) cmdSp.textContent = cmdFor(name,args) || '\u2026'; else typeCmd(cmdSp, cmdFor(name,args));
-  return { card, row, out, top, view: v, name };
+  return rec;
+}
+function paintRow(g){
+  const items = g.items, first = items[0];
+  const running = items.some((r) => r.ok === null && !r.instant);
+  const fail = items.some((r) => (r.ok === false && !r.denied) || r.bad);
+  const look = rowLook(g.name, first.args, !running);
+  const canOpen = items.length > 1 || !!rowDiffs(first) || first.ok === false || !!(first.result && String(first.result).trim());
+  g.row.classList.toggle('running', running);
+  g.row.classList.toggle('fail', fail);
+  g.row.classList.toggle('can-open', canOpen);
+  const top = g.top;
+  top.textContent = '';
+  top.appendChild(running ? el('span', 'tr-spin') : trIcon(look.icon));
+  const verb = el('span', 'tr-verb'); verb.textContent = look.verb; top.appendChild(verb);
+  if (items.length > 1) {
+    const chips = el('span', 'tr-chips');
+    for (const r of items.slice(0, 3)) {
+      const c = rowChip(r.name, r.args); if (!c) continue;
+      const ch = el('span', 'tr-chip'); ch.textContent = c.text; ch.title = c.title || c.text; chips.appendChild(ch);
+    }
+    if (items.length > 3) chips.appendChild(el('span', 'tr-more', '+' + (items.length - 3)));
+    top.appendChild(chips);
+  } else {
+    const c = rowChip(g.name, first.args);
+    if (c) { const ch = el('span', 'tr-chip'); ch.textContent = c.text; ch.title = c.title || c.text; top.appendChild(ch); }
+  }
+  top.appendChild(el('span', 'tr-sp'));
+  const m = items.length > 1 ? { html: items.length + ' files' + (fail ? ' \u00b7 <span class="tr-d">' + items.filter((r) => r.ok === false && !r.denied).length + ' failed</span>' : '') } : rowMeta(first);
+  const meta = el('span', 'tr-meta' + (m.bad ? ' bad' : ''), m.html);
+  top.appendChild(meta);
+  const chev = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  chev.setAttribute('viewBox', '0 0 24 24'); chev.setAttribute('class', 'tr-chev');
+  chev.innerHTML = '<path d="M9 6l6 6-6 6"/>';
+  top.appendChild(chev);
+  top.title = canOpen ? (g.open ? 'Hide the detail' : 'Show the detail') : '';
+  top.setAttribute('role', canOpen ? 'button' : 'group');
+  top.setAttribute('aria-expanded', String(!!g.open));
+}
+function toggleRow(g){
+  if (!g.row.classList.contains('can-open')) return;
+  g.open = !g.open;
+  if (g.open) fillRowCard(g);
+  g.out.hidden = !g.open;
+  g.row.classList.toggle('open', g.open);
+  paintRow(g);
+}
+function fillRowCard(g){
+  const box = g.out;
+  if (g.items.length === 1) { fillDetail(box, g.items[0]); return; }
+  box.textContent = '';
+  box.classList.remove('bad');
+  for (const r of g.items) {
+    const sub = el('div', 'tr-sub');
+    const c = rowChip(r.name, r.args);
+    const ch = el('span', 'tr-chip'); ch.textContent = c ? c.text : r.name; ch.title = (c && c.title) || ''; sub.appendChild(ch);
+    sub.appendChild(el('span', 'tr-sp'));
+    const m = rowMeta(r);
+    sub.appendChild(el('span', 'tr-meta' + (m.bad ? ' bad' : ''), m.html));
+    const inner = el('div', 'tr-card tr-inner'); inner.hidden = true;
+    sub.onclick = () => { if (inner.hidden) fillDetail(inner, r); inner.hidden = !inner.hidden; };
+    box.appendChild(sub); box.appendChild(inner);
+  }
+}
+/** The detail behind a row: the diff, the terminal, the file, or the result. */
+function fillDetail(box, rec){
+  box.textContent = '';
+  const a = rec.args || {};
+  const res = rec.result == null ? '' : String(rec.result);
+  box.classList.toggle('bad', rec.ok === false && !rec.denied);
+  const head = (path, extra) => {
+    const h = el('div', 'tr-ch');
+    const p = el('span', 'p'); p.textContent = path; p.title = path; h.appendChild(p);
+    h.appendChild(el('span', 'sp'));
+    if (extra) h.insertAdjacentHTML('beforeend', extra);
+    box.insertBefore(h, body);
+  };
+  const body = el('div', 'tr-body');
+  box.appendChild(body);
+  const term = (text) => { const t = el('div', 'tr-term'); if (text != null) t.textContent = text; body.appendChild(t); return t; };
+  const line = (t, cls, text) => { const sp = el('span', cls); sp.textContent = text; t.appendChild(sp); };
+  if (rec.ok === false) {
+    const t = term();
+    if (rec.name === 'shell' && a.command) { line(t, 'p', '$ ' + a.command); t.appendChild(document.createTextNode('\n')); }
+    line(t, rec.denied ? '' : 'e', res.replace(/^\s*DENIED_OR_ERROR:\s*/, '') || 'failed');
+    return;
+  }
+  const diffs = rowDiffs(rec);
+  if (diffs) {
+    const c = diffCounts(diffs);
+    head(String(a.path || ''), rec.name === 'write' ? '<span>' + c.add + (c.add === 1 ? ' line' : ' lines') + '</span>' : '<span class="tr-a">+' + c.add + '</span><span class="tr-d">\u2212' + c.del + '</span>');
+    const d = el('div', 'tr-diff');
+    const MAX = 400; let shown = 0, total = 0;
+    diffs.forEach((h, i) => {
+      total += h.length;
+      if (i && shown < MAX) d.appendChild(el('div', 'hunk', '\u22ef'));
+      for (const x of h) {
+        if (shown >= MAX) break;
+        shown++;
+        const r = el('div', x[0] === '+' ? 'add' : x[0] === '-' ? 'del' : 'ctx');
+        const gl = el('span', 'g'); gl.textContent = x[0] === ' ' ? '' : (x[0] === '-' ? '\u2212' : '+');
+        const tx = el('span'); tx.textContent = x[1];
+        r.appendChild(gl); r.appendChild(tx); d.appendChild(r);
+      }
+    });
+    body.appendChild(d);
+    if (total > shown) box.appendChild(el('div', 'tr-note', (total - shown) + ' more lines'));
+    return;
+  }
+  if (rec.name === 'shell') {
+    const o = shellParts(res);
+    const t = term();
+    line(t, 'p', '$ ' + String(a.command || ''));
+    if (o.stdout.trim()) t.appendChild(document.createTextNode('\n' + trunc(o.stdout.replace(/\s+$/, ''), 20000)));
+    if (o.stderr.trim()) line(t, 'e', '\n' + trunc(o.stderr.replace(/\s+$/, ''), 20000));
+    if (o.exit) line(t, 'e', '\nexit ' + o.exit);
+    if (o.raw && o.raw.trim()) t.appendChild(document.createTextNode('\n' + trunc(o.raw, 20000)));
+    return;
+  }
+  if (rec.name === 'read') {
+    const content = jsonStr(res, 'content');
+    if (content != null) { head(String(a.path || ''), '<span>' + esc(summariseResult('read', res, true)) + '</span>'); term(trunc(content, 20000)); return; }
+  }
+  let text = res;
+  try { text = JSON.stringify(JSON.parse(res), null, 2); } catch { /* plain text */ }
+  term(trunc(text, 8000) || 'done');
 }
 /** The counts and the time beside the step's name. */
 function paintMeta(card){
@@ -2273,58 +2591,27 @@ function paintMeta(card){
   // Under a second is not worth a number.
   card.delta.textContent = card.t0 && end && end - card.t0 >= 1000 ? fmtElapsed(end - card.t0) : '';
 }
-function typeCmd(span, text){
-  const s = String(text == null ? '' : text);
-  span.textContent = '';
-  if (!s) { span.textContent = '…'; return; }
-  let i = 0;
-  const t = setInterval(function(){
-    i += 2;
-    span.textContent = s.slice(0, i) + '▍';
-    if (i >= s.length) { span.textContent = s; clearInterval(t); }
-  }, 12);
-}
 function setToolResult(rec, ok, resultText){
   if(!rec) return;
-  const res = rec.top.querySelector('.res');
-  res.textContent = summariseResult(rec.name || '', resultText, ok);
-  res.className = 'res ' + (ok ? 'ok' : 'err');
-  const kind = rec.top.querySelector('.kindb');
-  if (!ok) kind.dataset.st = 'err';
-  // The raw payload stays available but COLLAPSED. A failure opens itself, because
-  // an error the reader has to go hunting for may as well not be shown.
-  if (resultText && String(resultText).trim().length) {
-    rec.out.textContent = trunc(String(resultText), 2000);
-    rec.out.style.display = ok ? 'none' : 'block';
-    rec.row.classList.add('has-detail');
-    if (!rec.row._wired) {
-      rec.row._wired = true;
-      rec.top.style.cursor = 'pointer';
-      rec.top.title = 'click for the raw result';
-      rec.top.onclick = () => {
-        const open = rec.out.style.display !== 'none';
-        rec.out.style.display = open ? 'none' : 'block';
-        rec.row.classList.toggle('open', !open);
-      };
-    }
-    rec.row.classList.toggle('open', !ok);
-  }
-  // Feed the collapsed-batch metric.
-  //
-  // Deliberately NOT a +N -N line count: tool results carry characters replaced or
-  // bytes written, not lines, so any +/- derived here would be invented. It showed
-  // "+1 -0" for a 24-character edit. Real line counts come from git, in the diff
-  // strip above the composer; this delta sticks to what the tools actually report.
-  const st = rec.card.stats || (rec.card.stats = {});
+  rec.ok = !!ok;
+  // The plan reminder rides on a tool result for the model's sake; it is not output.
+  rec.result = (resultText == null ? '' : String(resultText)).replace(/\s*\[plan check\][\s\S]*$/, '');
+  const txt = rec.result;
   // A refused request did not run: it is not a command run, and not a failure either.
-  const blocked = !ok && /blocked by Auto mode/.test(String(resultText || ''));
-  const denied = !ok && (blocked || /permission denied/i.test(String(resultText || '')));
+  const blocked = !ok && /blocked by Auto mode/.test(txt);
+  const denied = !ok && (blocked || /permission denied/i.test(txt));
+  rec.denied = denied;
+  if (rec.name === 'shell' && ok) { const o = shellParts(txt); rec.bad = !!o.exit; }
+  // The row repaints, closed: the detail is there to open, not opened for you.
+  const g = rec.group;
+  if (g) { paintRow(g); if (g.open) fillRowCard(g); }
+  // Feed the step's summary line.
+  const st = rec.card.stats || (rec.card.stats = {});
   if (denied) {
     if (blocked) st.blocked = (st.blocked || 0) + 1; else st.denied = (st.denied || 0) + 1;
     const k = kindName(rec.name || '');
     if (rec.card.counts[k]) rec.card.counts[k]--;
   } else if (!ok) st.failed = (st.failed || 0) + 1;
-  const txt = String(resultText || '');
   const passed = /(\d+)\s+passed/.exec(txt);
   if (passed) st.verdict = passed[1] + ' passed';
   const failed = /(\d+)\s+failed/.exec(txt);
@@ -2338,9 +2625,9 @@ function paintLabel(card){
   const sm = stepSummary(card.counts, card.stats);
   if (!card.running) card.label.textContent = sm.head;
   paintMeta(card);
-  // Finished steps fold away. A failure stays open -- an error you have to click to
-  // find may as well not be shown.
-  if (card.running === false && card.setOpen) card.setOpen(!!sm.failed);
+  // Finished steps fold away, failures included: the header already says "1 failed",
+  // and opening a step is the reader's call, not the app's.
+  if (card.running === false && card.setOpen) card.setOpen(false);
 }
 function finalizeRunCard(){
   const v = RT();
@@ -3246,7 +3533,7 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     if (said && said.length <= SAY_MAX) foldNarration(ensureRunCard(), narr);
     else if (said) finalizeRunCard();
     const rec = addToolRow(event.name, event.args || {});
-    v.latestTool = rec ? { ...rec, name: event.name, kind: kindName(event.name) } : null;
+    v.latestTool = rec || null;
   } else if (event.type === 'tool_end') {
     if (v.latestTool) { setToolResult(v.latestTool, !!event.ok, event.result); v.latestTool = null; }
     if (event.mutated && event.mutated.path) noteTouched(sid, event.mutated.path);
