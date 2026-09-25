@@ -229,13 +229,28 @@ const shell = tool('shell', SHELL_DESC, {
   // strips -- what Node's own shell:true does. Left to execFile, every " was escaped
   // as \" first: `node -e "process.exit(3)"` evaluated a string and reported exit 0,
   // and `node -e "console.log('hi there')"` died with a syntax error. Found in a live run.
+  // Stop and the time limit end the whole process tree. Ending cmd.exe alone left its
+  // children running -- after Stop, a `ping -n 40` carried on to the end. Found in a
+  // live run. On Windows that takes taskkill /T; elsewhere the shell's process.
+  const killTree = (c) => {
+    try {
+      if (isWin) execFile('taskkill', ['/pid', String(c.pid), '/T', '/F'], { windowsHide: true }, () => {});
+      else c.kill('SIGKILL');
+    } catch {}
+  };
+  let timedOut = false, stopped = false;
   const child = execFile(isWin ? 'cmd.exe' : '/bin/sh', isWin ? ['/d', '/s', '/c', '"' + command + '"'] : ['-c', command], {
-    cwd: ctx.workdir, timeout: Math.min(Math.max(timeout_secs || 120, 5), 600) * 1000,
-    maxBuffer: 4 * 1024 * 1024, windowsHide: true, windowsVerbatimArguments: isWin,
+    cwd: ctx.workdir, maxBuffer: 4 * 1024 * 1024, windowsHide: true, windowsVerbatimArguments: isWin,
   }, (err, stdout, stderr) => {
+    clearTimeout(timer);
+    if (ctx.signal) ctx.signal.removeEventListener('abort', onStop);
     const cap = (s) => String(s || '').split('\n').slice(-400).join('\n').slice(-12000);
-    resolve({ command, exit: err && typeof err.code === 'number' ? err.code : (err ? 1 : 0), stdout: cap(stdout), stderr: cap(stderr) });
+    resolve({ command, exit: err && typeof err.code === 'number' ? err.code : (err ? 1 : 0), stdout: cap(stdout), stderr: cap(stderr),
+      ...(timedOut ? { timedOut: true } : {}), ...(stopped ? { stopped: true } : {}) });
   });
+  const timer = setTimeout(() => { timedOut = true; killTree(child); }, Math.min(Math.max(timeout_secs || 120, 5), 600) * 1000);
+  const onStop = () => { stopped = true; killTree(child); };
+  if (ctx.signal) { if (ctx.signal.aborted) onStop(); else ctx.signal.addEventListener('abort', onStop, { once: true }); }
   child.on('error', reject);
 }));
 

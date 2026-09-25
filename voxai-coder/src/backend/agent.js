@@ -483,6 +483,7 @@ async function* runAgent(opts) {
     userData,
     live,
     resolveIn,
+    signal,   // Stop, so a tool can end what it started (a shell command's processes)
     userInput: userInput || (async () => ({ answer: null, cancelled: true })),
     emit: pushEvent,
     // Set while a call the user has just approved at the sandbox gate is running, so

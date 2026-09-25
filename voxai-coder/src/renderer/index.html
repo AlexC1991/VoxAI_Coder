@@ -2229,6 +2229,7 @@ function stepSummary(counts, stats){
   else if (n('CHECK')) { head = 'Checked the code'; }
   else if (st.denied) { head = st.denied === 1 ? 'You denied a request' : 'You denied ' + st.denied + ' requests'; used.d = 1; }
   else if (st.blocked) { head = 'Auto mode held back ' + plural(st.blocked, 'action', 'actions'); used.b = 1; }
+  else if (st.stopped) { head = 'Stopped'; }   // not "Worked through 0 steps"
   else head = 'Worked through ' + plural(Object.values(c).reduce((a, b) => a + b, 0), 'step', 'steps');
   const meta = [];
   if (reads) meta.push(plural(reads, 'file read', 'files read'));
@@ -2668,6 +2669,7 @@ function noteRow({ icon, verb, chip, meta, bad }){
 function rowMeta(rec){
   if (rec.ok === false) {
     if (rec.planHeld) return { html: 'waits for plan approval' };
+    if (rec.stopped) return { html: 'stopped' };
     if (rec.denied) return { html: /blocked by Auto mode/.test(rec.result || '') ? 'held back' : 'denied' };
     return { html: 'failed', bad: true };
   }
@@ -2931,15 +2933,19 @@ function setToolResult(rec, ok, resultText){
   // Plan mode holding a change back until the plan is approved: expected, not an error.
   const planHeld = !ok && /^PLAN MODE:/.test(txt);
   rec.planHeld = planHeld;
-  rec.denied = denied || planHeld;
+  // You pressed Stop while it ran: not a failure, and not an error in the step's count.
+  const stoppedByUser = !ok && /stopped by the user/.test(txt);
+  rec.stopped = stoppedByUser;
+  rec.denied = denied || planHeld || stoppedByUser;
   if (rec.name === 'shell' && ok) { const o = shellParts(txt); rec.bad = !!o.exit; }
   // The row repaints, closed: the detail is there to open, not opened for you.
   const g = rec.group;
   if (g) { paintRow(g); if (g.open) fillRowCard(g); }
   // Feed the step's summary line.
   const st = rec.card.stats || (rec.card.stats = {});
-  if (denied || planHeld) {
+  if (denied || planHeld || stoppedByUser) {
     if (blocked) st.blocked = (st.blocked || 0) + 1; else if (denied) st.denied = (st.denied || 0) + 1;
+    else if (stoppedByUser) st.stopped = (st.stopped || 0) + 1;
     const k = kindName(rec.name || '');
     if (rec.card.counts[k]) rec.card.counts[k]--;
   } else if (!ok) st.errors = (st.errors || 0) + 1;

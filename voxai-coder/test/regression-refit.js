@@ -618,6 +618,26 @@ async function drain(gen) {
     let err = null;
     try { await cdp.withTimeout(new Promise(() => {}), 'Runtime.evaluate', 200); } catch (e) { err = e; }
     check('a browser command that never answers fails after its limit', err && /did not answer \(Runtime\.evaluate\)/.test(err.message) && Date.now() - t1 < 1500, err && err.message);
+    // Stop ends the command itself, not only the run: a stopped `ping -n 40` kept going.
+    {
+      const { buildTools } = require(path.join(ROOT, 'src/backend/tools/index.js'));
+      const ac = new AbortController();
+      const sctx = { workdir: WD, session: { id: 'cx2', workdir: WD, messages: [], todos: [] }, emit: () => {}, resolveIn: (w, p) => path.resolve(w, p), checkPermission: async () => {}, signal: ac.signal };
+      const sh = buildTools(sctx).ALL.find((t) => t.def.function.name === 'shell');
+      const long = process.platform === 'win32' ? 'ping -n 20 127.0.0.1' : 'sleep 20';
+      const t2 = Date.now();
+      setTimeout(() => ac.abort(), 700);
+      const r = await sh.run({ command: long }, sctx);
+      await new Promise((res) => setTimeout(res, 800));
+      let left = 0;
+      if (process.platform === 'win32') {
+        try { left = require('child_process').execFileSync('tasklist', ['/FI', 'IMAGENAME eq PING.EXE', '/NH'], { encoding: 'utf8' }).split('\n').filter((l) => /PING\.EXE/i.test(l)).length; } catch {}
+      }
+      check('Stop ends a running command and its children', r.stopped === true && Date.now() - t2 < 6000 && left === 0, { stopped: r.stopped, ms: Date.now() - t2, left });
+    }
+    const ss5 = new vm.Script('(' + /function stepSummary\(counts, stats\)\{[\s\S]*?\n\}/.exec(read('src/renderer/index.html'))[0] + ')').runInNewContext({});
+    check('a step you stopped is titled "Stopped"', ss5({}, { stopped: 1 }).head === 'Stopped', ss5({}, { stopped: 1 }).head);
+    check('a stopped action reads "stopped", not failed', read('src/renderer/index.html').includes("if (rec.stopped) return { html: 'stopped' };"), 'failed');
     check('every browser command goes through the limit', read('src/backend/cu/cdp.js').includes('return withTimeout(C.attachedWC.debugger.sendCommand(method, params)'), 'no limit');
   }
 
