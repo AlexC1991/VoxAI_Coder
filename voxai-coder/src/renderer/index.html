@@ -2207,7 +2207,9 @@ function stepSummary(counts, stats){
   else if (cmds) { head = 'Ran ' + plural(cmds, 'command', 'commands'); used.c = 1; }
   else if (subs) { head = 'Worked with sub-agents'; used.s = 1; }
   else if (eye) { head = 'Used the browser'; used.e = 1; }
-  else if (web && !reads && !finds) { head = 'Searched the web'; used.web = 1; }
+  // Reading a page is not searching: a step that only fetched example.com was titled
+  // "Searched the web". Found in a live run.
+  else if (web && !reads && !finds) { head = n('FIND') ? 'Searched the web' : (n('WEB') === 1 ? 'Read a web page' : 'Read ' + n('WEB') + ' web pages'); used.web = 1; }
   else if (reads || finds) { head = 'Explored the project'; }
   else if (st.denied) { head = st.denied === 1 ? 'You denied a request' : 'You denied ' + st.denied + ' requests'; used.d = 1; }
   else if (st.blocked) { head = 'Auto mode held back ' + plural(st.blocked, 'action', 'actions'); used.b = 1; }
@@ -2317,7 +2319,13 @@ function rowLook(name, args, done){
     case 'web_search': return pick('globe', 'Searched the web', 'Searching the web');
     case 'web_fetch': return pick('globe', 'Fetched', 'Fetching');
     case 'todo': return pick('list', 'Updated the plan', 'Updating the plan');
-    case 'memory': return pick('list', 'Memory');
+    case 'memory': {
+      const act = String((args && args.action) || '');
+      if (act === 'add') return pick('list', 'Remembered', 'Remembering');
+      if (act === 'forget') return pick('list', 'Forgot', 'Forgetting');
+      if (act === 'search') return pick('search', 'Searched memory', 'Searching memory');
+      return pick('list', 'Checked memory', 'Checking memory');
+    }
     case 'ask_user': case 'ask_confirm': return pick('ask', 'Asked', 'Asking');
     case 'spawn_agent': case 'spawn_parallel': return pick('people', 'Delegated', 'Delegating');
     case 'computer': return pick('eye', 'Used the browser', 'Using the browser');
@@ -2361,6 +2369,11 @@ function rowChip(name, args){
   if (name === 'shell') { const c = String(a.command || '').replace(/\s+/g, ' ').trim(); return c ? { text: c, title: String(a.command) } : null; }
   if (name === 'todo') return null;
   if (name === 'build_state') return a.task ? { text: String(a.task), title: String(a.task) } : null;
+  if (name === 'memory') {
+    const facts = Array.isArray(a.facts) ? a.facts.map((f) => (f && typeof f === 'object' ? f.text || f.fact || '' : String(f))).filter(Boolean) : [];
+    const t = a.action === 'search' ? String(a.query || '') : facts.length ? facts[0] + (facts.length > 1 ? ' \u2026' : '') : '';
+    return t ? { text: t, title: facts.join('\n') || t } : null;
+  }
   // The verb already says remove / move / mkdir; the chip is just the path.
   if (name === 'fs' && a.action === 'move' && a.source) return { text: base(a.source) + ' → ' + base(a.destination), title: a.source + ' → ' + a.destination };
   if (name === 'fs' && a.path) return { text: base(a.path), title: String(a.path) };
@@ -2566,6 +2579,18 @@ function markPreviewRows(st){
   if (!st || !st.open || !st.url) return;
   document.querySelectorAll('.pv-row').forEach((row) => { if (row._opened && samePreviewUrl(st.url, row.dataset.url)) row._opened(true); });
 }
+/** A quiet row that is not a tool call: a notice in the same shape as the rest. */
+function noteRow({ icon, verb, chip, meta, bad }){
+  const row = el('div', 'toolrow note-row' + (bad ? ' fail' : ''));
+  const top = el('div', 'top');
+  top.appendChild(trIcon(icon || 'tool'));
+  const vb = el('span', 'tr-verb'); vb.textContent = verb || ''; top.appendChild(vb);
+  if (chip) { const c = el('span', 'tr-chip'); c.textContent = chip; c.title = chip; top.appendChild(c); }
+  top.appendChild(el('span', 'tr-sp'));
+  if (meta) { const m = el('span', 'tr-meta' + (bad ? ' bad' : '')); m.textContent = meta; top.appendChild(m); }
+  row.appendChild(top);
+  return row;
+}
 /** The note at the row's right edge: +/- lines, "1 failed", "143 lines". */
 function rowMeta(rec){
   if (rec.ok === false) {
@@ -2589,6 +2614,13 @@ function rowMeta(rec){
     return { html: tv && tv.passed !== null ? tv.passed + ' passed' : '' };
   }
   if (rec.name === 'build_state') return { html: '' };   // the verb says it; "set" says nothing
+  if (rec.name === 'memory') {
+    const facts = Array.isArray((rec.args || {}).facts) ? rec.args.facts.length : 0;
+    if ((rec.args || {}).action === 'add' && facts) return { html: facts + (facts === 1 ? ' fact' : ' facts') };
+    let o = null; try { o = JSON.parse(rec.result); } catch { /* plain */ }
+    const n = o && (Array.isArray(o.facts) ? o.facts.length : Array.isArray(o.hits) ? o.hits.length : o.total);
+    return { html: n != null ? n + (n === 1 ? ' fact' : ' facts') : '' };
+  }
   // A question's row carries the answer.
   if (rec.name === 'ask_user' || rec.name === 'ask_confirm') {
     let o = null; try { o = JSON.parse(rec.result); } catch { /* plain */ }
@@ -2634,7 +2666,7 @@ function paintRow(g){
   const running = items.some((r) => r.ok === null && !r.instant);
   const fail = items.some((r) => (r.ok === false && !r.denied) || r.bad);
   const look = rowLook(g.name, first.args, !running);
-  const canOpen = items.length > 1 || !!rowDiffs(first) || first.ok === false || !!(first.result && String(first.result).trim()) || !!(first.subs && first.subs.size);
+  const canOpen = items.length > 1 || !!rowDiffs(first) || first.ok === false || !!(first.result && String(first.result).trim()) || !!(first.subs && first.subs.size) || !!first.display || !!first.artifact;
   g.row.classList.toggle('running', running);
   g.row.classList.toggle('fail', fail);
   g.row.classList.toggle('can-open', canOpen);
@@ -2760,6 +2792,18 @@ function fillDetail(box, rec){
     if (o.stderr.trim()) line(t, 'e', '\n' + trunc(o.stderr.replace(/\s+$/, ''), 20000));
     if (o.exit) line(t, 'e', '\nexit ' + o.exit);
     if (o.raw && o.raw.trim()) t.appendChild(document.createTextNode('\n' + trunc(o.raw, 20000)));
+    return;
+  }
+  if (rec.name === 'web_fetch' && rec.display) {
+    const d = rec.display;
+    head(String(d.url || d.title || ''), '<span>' + esc(d.kind || 'page') + (d.text ? ' \u00b7 ' + fmtBytes(d.text.length) : '') + '</span>');
+    term(trunc(String(d.text || ''), 6000));
+    return;
+  }
+  if (rec.name === 'artifact_publish' && rec.artifact) {
+    const a = rec.artifact;
+    head(String(a.title || a.path || 'artifact'), '<span>' + esc([a.kind, a.bytes != null ? fmtBytes(a.bytes) : ''].filter(Boolean).join(' \u00b7 ')) + '</span>');
+    term([a.summary, a.path, a.id].filter(Boolean).join('\n') || 'published');
     return;
   }
   if (rec.name === 'read') {
@@ -3758,7 +3802,11 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     if (rec && (event.name === 'spawn_agent' || event.name === 'spawn_parallel')) v._subHost = rec;
   } else if (event.type === 'tool_end') {
     if (v.latestTool) { setToolResult(v.latestTool, !!event.ok, event.result); v.latestTool = null; }
-    if (event.mutated && event.mutated.path) noteTouched(sid, event.mutated.path);
+    if (event.mutated && event.mutated.path) {
+      noteTouched(sid, event.mutated.path);
+      // Keep the strip current while the run works, without a git call per edit.
+      if (sid === activeId) { clearTimeout(v.ctxTimer); v.ctxTimer = setTimeout(refreshCtx, 700); }
+    }
     // debounce 'thinking…' — only show if the model is actually slow
     clearTimeout(v.statusTimer);
     if (v.runKeys.size) setActivity(v, 'Thinking');
@@ -3817,23 +3865,17 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     v.busy = false; v.activity = '';
     v.runKeys.delete(runKey);
     if (sid === activeId) { $('runDot').style.display = 'none'; updateSendState(); paintShelf(); }
-    refreshSessionList(); refreshUsage();
+    // The run's changes belong on the strip: it was only re-read when a run hit a
+    // limit, so an ordinary finish left "No uncommitted changes" beside a changed file.
+    refreshSessionList(); refreshUsage(); if (sid === activeId) refreshCtx();
     drainQueue(sid);
   } else if (event.type === 'display') {
-    // web_fetch emitted the page it retrieved and nothing listened, so fetching a URL
-    // showed only the tool row — the content the agent is reasoning about was hidden.
+    // The page web_fetch read belongs to its "Fetched" row, one click away -- it was a
+    // box of its own in the old style.
     const d = event.display || {};
-    const box = el('div', 'md');
-    box.style.cssText = 'border:1px solid var(--edge2);border-radius:8px;overflow:hidden';
-    const head = document.createElement('div');
-    head.style.cssText = 'display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--panel2);font-family:"Sometype Mono",monospace;font-size:11.5px;color:var(--faint)';
-    head.textContent = (d.kind || 'page') + ' · ' + (d.title || d.url || '');
-    head.title = d.url || '';
-    const body = document.createElement('div');
-    body.style.cssText = 'padding:8px 10px;font-size:13px;color:var(--dim);white-space:pre-wrap;max-height:220px;overflow:auto';
-    body.textContent = trunc(String(d.text || ''), 4000);
-    box.appendChild(head); box.appendChild(body);
-    const rr = RR(); if (rr) { rr.appendChild(box); followThread(); }
+    const rec = v.latestTool && v.latestTool.name === 'web_fetch' ? v.latestTool : null;
+    if (rec) { rec.display = d; if (rec.group) { paintRow(rec.group); if (rec.group.open) fillRowCard(rec.group); } }
+    else { const r = noteRow({ icon: 'globe', verb: 'Fetched', chip: d.url || d.title || 'page', meta: d.text ? fmtBytes(d.text.length) : '' }); const rr = flowRoot(v); if (rr) { rr.appendChild(r); followThread(); } }
   } else if (event.type === 'previewable') {
     // Detect -> offer -> remember, as one quiet row in the step: the file, and Open /
     // Always. It used to be a gold box of its own, and it kept offering a page the agent
@@ -3882,32 +3924,24 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
       try { const st = await window.voxai.preview.state(); if (st && st.open && samePreviewUrl(st.url, event.url)) row._opened(true); } catch {}
     })();
   } else if (event.type === 'artifact') {
-    // artifact_publish emitted this and nothing listened, so publishing a reviewable
-    // artifact succeeded completely silently.
+    // artifact_publish's receipt belongs to its "Published" row: title, kind, size and
+    // summary one click away, not a box of its own.
     const a = event.artifact || {};
-    const box = el('div', 'md');
-    box.style.cssText = 'border:1px solid var(--edge2);border-left:3px solid var(--gold);border-radius:0 6px 6px 0;padding:9px 12px';
-    const t = document.createElement('div');
-    t.style.cssText = 'font-weight:700;color:var(--ink)';
-    t.textContent = a.title || a.path || 'artifact';
-    const meta = document.createElement('div');
-    meta.style.cssText = 'font-family:"Sometype Mono",monospace;font-size:11.5px;color:var(--faint);margin-top:3px';
-    meta.textContent = [a.kind, a.path, a.bytes != null ? fmtNum(a.bytes) + ' bytes' : '', a.id]
-      .filter(Boolean).join(' · ');
-    box.appendChild(t); box.appendChild(meta);
-    if (a.summary) { const sEl = document.createElement('div'); sEl.style.cssText = 'font-size:13px;color:var(--dim);margin-top:5px'; sEl.textContent = a.summary; box.appendChild(sEl); }
-    const rr = RR(); if (rr) { rr.appendChild(box); followThread(); }
+    const rec = v.latestTool && v.latestTool.name === 'artifact_publish' ? v.latestTool : null;
+    if (rec) { rec.artifact = a; if (rec.group) { paintRow(rec.group); if (rec.group.open) fillRowCard(rec.group); } }
+    else { const r = noteRow({ icon: 'globe', verb: 'Published', chip: a.title || a.path || 'artifact', meta: a.kind || '' }); const rr = flowRoot(v); if (rr) { rr.appendChild(r); followThread(); } }
   } else if (event.type === 'awaiting_agents') {
     setStatus('waiting for ' + event.count + ' background agent' + (event.count === 1 ? '' : 's') + '…');
   } else if (event.type === 'agent_finished') {
     const n = (event.files_changed || []).length;
     const bad = (event.needs_attention || []).length;
-    const line = el('div', 'md');
-    line.style.cssText = 'border-left:3px solid ' + (bad ? 'var(--del)' : 'var(--add)') + ';padding:6px 10px;font-size:13px;color:var(--dim)';
     for (const f of (event.files_changed || [])) noteTouched(sid, f.path);
-    line.textContent = 'background agent finished (' + (event.stopReason || 'done') + ')'
-      + (n ? ' — ' + n + ' file' + (n === 1 ? '' : 's') + ' changed' : '')
-      + (bad ? ' · ' + bad + ' need attention' : '');
+    const stop = event.stopReason && event.stopReason !== 'completed' ? event.stopReason : '';
+    const line = noteRow({
+      icon: 'people', verb: 'Background agent finished', chip: stop,
+      meta: (n ? n + (n === 1 ? ' file changed' : ' files changed') : 'no changes') + (bad ? ' \u00b7 ' + bad + ' need attention' : ''),
+      bad: !!bad || !!stop,
+    });
     const rr = RR(); if (rr) { rr.appendChild(line); followThread(); }
   } else if (event.type === 'budget') {
     // live spend readout against the cap
@@ -4673,9 +4707,9 @@ function paintDiffList(d){
 }
 
 async function refreshDiff(){
-  const v = actView(); if (!v || !v.workdir) return;
+  const v = actView(); const wd = viewDir(v); if (!v || !wd) return;
   try {
-    const d = await window.voxai.workspaceDiff(v.workdir);
+    const d = await window.voxai.workspaceDiff(wd);
     if (d && d.ok) { v.diff = d; paintDiffList(d); }
   } catch { /* not fatal */ }
 }
@@ -4691,9 +4725,10 @@ async function refreshCtx(){
   const v = actView(); if (!v) return;
   // Without a workdir the honest answer is "nothing to show" — asking anyway let the
   // main process answer about whichever folder happened to be in settings.
-  if (!v.workdir) { v.ctx = null; paintCtxBar(); return; }
+  const wd = viewDir(v);
+  if (!wd) { v.ctx = null; paintCtxBar(); return; }
   try {
-    const r = await window.voxai.workspaceContext(v.workdir);
+    const r = await window.voxai.workspaceContext(wd);
     if (r && r.ok) { v.ctx = r; paintCtxBar(); if (DIFF_OPEN) refreshDiff(); }
   } catch { /* not fatal — the bar simply stays as it was */ }
 }

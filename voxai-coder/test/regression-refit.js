@@ -494,6 +494,26 @@ async function drain(gen) {
     check('the agent is told to name files by project path', read('src/backend/agent.js').includes('use its path relative to the project folder'), 'not told');
   }
 
+  // ------------------------------------------------------------------ [CT]
+  console.log('\n[CT] the menu works; the last old boxes are rows');
+  {
+    const MAIN = read('src/main/main.js');
+    const relayDef = MAIN.indexOf('function relay(ch)'), createWin = MAIN.indexOf('function createWindow()');
+    check('the File menu can reach relay (Ctrl+N, Ctrl+O)', relayDef > 0 && relayDef < createWin && !MAIN.includes('const relay = (ch)'), 'relay out of scope');
+    check('About shows the real version', MAIN.includes("message: 'VoxAI Coder ' + app.getVersion()") && !MAIN.includes("'VoxAI Coder v0.1.0'"), 'v0.1.0');
+    const HTML = read('src/renderer/index.html');
+    check('a fetched page opens from its row', HTML.includes("if (rec) { rec.display = d;") && HTML.includes("if (rec.name === 'web_fetch' && rec.display) {"), 'separate box');
+    check('a published artifact opens from its row', HTML.includes("if (rec) { rec.artifact = a;") && HTML.includes("if (rec.name === 'artifact_publish' && rec.artifact) {"), 'separate box');
+    check('a background agent finishing is a quiet row', HTML.includes("icon: 'people', verb: 'Background agent finished'") && !HTML.includes("'background agent finished ('"), 'old line');
+    check('no old gold-edged boxes are left in the thread', !/border-left:3px solid var\(--gold\);border-radius:0 6px 6px 0;padding:9px 12px/.test(HTML), 'still there');
+    const ss3 = new vm.Script('(' + /function stepSummary\(counts, stats\)\{[\s\S]*?\n\}/.exec(HTML)[0] + ')').runInNewContext({});
+    check('fetching a page is not "Searched the web"', ss3({ WEB: 1, MEMORY: 1 }, {}).head === 'Read a web page' && ss3({ FIND: 1 }, {}).head === 'Searched the web', [ss3({ WEB: 1 }, {}).head, ss3({ FIND: 1 }, {}).head]);
+    check('the changes strip is re-read when a run finishes', HTML.includes("refreshSessionList(); refreshUsage(); if (sid === activeId) refreshCtx();"), 'stale after a run');
+    check('and soon after each file change', HTML.includes('v.ctxTimer = setTimeout(refreshCtx, 700);'), 'stale during a run');
+    check('the strip asks about the session\'s own folder', HTML.includes('const r = await window.voxai.workspaceContext(wd);'), 'empty after a reload');
+    check('memory rows read as words', HTML.includes("if (act === 'add') return pick('list', 'Remembered', 'Remembering');"), 'Memory · add (2)');
+  }
+
   // ------------------------------------------------------------------ [CP]
   console.log('\n[CP] updates come from CodeRook, and only signed ones install');
   {

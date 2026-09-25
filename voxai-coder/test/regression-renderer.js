@@ -362,8 +362,8 @@ console.log('\n[AH] a new session carries nothing from the last one');
 // A fresh session in one project was showing another project's branch and diff.
 check('new session sets its own workdir', HTML.includes('v.workdir = created.workdir'), 'unset');
 check('new session clears cached git state', HTML.includes('v.ctx = null') && HTML.includes('v.diff = null'), 'stale ctx kept');
-check('no workdir means no context request', HTML.includes('if (!v.workdir) { v.ctx = null; paintCtxBar(); return; }'), 'asks anyway');
-check('diff refuses without a workdir', HTML.includes('if (!v || !v.workdir) return;'), 'asks anyway');
+check('no workdir means no context request', HTML.includes('if (!wd) { v.ctx = null; paintCtxBar(); return; }'), 'asks anyway');
+check('diff refuses without a workdir', HTML.includes('const v = actView(); const wd = viewDir(v); if (!v || !wd) return;'), 'asks anyway');
 check('main will not guess the project', MAIN.includes('unknown: true'), 'still falls back');
 check('preview history is per session', HTML.includes('v.ppHistory'), 'global history');
 // Both session-entry paths must clear the tray: creating one, and switching to one.

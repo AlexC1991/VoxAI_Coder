@@ -159,6 +159,11 @@ function chatWebContents() {
   return (chatV && chatV.webContents) || (win() && win().webContents);
 }
 
+// File menu -> the window (New Session, Open Folder). It lived inside the startup
+// function, out of reach of the menu built in createWindow, so the menu items and
+// their shortcuts (Ctrl+N, Ctrl+O) threw and did nothing. Found in a live test.
+function relay(ch) { const c = chatWebContents(); if (c) c.send('vox:menu', ch); }
+
 // ------------------------------------------------------------------- window ---
 function createWindow() {
   const w = new BrowserWindow({
@@ -203,7 +208,7 @@ function createWindow() {
     { label: 'Help', submenu: [
       { label: 'About VoxAI Coder', click: () => dialog.showMessageBox(w, {
         type: 'info', title: 'VoxAI Coder',
-        message: 'VoxAI Coder v0.1.0',
+        message: 'VoxAI Coder ' + app.getVersion(),
         detail: 'Forge-style desktop coder · own Vox backend · OpenRouter models.' }) },
     ]},
   ];
@@ -1163,8 +1168,6 @@ ipcMain.handle('openrouter:generations', async (_e, { limit = 40, cursor } = {})
     return { auto: !!(s2.previewAuto && s2.previewAuto[String(workdir)]) };
   });
 
-  // menu-event relays (File menu → renderer actions)
-  const relay = (ch) => { const c = chatWebContents(); c && c.send('vox:menu', ch); };
 
   try { createWindow(); } catch (e) { try { console.error('createWindow failed:', e && e.message); } catch {} }
   app.on('activate', () => { try { if (BrowserWindow.getAllWindows().length === 0) createWindow(); } catch (e) {} });
