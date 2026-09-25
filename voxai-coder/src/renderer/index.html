@@ -2689,6 +2689,7 @@ function stopNotice(ev, live){
     [/^This conversation is too long for the model/, 'Conversation too long for this model'],
     [/^No provider is serving this model/, 'Model not available'],
     [/^The model's provider.* had a problem/, 'The provider had a problem'],
+    [/^The connection dropped part-way/, 'The connection dropped'],
   ];
   const hit = TITLES.find(([re]) => re.test(msg));
   return noticeRow({ tone: 'bad', icon: 'alert', title: hit ? hit[1] : 'Something went wrong', text: tidyPaths(msg) });

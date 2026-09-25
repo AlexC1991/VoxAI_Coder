@@ -732,9 +732,17 @@ async function* runAgent(opts) {
               }
             },
           });
+          // Nothing at all -- no text, no tool call -- is a provider hiccup more often
+          // than an answer; it ended the run with nothing shown. Ask once more.
+          if (!streamed && !String(r.content || '').trim() && !(r.toolCalls || []).length && attempt === 0 && !(signal && signal.aborted)) {
+            if (onLiveEvent) { try { onLiveEvent({ type: 'warning', code: 'retrying', message: 'The model returned an empty answer. Asking again.' }); } catch {} }
+            continue;
+          }
           break;
         } catch (callErr) {
-          if (!callErr || !callErr.retryable || streamed || attempt >= retryWaits().length || (signal && signal.aborted)) throw callErr;
+          // A connection dropped before anything arrived passes like a network blip.
+          const passing = callErr && (callErr.retryable || /\b(terminated|ECONNRESET|socket hang up|other side closed)\b/i.test(String(callErr.message || '')));
+          if (!passing || streamed || attempt >= retryWaits().length || (signal && signal.aborted)) throw callErr;
           const wait = retryWaits()[attempt];
           if (onLiveEvent) {
             // What went wrong, not the advice after it: "…then send again. Trying again"
@@ -805,12 +813,23 @@ async function* runAgent(opts) {
       // Stopping aborts the request mid-stream. That is the user's Stop, not a failure,
       // and it showed as "Error: This operation was aborted".
       if (signal && signal.aborted) { bg.cancelAll(session.id); yield { type: 'cancelled' }; return; }
+      // The connection dropped part-way through the answer. It said only "terminated",
+      // and what had arrived was not kept, so after "continue" the model no longer knew
+      // what it had written. Found in a live run. Keep it, and say what to do.
+      if (content) {
+        session.messages.push({ role: 'assistant', content });
+        yield { type: 'error', message: `The connection dropped part-way through the answer (${err.message}). What arrived is kept above; send "continue" to pick up from there.` };
+        return;
+      }
       yield { type: 'error', message: err.message };
       return;
     }
     while (emitQueue.length) yield emitQueue.shift();
 
     if (!toolCalls.length) {
+      if (!String(content || '').trim()) {
+        yield { type: 'warning', code: 'empty-answer', message: 'The model returned an empty answer twice. Send your message again, or try another model.' };
+      }
       session.messages.push({ role: 'assistant', content });
       // The model thinks it is finished — but a background agent still running means
       // a report is coming that it has not seen. Finishing here would silently drop
@@ -869,9 +888,17 @@ async function* runAgent(opts) {
         // A model that used web_search earlier in the session will try it again after
         // search is switched off. "unknown tool" left it guessing why; say the real
         // reason so it can tell the user.
+        // Models trained on other tools call Bash, Read, str_replace_editor… "unknown tool:
+        // Bash" left them guessing; name the one that does it, and the ones there are.
+        const SAME_AS = { bash: 'shell', run_command: 'shell', execute_command: 'shell', terminal: 'shell', cmd: 'shell', powershell: 'shell',
+          read_file: 'read', view: 'read', cat: 'read', write_file: 'write', create_file: 'write', str_replace_editor: 'edit', str_replace: 'edit',
+          edit_file: 'edit', apply_patch: 'patch', multiedit: 'patch', list_files: 'glob', ls: 'glob', find: 'glob', search_files: 'grep', ripgrep: 'grep',
+          fetch: 'web_fetch', webfetch: 'web_fetch', websearch: 'web_search', task: 'spawn_agent', todowrite: 'todo' };
+        const alt = SAME_AS[String(tc.name).toLowerCase()] || (toolList.find((t) => t.def.function.name.toLowerCase() === String(tc.name).toLowerCase()) || { def: { function: {} } }).def.function.name;
+        const have = toolList.map((t) => t.def.function.name).join(', ');
         const why = tc.name === 'web_search' && !webSearchOn
           ? 'web_search is turned off in Settings. Use web_fetch on URLs you already have, or tell the user search is off.'
-          : `unknown tool: ${tc.name}`;
+          : `There is no tool called ${tc.name}.${alt && toolList.some((t) => t.def.function.name === alt) ? ` Use ${alt} for that.` : ''} The tools here are: ${have}.`;
         session.messages.push({ role: 'tool', tool_call_id: id, content: why });
         yield { type: 'tool_end', id, name: tc.name, ok: false, result: why };
         continue;

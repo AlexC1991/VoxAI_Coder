@@ -697,6 +697,40 @@ async function drain(gen) {
       const H = read('src/renderer/index.html');
       check('out of credits is titled so', H.includes("[/^Your OpenRouter account is out of credits/, 'Out of OpenRouter credits'],"), 'generic');
     }
+    // Odd answers: a connection dropped mid-answer said "terminated" and lost what had
+    // arrived; an empty answer ended the run showing nothing; "unknown tool: Bash".
+    {
+      const enc = new TextEncoder();
+      const body = (chunks, fail) => new ReadableStream({ start(c) {
+        for (const ch of chunks) c.enqueue(enc.encode('data: ' + JSON.stringify(ch) + '\n\n'));
+        if (fail) { setTimeout(() => c.error(new TypeError('terminated')), 30); return; }
+        c.enqueue(enc.encode('data: [DONE]\n\n')); c.close();
+      } });
+      const serve = (steps) => { global.fetch = async () => { const s = steps.shift() || { chunks: [{ choices: [{ delta: { content: 'fine' }, finish_reason: 'stop' }] }] }; return { ok: true, status: 200, body: body(s.chunks, s.fail) }; }; };
+      const prevW = process.env.VOX_RETRY_WAITS_MS; process.env.VOX_RETRY_WAITS_MS = '10,20';
+      try {
+        const agentRun = async (id) => { const session = { id, workdir: WD, messages: [] }; const ev = await drain(runAgent({ session, userText: 'go', apiKey: 'k', model: 'm', access: 'full', askPermission: async () => true, maxTurns: 3 })); return { ev, session }; };
+        serve([{ chunks: [{ choices: [{ delta: { content: 'Here is the first half' } }] }], fail: true }]);
+        const a = await agentRun('odd1');
+        const errA = a.ev.find((e) => e.type === 'error');
+        check('a drop mid-answer keeps what arrived and says to continue', errA && /dropped part-way through the answer.*send "continue"/.test(errA.message) && a.session.messages.some((m) => m.role === 'assistant' && m.content === 'Here is the first half'), [errA, a.session.messages]);
+        serve([{ chunks: [], fail: true }]);
+        const b = await agentRun('odd2');
+        check('a drop before anything arrived is retried', (b.ev.find((e) => e.type === 'done') || {}).content === 'fine', b.ev.map((e) => e.type));
+        serve([{ chunks: [{ choices: [{ delta: {}, finish_reason: 'stop' }] }] }]);
+        const c = await agentRun('odd3');
+        check('an empty answer is asked again', (c.ev.find((e) => e.type === 'done') || {}).content === 'fine', c.ev.map((e) => e.type));
+        serve([{ chunks: [{ choices: [{ delta: {}, finish_reason: 'stop' }] }] }, { chunks: [{ choices: [{ delta: {}, finish_reason: 'stop' }] }] }]);
+        const d = await agentRun('odd4');
+        check('two empty answers are said, not silent', d.ev.some((e) => e.type === 'warning' && e.code === 'empty-answer'), d.ev.map((e) => e.type));
+        serve([{ chunks: [{ choices: [{ delta: { tool_calls: [{ index: 0, id: 'u1', function: { name: 'Bash', arguments: '{"command":"dir"}' } }] } }] }, { choices: [{ delta: {}, finish_reason: 'tool_calls' }] }] }]);
+        const e = await agentRun('odd5');
+        const te = e.ev.find((x) => x.type === 'tool_end');
+        check('an unknown tool points to the right one', te && /There is no tool called Bash\. Use shell for that\. The tools here are: .*\bread\b/.test(te.result), te && te.result);
+      } finally {
+        if (prevW === undefined) delete process.env.VOX_RETRY_WAITS_MS; else process.env.VOX_RETRY_WAITS_MS = prevW;
+      }
+    }
     // snapshot restore writes files back, yet ran without asking under "Ask first";
     // the agent named levels the menu does not show ("Auto-edit files").
     {
