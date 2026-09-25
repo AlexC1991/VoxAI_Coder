@@ -322,7 +322,7 @@ tests"). Scroll the row instead of breaking words:
 .md table{border-collapse:collapse;width:100%;margin:.6em 0;font-size:13.5px}.md table th,.md table td{border:1px solid var(--edge2);padding:6px 9px;text-align:left;vertical-align:top}.md table thead th{background:var(--panel2);color:var(--gold);font-weight:700;font-family:"Sometype Mono",monospace;font-size:12px;letter-spacing:.05em}.md table tbody tr:nth-child(even){background:var(--panel)}.md blockquote{margin:.6em 0;padding:2px 0 2px 13px;border-left:3px solid var(--goldedge);color:var(--mut);font-style:italic}
 .toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top, 0px) + 92px);transform:translateX(-50%);z-index:120;display:flex;align-items:center;gap:12px;max-width:min(560px,calc(100vw - 32px));background:var(--panel2);border:1px solid var(--edge2);border-radius:9px;padding:9px 12px 9px 15px;box-shadow:0 10px 34px rgba(0,0,0,.45);font-size:13px;color:var(--ink)}
 .toast[hidden]{display:none}
-.toast-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.toast-t{line-height:1.45;overflow-wrap:anywhere}
 .toast-a{flex:none;border:1px solid var(--goldedge);background:transparent;color:var(--gold);cursor:pointer;padding:4px 10px;border-radius:6px;font:inherit;font-size:12.5px}
 .toast-a:hover{background:rgba(200,169,97,.08)}
 #sessMenu button{display:flex;width:100%;border:0;background:transparent;color:var(--mut);cursor:pointer;padding:7px 10px;text-align:left;font-size:13px;border-radius:5px;font-family:inherit}#sessMenu button:hover{background:var(--sel);color:var(--ink)}#sessMenu button[data-act="delete"]:hover{color:var(--del)}
@@ -4410,9 +4410,21 @@ $('prompt').addEventListener('paste', (e) => {
 // ===== mic → voice to text (Web Speech API) =====
 let recog = null, recogOn = false;
 function micSupported(){ return !!(window.SpeechRecognition || window.webkitSpeechRecognition); }
+// The mic lit for a second and went out: speech recognition in Electron has no speech
+// service behind it ("network"), and the error only reached the console. Say so, and
+// point to the dictation Windows already has. Found in a live run.
+const WIN_DICTATE = /Windows/i.test(navigator.userAgent) ? ' Press Win+H in the message box to dictate with Windows voice typing instead.' : '';
+const MIC_ERRORS = {
+  'network': 'Voice input isn’t available in this app: it needs a speech service it can’t reach.' + WIN_DICTATE,
+  'not-allowed': 'Microphone access was refused.' + WIN_DICTATE,
+  'service-not-allowed': 'Voice input isn’t allowed here.' + WIN_DICTATE,
+  'audio-capture': 'No microphone was found.',
+  'no-speech': 'Didn’t hear anything. Click the mic and speak.',
+};
+let micUnavailable = false;
 function startMic(){
   const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) { const ta = $('prompt'); ta.value = (ta.value ? ta.value + ' ' : '') + '[voice input not supported in this browser]'; return; }
+  if (!SR || micUnavailable) { toast(MIC_ERRORS.network); $('prompt').focus(); return; }
   if (recogOn) { stopMic(); return; }
   if (!recog) {
     recog = new SR();
@@ -4428,7 +4440,12 @@ function startMic(){
       ta.value = (base + ' ' + final).trim() + (interim ? ' ' + interim : '');
     };
     recog.onend = () => { recogOn = false; $('btnMic').classList.remove('rec','active'); };
-    recog.onerror = (e) => { recogOn = false; $('btnMic').classList.remove('rec','active'); console.log('mic error', e.error); };
+    recog.onerror = (e) => {
+      recogOn = false; $('btnMic').classList.remove('rec','active');
+      if (e.error === 'network') micUnavailable = true;
+      const msg = MIC_ERRORS[e.error];
+      if (msg) toast(msg);
+    };
   }
   $('btnMic').classList.add('rec','active');
   $('prompt').setAttribute('data-mic-base', $('prompt').value.trim());
@@ -4655,7 +4672,13 @@ $('newSessOk').onclick = async () => {
   catch(e){ const hn = $('newSessHint'); if (hn) hn.textContent = String(e && e.message || e); }
 };
 $('newSessCancel').onclick = closeNewSess;
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('newSessModalBg').classList.contains('show')) { e.preventDefault(); closeNewSess(); } });
+// Esc closes these dialogs, as it already did Settings. The Usage window sits over
+// Settings, so it goes first.
+document.addEventListener('keydown', (e) => {
+  if (e.key !== 'Escape') return;
+  if ($('usageModalBg').classList.contains('show')) { e.preventDefault(); e.stopImmediatePropagation(); closeUsage(); return; }
+  if ($('newSessModalBg').classList.contains('show')) { e.preventDefault(); closeNewSess(); }
+}, true);
 $('newSessDir').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); $('newSessOk').click(); } });
 $('newSessModalBg').addEventListener('click', (e) => { if (e.target.id === 'newSessModalBg') closeNewSess(); });
 $('btnFolder') && ($('btnFolder').onclick = () => openNewSess());

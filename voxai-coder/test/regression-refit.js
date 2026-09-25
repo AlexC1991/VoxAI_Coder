@@ -690,7 +690,13 @@ async function drain(gen) {
       check('a session needs a folder that exists', M.includes("try { isDir = path.isAbsolute(dir) && fs.statSync(dir).isDirectory(); } catch { isDir = false; }") && M.includes("if (!isDir) return { ok: false, error: `There is no folder at ${dir"), 'made anyway');
       check('and the app says so where you are looking', H.includes("if (!created || created.ok === false) throw new Error((created && created.error) || 'Could not start a session.');") && H.includes('try { await newSession(dir); closeNewSess(); }'), 'closed first');
       check('the + on a project says so too', H.includes("newSession(k).catch((err) => toast(String(err && err.message || err)))"), 'unhandled');
-      check('Esc closes the New session dialog', H.includes("if (e.key === 'Escape' && $('newSessModalBg').classList.contains('show')) { e.preventDefault(); closeNewSess(); }"), 'stays open');
+      check('Esc closes the New session dialog', H.includes("if ($('newSessModalBg').classList.contains('show')) { e.preventDefault(); closeNewSess(); }"), 'stays open');
+      check('and the Usage window, before Settings under it', H.includes("if ($('usageModalBg').classList.contains('show')) { e.preventDefault(); e.stopImmediatePropagation(); closeUsage(); return; }"), 'stays open');
+      // The mic lit for a second and went out: no speech service in Electron, and the
+      // error only reached the console.
+      check('a mic that cannot work says so, and what to use', H.includes("if (e.error === 'network') micUnavailable = true;") && H.includes("if (msg) toast(msg);") && H.includes('Press Win+H in the message box to dictate'), 'silent');
+      check('and does not try again', H.includes('if (!SR || micUnavailable) { toast(MIC_ERRORS.network);'), 'retries');
+      check('a long message wraps instead of being cut off', H.includes('.toast-t{line-height:1.45;overflow-wrap:anywhere}'), 'cut');
     }
     // Images dropped on the window or pasted into the box are attached; other files are
     // explained (a dropped file once loaded in place of the app, then did nothing).
