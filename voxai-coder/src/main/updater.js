@@ -72,17 +72,24 @@ function plainError(e) {
  * Once the app is running that version (or a later one), the download has done its job.
  */
 function clearInstalledDownload(version, log = () => {}, root = process.env.LOCALAPPDATA) {
+  // Judged by the installers themselves: the info file it used to read is not always
+  // written, and without it nothing was cleared -- one install held 0.2.6 and 0.2.12,
+  // 329 MB. Found in a live update. Every installer at or below the running version
+  // goes; a newer one waiting to be installed stays.
   try {
     const dir = path.join(root || '', 'voxai-coder-updater', 'pending');
-    const info = JSON.parse(fs.readFileSync(path.join(dir, 'update-info.json'), 'utf8'));
-    const got = (/(\d+\.\d+\.\d+)/.exec(String(info.fileName || '')) || [])[1];
-    if (!got) return false;
+    if (!fs.existsSync(dir)) return false;
     const semver = require(require.resolve('semver', { paths: [path.dirname(require.resolve('electron-updater'))] }));
-    if (semver.gt(got, version)) return false;   // a newer one, still waiting to be installed
-    fs.rmSync(dir, { recursive: true, force: true });
-    log(`removed the installed ${got} download`);
-    return true;
-  } catch { return false; }   // nothing downloaded, or unreadable: leave it
+    let removed = 0, waiting = 0;
+    for (const f of fs.readdirSync(dir)) {
+      const v = (/(\d+\.\d+\.\d+)\.exe$/i.exec(f) || [])[1];
+      if (!v) continue;
+      if (semver.gt(v, version)) { waiting++; continue; }
+      try { fs.rmSync(path.join(dir, f), { force: true }); removed++; log(`removed the installed ${v} download`); } catch {}
+    }
+    if (!waiting) fs.rmSync(dir, { recursive: true, force: true });   // nothing left worth keeping
+    return removed > 0;
+  } catch { return false; }   // unreadable: leave it
 }
 
 function publicKey() {

@@ -703,6 +703,15 @@ async function drain(gen) {
       const put = (v) => { fs.mkdirSync(pend, { recursive: true }); fs.writeFileSync(path.join(pend, `VoxAI-Coder-Setup-${v}.exe`), 'x'); fs.writeFileSync(path.join(pend, 'update-info.json'), JSON.stringify({ fileName: `VoxAI-Coder-Setup-${v}.exe` })); };
       put('0.2.3');
       check('an installed download is cleared on the next start', U.clearInstalledDownload('0.2.3', () => {}, LA) === true && !fs.existsSync(pend), fs.existsSync(pend));
+      // As found on a real install: two installers and no update-info.json (329 MB).
+      fs.mkdirSync(pend, { recursive: true });
+      for (const v of ['0.2.6', '0.2.12']) fs.writeFileSync(path.join(pend, `VoxAI-Coder-Setup-${v}.exe`), 'x');
+      check('old installers go even without the info file', U.clearInstalledDownload('0.2.12', () => {}, LA) === true && !fs.existsSync(pend), fs.existsSync(pend) && fs.readdirSync(pend));
+      fs.mkdirSync(pend, { recursive: true });
+      for (const v of ['0.2.11', '0.2.13']) fs.writeFileSync(path.join(pend, `VoxAI-Coder-Setup-${v}.exe`), 'x');
+      U.clearInstalledDownload('0.2.12', () => {}, LA);
+      check('a newer one waiting to install is kept, older ones go', JSON.stringify(fs.readdirSync(pend)) === JSON.stringify(['VoxAI-Coder-Setup-0.2.13.exe']), fs.readdirSync(pend));
+      fs.rmSync(pend, { recursive: true, force: true });
       put('0.2.4');
       check('one still waiting to be installed is kept', U.clearInstalledDownload('0.2.3', () => {}, LA) === false && fs.existsSync(path.join(pend, 'VoxAI-Coder-Setup-0.2.4.exe')), fs.existsSync(pend));
       fs.rmSync(path.join(LA, 'voxai-coder-updater'), { recursive: true, force: true });
