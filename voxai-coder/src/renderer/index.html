@@ -836,7 +836,7 @@ tests"). Scroll the row instead of breaking words:
               <button class="b lnk" id="askDetail" type="button">Details</button>
               <span class="sh-sp"></span>
               <button class="b" id="askDeny" type="button">Deny<kbd>Esc</kbd></button>
-              <button class="b" id="askAlways" type="button">Always in this session</button>
+              <button class="b" id="askAlways" type="button">Always for this</button>
               <button class="b pri" id="askAllow" type="button">Allow once<kbd>↵</kbd></button>
             </div>
           </div>
@@ -2169,7 +2169,9 @@ function stepSummary(counts, stats){
   const plural = (x, one, many) => x + ' ' + (x === 1 ? one : many);
   // Files, not calls: five edits to two files, two of which failed, changed 2 files.
   // Until a result names a path, the calls are all there is to count.
-  const reads = n('READ'), writes = st.files ? st.files.size : n('WRITE') + n('EDIT') + n('PATCH') + n('FS');
+  // File operations count only once a result names a change: checking a file (fs stat)
+  // read as "Changed 1 file" when nothing changed. Found in a live run.
+  const reads = n('READ'), writes = st.files ? st.files.size : n('WRITE') + n('EDIT') + n('PATCH');
   const cmds = n('CMD') + n('SHELL'), finds = n('GREP') + n('TREE') + n('RAG');
   const web = n('WEB') + n('FIND'), subs = n('SUB') + n('SUBx'), eye = n('EYE');
   let head, used = {};
@@ -2310,6 +2312,19 @@ function rowLook(name, args, done){
   const t = String(name || 'tool').replace(/_/g, ' ');
   return pick('tool', t.charAt(0).toUpperCase() + t.slice(1));
 }
+/**
+ * The plain verb, for an action that did not happen: "Deleted README.md · denied" said
+ * the file was gone when nothing was deleted. Found in a live run.
+ */
+const BASE_VERB = {
+  'Read': 'Read', 'Wrote': 'Write', 'Edited': 'Edit', 'Ran': 'Run', 'Ran JavaScript': 'Run JavaScript',
+  'Searched': 'Search', 'Listed': 'List', 'Checked types': 'Check types', 'Searched the web': 'Search the web',
+  'Fetched': 'Fetch', 'Updated the plan': 'Update the plan', 'Asked': 'Ask', 'Delegated': 'Delegate',
+  'Used the browser': 'Use the browser', 'Deleted': 'Delete', 'Moved': 'Move', 'Created folder': 'Create folder',
+  'Checked': 'Check', 'Saved progress notes': 'Save progress notes', 'Published': 'Publish', 'Used a skill': 'Use a skill',
+  'Called': 'Call', 'Checked sub-agents': 'Check sub-agents', 'Checked access': 'Check access',
+};
+const verbFor = (look, rec) => (rec && rec.ok === false ? (BASE_VERB[look.verb] || look.verb) : look.verb);
 /** What goes in the chip: a file's name (its path on hover), the command, the query. */
 function rowChip(name, args){
   const a = args || {};
@@ -2322,7 +2337,7 @@ function rowChip(name, args){
   if (name === 'fs' && a.action === 'move' && a.source) return { text: base(a.source) + ' → ' + base(a.destination), title: a.source + ' → ' + a.destination };
   if (name === 'fs' && a.path) return { text: base(a.path), title: String(a.path) };
   const t = cmdFor(name, a);
-  return t ? { text: t, title: t } : null;
+  return t && t !== '{}' ? { text: t, title: t } : null;   // no arguments: no chip, not "{}"
 }
 /**
  * A line diff of two texts: common lines kept, the rest as removals and additions.
@@ -2468,7 +2483,7 @@ function subActRow(act){
   const line = el('div', 'tr-sub');
   const look = rowLook(act.name, act.args, act.ok !== null);
   line.appendChild(act.ok === null ? el('span', 'tr-spin') : trIcon(look.icon));
-  const vb = el('span', 'tr-verb'); vb.textContent = look.verb; line.appendChild(vb);
+  const vb = el('span', 'tr-verb'); vb.textContent = verbFor(look, act); line.appendChild(vb);
   const c = rowChip(act.name, act.args);
   if (c) { const ch = el('span', 'tr-chip'); ch.textContent = c.text; ch.title = c.title || c.text; line.appendChild(ch); }
   line.appendChild(el('span', 'tr-sp'));
@@ -2505,6 +2520,7 @@ function testVerdict(text){
 /** The note at the row's right edge: +/- lines, "1 failed", "143 lines". */
 function rowMeta(rec){
   if (rec.ok === false) {
+    if (rec.planHeld) return { html: 'waits for plan approval' };
     if (rec.denied) return { html: /blocked by Auto mode/.test(rec.result || '') ? 'held back' : 'denied' };
     return { html: 'failed', bad: true };
   }
@@ -2576,7 +2592,7 @@ function paintRow(g){
   const top = g.top;
   top.textContent = '';
   top.appendChild(running ? el('span', 'tr-spin') : trIcon(look.icon));
-  const verb = el('span', 'tr-verb'); verb.textContent = look.verb; top.appendChild(verb);
+  const verb = el('span', 'tr-verb'); verb.textContent = items.length === 1 ? verbFor(look, first) : look.verb; top.appendChild(verb);
   if (items.length > 1) {
     const chips = el('span', 'tr-chips');
     for (const r of items.slice(0, 3)) {
@@ -2711,7 +2727,7 @@ function paintMeta(card){
   // While it runs the header shows the current action, so the files written so far
   // belong in the counts (once it is done, "Changed N files" becomes the name).
   const c = card.counts || {}, st = card.stats || {};
-  const wrote = st.files ? st.files.size : (c.WRITE || 0) + (c.EDIT || 0) + (c.PATCH || 0) + (c.FS || 0);
+  const wrote = st.files ? st.files.size : (c.WRITE || 0) + (c.EDIT || 0) + (c.PATCH || 0);
   if (card.running && wrote) sm.meta.unshift(wrote + (wrote === 1 ? ' file changed' : ' files changed'));
   const bad = [];
   if (sm.failed) bad.push(sm.failed + ' failed');
@@ -2730,15 +2746,18 @@ function setToolResult(rec, ok, resultText){
   // A refused request did not run: it is not a command run, and not a failure either.
   const blocked = !ok && /blocked by Auto mode/.test(txt);
   const denied = !ok && (blocked || /permission denied/i.test(txt));
-  rec.denied = denied;
+  // Plan mode holding a change back until the plan is approved: expected, not an error.
+  const planHeld = !ok && /^PLAN MODE:/.test(txt);
+  rec.planHeld = planHeld;
+  rec.denied = denied || planHeld;
   if (rec.name === 'shell' && ok) { const o = shellParts(txt); rec.bad = !!o.exit; }
   // The row repaints, closed: the detail is there to open, not opened for you.
   const g = rec.group;
   if (g) { paintRow(g); if (g.open) fillRowCard(g); }
   // Feed the step's summary line.
   const st = rec.card.stats || (rec.card.stats = {});
-  if (denied) {
-    if (blocked) st.blocked = (st.blocked || 0) + 1; else st.denied = (st.denied || 0) + 1;
+  if (denied || planHeld) {
+    if (blocked) st.blocked = (st.blocked || 0) + 1; else if (denied) st.denied = (st.denied || 0) + 1;
     const k = kindName(rec.name || '');
     if (rec.card.counts[k]) rec.card.counts[k]--;
   } else if (!ok) st.errors = (st.errors || 0) + 1;
@@ -4037,6 +4056,8 @@ function paintAsk(){
     $('askSub').textContent = '\u00b7 the agent wants to do this in ' + folderName(v.workdir || v._workdir || '');
     $('askWhat').textContent = p.showDetail ? (p.kind + '\n' + p.target) : (p.target || p.kind);
     $('askAlways').hidden = !p.canAlways;
+    // "Always" remembers this exact file or command; "in this session" read as everything.
+    $('askAlways').textContent = ({ 'write-file': 'Always for this file', shell: 'Always for this command', 'web-fetch': 'Always for this page', 'web-search': 'Always for this search' })[p.kind] || 'Always for this';
     $('askNote').hidden = !p.note; $('askNote').textContent = p.note || '';
     $('askDetail').textContent = p.showDetail ? 'Less' : 'Details';
     // Focus the request, not the Allow button: Enter on a focused button clicks it, and

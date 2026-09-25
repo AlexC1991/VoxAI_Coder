@@ -453,6 +453,27 @@ async function drain(gen) {
     check('the row shows the answer', /if \(rec\.name === 'ask_user' \|\| rec\.name === 'ask_confirm'\) \{/.test(HTML), 'no answer');
   }
 
+  // ------------------------------------------------------------------ [CR]
+  console.log('\n[CR] plan mode holds changes back before anyone is asked');
+  {
+    const asked = [];
+    fakeOpenRouter((n) => (n === 1 ? call('p1', 'write', { path: 'plan.txt', content: 'x' }) : n === 2 ? call('p2', 'shell', { command: 'dir /b' }) : say('done')));
+    const ev = await drain(runAgent({ session: { id: 'cr', workdir: WD, messages: [] }, userText: 'go', apiKey: 'k', model: 'm', access: 'ask', planMode: true, askPermission: async (q) => { asked.push(q); return true; }, maxTurns: 4 }));
+    const w = ev.find((e) => e.type === 'tool_end' && e.name === 'write');
+    const d = ev.find((e) => e.type === 'tool_end' && e.name === 'shell');
+    check('a write before the plan is approved is held, not put to the user', w && /^PLAN MODE:/.test(String(w.result)) && !asked.some((q) => q.kind === 'write-file') && !fs.existsSync(path.join(WD, 'plan.txt')), { asked, w });
+    check('its row starts like any other', ev.some((e) => e.type === 'tool_start' && e.name === 'write'), 'no row');
+    check('looking around is allowed while planning', d && d.ok === true && !/PLAN MODE/.test(String(d.result)), d);
+    const HTML = read('src/renderer/index.html');
+    check('a held change reads as waiting, not failed', HTML.includes("if (rec.planHeld) return { html: 'waits for plan approval' };"), 'red failure');
+    check('what did not happen gets the plain verb', HTML.includes("'Deleted': 'Delete'") && HTML.includes('verbFor(look, first)'), 'Deleted … denied');
+    check('Always says it covers this file or command', HTML.includes("'write-file': 'Always for this file', shell: 'Always for this command'") && !HTML.includes('Always in this session'), 'reads as everything');
+    check('no arguments, no "{}" chip', HTML.includes("return t && t !== '{}' ?"), '{}');
+    const sumSrc2 = /function stepSummary\(counts, stats\)\{[\s\S]*?\n\}/.exec(HTML);
+    const stepSummary2 = new vm.Script('(' + sumSrc2[0] + ')').runInNewContext({});
+    check('checking a file is not changing one', stepSummary2({ FS: 1, ASK: 1 }, {}).head !== 'Changed 1 file', stepSummary2({ FS: 1, ASK: 1 }, {}).head);
+  }
+
   // ------------------------------------------------------------------ [CP]
   console.log('\n[CP] updates come from CodeRook, and only signed ones install');
   {

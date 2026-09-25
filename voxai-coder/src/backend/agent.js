@@ -805,6 +805,28 @@ async function* runAgent(opts) {
         continue;
       }
       yield { type: 'tool_start', id, name: tc.name, args };
+      // Before the permission prompt, not after it: in plan mode a write was put to the
+      // user ("Change a file?"), and then blocked by this check anyway. Found in a live run.
+      // PLAN MODE enforcement: block mutating tools until the plan has been
+      // explicitly approved by the user via ask_confirm (Claude/Codex plan mode).
+      if (planMode && !planApproved) {
+        // Folded surfaces carry the operation in `action`, so name alone is not
+        // enough: `fs` is only mutating for mkdir/move/remove, and `computer`
+        // drives a real browser so it counts throughout.
+        const MUTATING = ['write', 'edit', 'patch', 'shell', 'spawn_agent', 'spawn_parallel', 'worktree', 'computer'];
+        const MUTATING_ACTIONS = { fs: ['mkdir', 'move', 'remove'], mcp: ['call'] };
+        const act = args && (args.action || args.op);
+        // Looking is what planning is for: `dir` or `git status` changes nothing.
+        const readOnlyShell = tc.name === 'shell' && isReadOnlyCommand(String((args && args.command) || ''));
+        const isMutating = (MUTATING.includes(tc.name) && !readOnlyShell)
+          || (MUTATING_ACTIONS[tc.name] || []).includes(String(act));
+        if (isMutating) {
+          const msg = `PLAN MODE: ${tc.name} is blocked until you present a plan and get user approval. Call ask_confirm (e.g. "Here is my plan: … Proceed?") and only continue mutating once confirmed. Do NOT retry this call directly.`;
+          session.messages.push({ role: 'tool', tool_call_id: id, content: msg });
+          yield { type: 'tool_end', id, name: tc.name, ok: false, result: msg };
+          continue;
+        }
+      }
       // sandbox policy: deny tools outside the access level; tools that need a
       // permission decision (ALWAYS_PROMPT / lower-level) go through askPermission
       // instead of hard-erroring, and a denial tells the model NOT to retry.
@@ -834,24 +856,6 @@ async function* runAgent(opts) {
         if (tc.name === 'shell') {
           const sh = args.command ? checkShellCommand(args.command) : { blocked: false };
           if (sh.blocked) throw new Error('sandbox: dangerous shell command blocked');
-        }
-        // PLAN MODE enforcement: block mutating tools until the plan has been
-        // explicitly approved by the user via ask_confirm (Claude/Codex plan mode).
-        if (planMode && !planApproved) {
-          // Folded surfaces carry the operation in `action`, so name alone is not
-          // enough: `fs` is only mutating for mkdir/move/remove, and `computer`
-          // drives a real browser so it counts throughout.
-          const MUTATING = ['write', 'edit', 'patch', 'shell', 'spawn_agent', 'spawn_parallel', 'worktree', 'computer'];
-          const MUTATING_ACTIONS = { fs: ['mkdir', 'move', 'remove'], mcp: ['call'] };
-          const act = args && (args.action || args.op);
-          const isMutating = MUTATING.includes(tc.name)
-            || (MUTATING_ACTIONS[tc.name] || []).includes(String(act));
-          if (isMutating) {
-            const msg = `PLAN MODE: ${tc.name} is blocked until you present a plan and get user approval. Call ask_confirm (e.g. "Here is my plan: … Proceed?") and only continue mutating once confirmed. Do NOT retry this call directly.`;
-            session.messages.push({ role: 'tool', tool_call_id: id, content: msg });
-            yield { type: 'tool_end', id, name: tc.name, ok: false, result: msg };
-            continue;
-          }
         }
         // Run the tool and pump its events out while it is still running.
         let toolSettled = false;
