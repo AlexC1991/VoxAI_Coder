@@ -2,7 +2,7 @@
  * Preload — VoxAI standalone backend edition.
  * Renderer gets ONLY this API (contextIsolation + sandbox).
  */
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 // Only the app's own page gets the bridge. If anything ever loads another page into
 // this view (a link once did), that page gets nothing: the bridge can run the agent,
@@ -97,6 +97,7 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
   sessionsShowExport: (id) => ipcRenderer.invoke('sessions:showExport', id),
   memoryList: (workdir) => ipcRenderer.invoke('memory:list', { workdir }),
   memoryDelete: (workdir, query) => ipcRenderer.invoke('memory:delete', { workdir, query }),
+  memoryForget: (workdir, exact, index) => ipcRenderer.invoke('memory:delete', { workdir, exact, index }),
   onAgentEvent: (cb) => {
     const fn = (_e, msg) => cb(msg);
     ipcRenderer.on('agent:event', fn);
@@ -123,6 +124,8 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
   workspaceDiff: (workdir) => ipcRenderer.invoke('workspace:diff', { workdir }),
   openDir: () => ipcRenderer.invoke('dialog:openDir'),
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
+  // A dropped or pasted file's path on disk, so it can go into the message.
+  pathForFile: (file) => { try { return (webUtils && webUtils.getPathForFile(file)) || ''; } catch { return ''; } },
   onMenu: (cb) => {
     const fn = (_e, ch) => cb(ch);
     ipcRenderer.on('vox:menu', fn);

@@ -801,6 +801,25 @@ async function drain(gen) {
       check('no key: said first, no session made, not as the model', /let v = actView\(\);\s*\/\/[^\n]*\n[^\n]*\n\s*if \(\$\('prompt'\)\.value\.trim\(\) && !S\.hasOpenRouterKey\) \{\s*openModal\('account'\);\s*toast\(/.test(H) && !H.includes("addMsg('Set your OpenRouter API key"), 'as a reply');
       check('narrow, the Plan label really hides so Send stays in the box', H.includes('.composer-row .plan-sw{font-size:0;gap:0}') && H.includes('.composer-row .chip .cv{display:none}'), 'overridden');
     }
+    // 0.2.37: the Memory page back, Esc to stop, a Content-Security-Policy, Copy on code
+    // blocks, and the keyboard: shortcuts, paste from anywhere, file paths.
+    {
+      const H = read('src/renderer/index.html'), M = read('src/main/main.js'), P = read('src/preload/preload.js');
+      check('Settings has a Memory page for the open project', H.includes('<section class="set-page" data-set="memory" hidden>') && H.includes('function memoryDir(){ return viewDir(actView())') && H.includes("if (key === 'memory') {"), 'missing');
+      check('Forget removes exactly that fact', M.includes("const i = Number.isInteger(index) && facts[index] && facts[index].text === exact ? index : facts.findIndex((f) => f.text === exact);") && P.includes("memoryForget: (workdir, exact, index) => ipcRenderer.invoke('memory:delete', { workdir, exact, index })"), 'by prefix');
+      check('Esc stops a running answer, unless something is open', H.includes("run: () => { const v = actView(); if (!v || !v.busy || overlayOpen()) return false; stopCurrent(); toast('Stopped.'); return true; } }"), 'nothing');
+      check('the Keyboard page is drawn from the same table', H.includes('for (const s of SHORTCUTS) {') && H.includes('<section class="set-page" data-set="keys" hidden>'), 'separate list');
+      check('paste works from anywhere in the window', H.includes("document.addEventListener('paste', (e) => {\n  if (e.defaultPrevented || isField(e.target) || overlayOpen()) return;"), 'box only');
+      check('a dropped or pasted file goes in as its path', P.includes('pathForFile: (file) =>') && P.includes('webUtils.getPathForFile(file)'), 'dropped');
+      check('code blocks get a Copy button', H.includes("if (typeof addCodeCopy === 'function') addCodeCopy(m);") && H.includes("if (typeof addCodeCopy === 'function') addCodeCopy(v.curStream);"), 'none');
+      // The policy: only the page's own scripts run.
+      const CSP = require(path.join(ROOT, 'scripts/csp.js'));
+      const meta = /<meta http-equiv="Content-Security-Policy" content="([^"]*)">/.exec(H);
+      check('the page has a Content-Security-Policy, and it is current', meta && meta[1] === CSP.policyFor(H), meta && meta[1].slice(0, 60));
+      check('it allows no inline script but the page\'s own', meta && /script-src 'self' 'sha256-[A-Za-z0-9+/=]+'(;|$)/.test(meta[1]) && !/script-src[^;]*unsafe-inline/.test(meta[1]) && /default-src 'none'/.test(meta[1]), meta && meta[1]);
+      const PKG = JSON.parse(read('package.json'));
+      check('the policy is rewritten before start, test and a build', [PKG.scripts.prestart, PKG.scripts.pretest, PKG.scripts.predist].every((s) => /node scripts\/csp\.js/.test(s || '')), PKG.scripts);
+    }
     // Closing the preview and opening it again showed a blank page and "The model
     // hasn't shown anything yet", after two pages had been shown.
     {
@@ -989,7 +1008,7 @@ async function drain(gen) {
       const H = read('src/renderer/index.html');
       check('a dropped image is attached', H.includes("document.addEventListener('drop', (e) => {") && H.includes('addImageFiles(e.dataTransfer.files);'), 'nothing');
       check('a pasted image is attached, text pastes as usual', H.includes("$('prompt').addEventListener('paste', (e) => {") && H.includes("if (!files.some((f) => /^image\\//i.test(f.type || ''))) return;"), 'nothing');
-      check('a file that is not an image is explained', H.includes("toast(skipped === all.length && skipped === 1 ? 'Only images can be attached."), 'silent');
+      check('a file that is not an image goes in as its path', H.includes('window.voxai.pathForFile(f)') && H.includes("ta.value = (ta.value && !/\\s$/.test(ta.value) ? ta.value + ' ' : ta.value) + paths.map(q).join(' ');"), 'dropped');
       check('"Keys saved" only when a key was typed', H.includes("flashSettingsSaved(('openrouterKey' in patch || 'managementKey' in patch) ? 'Keys saved' : 'Saved');"), 'always');
     }
     // Text that is not ours is text, not HTML: a queued message with an onerror
@@ -1179,7 +1198,7 @@ async function drain(gen) {
       check('nothing downloaded is not an error', U.clearInstalledDownload('0.2.3', () => {}, LA) === false, 'threw');
     }
     // Every build used to leave its ~110 MB installers behind in release/.
-    check('each build clears the last one first', PKG.scripts.predist === 'node scripts/clean-release.js', PKG.scripts);
+    check('each build clears the last one first', /(^|&& )node scripts\/clean-release\.js$/.test(PKG.scripts.predist || ''), PKG.scripts);
     {
       const OUTD = path.join(WD, 'release-out');
       fs.mkdirSync(path.join(OUTD, 'win-unpacked'), { recursive: true });

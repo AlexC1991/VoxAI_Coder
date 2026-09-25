@@ -889,9 +889,18 @@ app.whenReady().then(() => {
     const facts = await mem.loadMemory(workdir || os.homedir());
     return { ok: true, facts };
   });
-  ipcMain.handle('memory:delete', async (_e, { workdir, query }) => {
+  ipcMain.handle('memory:delete', async (_e, { workdir, query, exact, index }) => {
     const mem = require('../backend/tools/memory');
     const facts = await mem.loadMemory(workdir || os.homedir());
+    // The Memory page removes one fact: the one at `index`, if it is still that text.
+    // Matching the first 40 characters removed every fact that began the same way.
+    if (typeof exact === 'string') {
+      const i = Number.isInteger(index) && facts[index] && facts[index].text === exact ? index : facts.findIndex((f) => f.text === exact);
+      if (i === -1) return { ok: false, error: 'That fact is no longer there.' };
+      facts.splice(i, 1);
+      await mem.saveMemory(workdir || os.homedir(), facts);
+      return { ok: true, removed: 1 };
+    }
     const q = String(query || '').toLowerCase();
     if (!q) return { ok: false, error: 'query required' };
     const kept = facts.filter((f) => !f.text.toLowerCase().includes(q));

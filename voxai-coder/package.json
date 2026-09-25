@@ -1,6 +1,6 @@
 {
   "name": "voxai-coder",
-  "version": "0.2.36",
+  "version": "0.2.37",
   "description": "VoxAI Coder — Forge-style desktop coding agent. Own Node agent loop, OpenRouter models, no external agent binary.",
   "main": "src/main/main.js",
   "scripts": {
@@ -8,11 +8,14 @@
     "dev": "electron . --dev",
     "test": "node test/regression-protocol.js && node test/regression-tools.js && node test/regression-renderer.js && node test/regression-sessions.js && node test/regression-refit.js",
     "pack": "electron-builder --dir",
-    "predist": "node scripts/clean-release.js",
+    "predist": "node scripts/csp.js && node scripts/clean-release.js",
     "dist": "electron-builder --publish never",
     "icon": "electron scripts/make-icon.js",
     "release-key": "node scripts/release-key.js",
-    "release": "node scripts/release.js"
+    "release": "node scripts/release.js",
+    "prestart": "node scripts/csp.js",
+    "predev": "node scripts/csp.js",
+    "pretest": "node scripts/csp.js"
   },
   "author": "VoxAI",
   "license": "MIT",
