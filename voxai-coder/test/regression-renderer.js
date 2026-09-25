@@ -54,6 +54,8 @@ if (fnSrc) {
   const J = (o) => JSON.stringify(o);
 
   check('file read reports line count', sum('read', J({ path: 'a', lines: 312 }), true) === '312 lines', sum('read', J({ lines: 312 }), true));
+  check('one file is "1 file"', sum('glob', J({ files: ['greeting.txt'] }), true) === '1 file' && sum('glob', J({ files: ['a', 'b'] }), true) === '2 files', sum('glob', J({ files: ['greeting.txt'] }), true));
+  check('one byte is "1 byte"', sum('write', J({ bytes: 1 }), true) === '1 byte', sum('write', J({ bytes: 1 }), true));
   check('one line is "1 line"', sum('read', J({ path: 'a', lines: 1 }), true) === '1 line', sum('read', J({ path: 'a', lines: 1 }), true));
   check('truncated read says so', /truncated/.test(sum('read', J({ lines: 4000, truncated: true }), true)), sum('read', J({ lines: 4000, truncated: true }), true));
   check('edit reports a replacement', sum('edit', J({ replaced: 24, match: 'exact' }), true) === 'replaced', sum('edit', J({ replaced: 24, match: 'exact' }), true));

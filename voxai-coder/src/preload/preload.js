@@ -4,7 +4,14 @@
  */
 const { contextBridge, ipcRenderer } = require('electron');
 
-contextBridge.exposeInMainWorld('voxai', {
+// Only the app's own page gets the bridge. If anything ever loads another page into
+// this view (a link once did), that page gets nothing: the bridge can run the agent,
+// change settings and answer its own permission prompts.
+const IS_APP_PAGE = (() => {
+  try { return location.protocol === 'file:' && /\/renderer\/index\.html$/i.test(decodeURIComponent(location.pathname)); } catch { return false; }
+})();
+
+if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
   // Updates from CodeRook: where it stands, check now, restart into a downloaded one
   updates: {
     state: () => ipcRenderer.invoke('update:state'),
@@ -87,6 +94,7 @@ contextBridge.exposeInMainWorld('voxai', {
   agentAnswer: (inputId, answer) => ipcRenderer.invoke('agent:user-input-answer', { inputId, answer }),
   agentCompact: (sessionId) => ipcRenderer.invoke('agent:compact', { sessionId }),
   sessionsExport: (id) => ipcRenderer.invoke('sessions:export', { id }),
+  sessionsShowExport: (id) => ipcRenderer.invoke('sessions:showExport', id),
   memoryList: (workdir) => ipcRenderer.invoke('memory:list', { workdir }),
   memoryDelete: (workdir, query) => ipcRenderer.invoke('memory:delete', { workdir, query }),
   onAgentEvent: (cb) => {

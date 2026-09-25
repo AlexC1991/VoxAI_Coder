@@ -319,6 +319,27 @@ async function assertModelUsable(modelId, getModels, opts = {}) {
   }
 }
 
+/**
+ * The app's own page never leaves the app.
+ *
+ * It holds the full `window.voxai` bridge. A link in an answer -- which can come from
+ * a web page the agent read -- loaded that site IN PLACE of the app, and the site got
+ * the bridge: saveSettings, agentSend, agentPermission. Found in a live run. Web links
+ * go to the user's browser instead; nothing else is followed.
+ */
+function isAppPage(url) {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'file:' && /\/renderer\/index\.html$/i.test(decodeURIComponent(u.pathname).replace(/\\/g, '/'));
+  } catch { return false; }
+}
+function guardTrustedView(wc) {
+  const outside = (url) => { if (/^https?:\/\//i.test(String(url || ''))) { try { shell.openExternal(url); } catch {} } };
+  wc.on('will-navigate', (e, url) => { if (!isAppPage(url)) { e.preventDefault(); outside(url); } });
+  wc.on('will-redirect', (e, url) => { if (!isAppPage(url)) { e.preventDefault(); } });
+  wc.setWindowOpenHandler(({ url }) => { outside(url); return { action: 'deny' }; });
+}
+
 function attachSplitViews(w) {
   // Trusted surface: our own renderer, gets the full `window.voxai` bridge.
   const chatPrefs = {
@@ -342,6 +363,7 @@ function attachSplitViews(w) {
   w.setContentView(rootV);
 
   chatV.webContents.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+  guardTrustedView(chatV.webContents);
   browserV.webContents.loadURL('about:blank');
   // Keep the preview strip's URL honest as the page navigates (links, redirects).
   try {
@@ -581,10 +603,17 @@ app.whenReady().then(() => {
     };
     return { id: sess.id, title: sess.title, workdir: sess.workdir, model: sess.model, messages: sess.messages, todos: sess.todos, usage: sess.usage, stats: sess.stats, stops: sess.stops || [], context };
   });
+  // To the Recycle Bin, not erased: one misclick on Delete lost a whole conversation
+  // for good. If the bin refuses, nothing is deleted and the user is told why.
   ipcMain.handle('sessions:delete', async (_e, id) => {
+    const file = path.join(store.sessionsDir(userData()), `${path.basename(String(id || ''))}.jsonl`);
+    try {
+      await require('electron').shell.trashItem(file);
+    } catch (e) {
+      return { ok: false, error: 'Could not move it to the Recycle Bin: ' + String((e && e.message) || e) };
+    }
     live.delete(id);
-    await store.deleteSession(userData(), id);
-    return true;
+    return { ok: true };
   });
   ipcMain.handle('sessions:rename', async (_e, { id, title }) => {
     const t = String(title || '').trim();
@@ -838,7 +867,15 @@ app.whenReady().then(() => {
     fs.mkdirSync(dir, { recursive: true });
     const out = path.join(dir, `${sess.id}.jsonl`);
     fs.writeFileSync(out, store.exportSession(sess), 'utf8');
-    return { ok: true, path: out };
+    return { ok: true, path: out, title: sess.title || '' };
+  });
+  // "Show in folder" on the export message: the file just written, selected.
+  ipcMain.handle('sessions:showExport', async (_e, id) => {
+    const sess = await getLive(id);
+    const out = path.join((sess.workdir || os.homedir()), '.voxai', 'exports', `${sess.id}.jsonl`);
+    if (!fs.existsSync(out)) return false;
+    require('electron').shell.showItemInFolder(out);
+    return true;
   });
   // project memory viewer (facts in .voxai/memory.json)
   ipcMain.handle('memory:list', async (_e, { workdir }) => {

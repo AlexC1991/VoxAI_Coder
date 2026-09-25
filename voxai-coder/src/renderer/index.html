@@ -320,6 +320,11 @@ tests"). Scroll the row instead of breaking words:
 .cmpbtn{width:26px;height:26px;flex:none;border:0;border-radius:6px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--dim)}.cmpbtn:hover,.cmpbtn.active{background:var(--sel);color:var(--ink)}.vdiv{width:1px;height:16px;background:var(--edge)}.cmpbtn.rec{color:var(--del);border-color:var(--del);animation:pulse 1s infinite}
 .usage-summary{display:flex;gap:10px;flex-wrap:wrap}.us-box{flex:1;min-width:110px;border:1px solid var(--edge2);border-radius:8px;padding:10px 12px;background:var(--panel2)}.us-k{font-size:11px;letter-spacing:.14em;color:var(--faint);font-weight:700}.us-v{font-size:19px;font-family:"Sometype Mono",monospace;color:var(--gold);margin-top:4px}.ug-row{display:flex;align-items:center;gap:10px;border:1px solid var(--edge);border-radius:8px;padding:8px 11px;margin-bottom:7px;background:var(--panel)}.ug-row .m{font-weight:700;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.ug-row .tk{font-family:"Sometype Mono",monospace;font-size:12px;color:var(--dim);white-space:nowrap}.ug-row .cost{margin-left:auto;font-family:"Sometype Mono",monospace;font-size:13px;color:var(--add);white-space:nowrap}.ug-row .t{font-family:"Sometype Mono",monospace;font-size:11.5px;color:var(--faint);white-space:nowrap}.usage-hint{font-size:12.5px;color:var(--faint);line-height:1.6}
 .md table{border-collapse:collapse;width:100%;margin:.6em 0;font-size:13.5px}.md table th,.md table td{border:1px solid var(--edge2);padding:6px 9px;text-align:left;vertical-align:top}.md table thead th{background:var(--panel2);color:var(--gold);font-weight:700;font-family:"Sometype Mono",monospace;font-size:12px;letter-spacing:.05em}.md table tbody tr:nth-child(even){background:var(--panel)}.md blockquote{margin:.6em 0;padding:2px 0 2px 13px;border-left:3px solid var(--goldedge);color:var(--mut);font-style:italic}
+.toast{position:fixed;left:50%;top:calc(env(safe-area-inset-top, 0px) + 92px);transform:translateX(-50%);z-index:120;display:flex;align-items:center;gap:12px;max-width:min(560px,calc(100vw - 32px));background:var(--panel2);border:1px solid var(--edge2);border-radius:9px;padding:9px 12px 9px 15px;box-shadow:0 10px 34px rgba(0,0,0,.45);font-size:13px;color:var(--ink)}
+.toast[hidden]{display:none}
+.toast-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.toast-a{flex:none;border:1px solid var(--goldedge);background:transparent;color:var(--gold);cursor:pointer;padding:4px 10px;border-radius:6px;font:inherit;font-size:12.5px}
+.toast-a:hover{background:rgba(200,169,97,.08)}
 #sessMenu button{display:flex;width:100%;border:0;background:transparent;color:var(--mut);cursor:pointer;padding:7px 10px;text-align:left;font-size:13px;border-radius:5px;font-family:inherit}#sessMenu button:hover{background:var(--sel);color:var(--ink)}#sessMenu button[data-act="delete"]:hover{color:var(--del)}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 .md{animation:fadeIn .3s ease}
@@ -2040,7 +2045,7 @@ function cmdFor(name, args){
   if (name==='rag') return (args.path || '') + (args.query ? ' :: ' + args.query : '');
   if (name==='web_fetch') return args.url || 'fetch';
   if (name==='web_search') return String(args.query || '') + (Array.isArray(args.include_domains) && args.include_domains.length ? ' · ' + args.include_domains.join(', ') : '');
-  if (name==='lsp') return (Array.isArray(args.paths) ? args.paths.length + ' files' : 'project');
+  if (name==='lsp') return (Array.isArray(args.paths) ? args.paths.length + (args.paths.length === 1 ? ' file' : ' files') : 'project');
   if (name==='worktree') return args.action + (args.name ? ' ' + args.name : '');
   if (name==='snapshot') return args.action || '';
   if (name==='node_repl') { const s = String(args.code || '').replace(/\s+/g,' '); return s.length > 70 ? s.slice(0,67) + '…' : s; }
@@ -2133,13 +2138,13 @@ function summariseResult(name, raw, ok){
     }
     if (o.replaced !== undefined) return 'replaced' + (o.match && o.match !== 'exact' ? ' (' + o.match + ')' : '');
     if (o.edits !== undefined) return o.edits + (o.edits === 1 ? ' edit' : ' edits');
-    if (o.bytes !== undefined) return n(o.bytes) + ' bytes';
+    if (o.bytes !== undefined) return n(o.bytes) + (Number(o.bytes) === 1 ? ' byte' : ' bytes');
     if (Array.isArray(o.results) && o.query !== undefined) {
       const c = o.results.length;
       return (c ? c + (c === 1 ? ' result' : ' results') : 'no results') + (Number(o.cost_usd) > 0 ? ' · $' + Number(o.cost_usd).toFixed(4) : '');
     }
     if (Array.isArray(o.hits)) return o.hits.length + (o.hits.length === 1 ? ' match' : ' matches');
-    if (Array.isArray(o.files)) return (o.total !== undefined ? n(o.total) : o.files.length) + ' files';
+    if (Array.isArray(o.files)) { const fc = o.total !== undefined ? Number(o.total) : o.files.length; return n(fc) + (fc === 1 ? ' file' : ' files'); }
     // A fan-out reports per-task outcomes, not a single file list — and a read-only
     // fan-out changes nothing, so "0 files changed" was both true and useless.
     if (o.execution_summary || o.total_tasks !== undefined) {
@@ -3040,6 +3045,17 @@ function paintPlanTray(){
 }
 $('planHead').onclick = (e) => { e.stopPropagation(); const v = actView(); if (!v) return; v.planOpen = !v.planOpen; paintPlanTray(); };
 // The drawer tucks away on a click elsewhere or Esc, like the menus.
+// A link never navigates this page. Clicking one in an answer loaded the site IN
+// PLACE of the app (with the app's bridge). Web links open in the user's browser;
+// anything else -- javascript:, file:, a custom scheme -- does nothing.
+document.addEventListener('click', (e) => {
+  const a = e.target && e.target.closest && e.target.closest('a[href]');
+  if (!a) return;
+  const href = a.getAttribute('href') || '';
+  if (href.startsWith('#')) return;
+  e.preventDefault();
+  if (/^https?:\/\//i.test(href) && window.voxai && window.voxai.openExternal) { try { window.voxai.openExternal(href); } catch {} }
+}, true);
 document.addEventListener('click', (e) => {
   const v = actView();
   if (v && v.planOpen && !(e.target.closest && e.target.closest('#planTab'))) { v.planOpen = false; paintPlanTray(); }
@@ -4936,8 +4952,9 @@ async function handleSessMenuAct(act){
     if (act === 'open') { openSession(s.id); return; }
     if (act === 'reveal') { await window.voxai.sessionsReveal(s.id); return; }
     if (act === 'delete') {
-      if (!confirm('Delete session "' + (s.title || '') + '"?')) return;
-      await window.voxai.sessionsDelete(s.id);
+      if (!confirm('Move session "' + (s.title || '') + '" to the Recycle Bin?')) return;
+      const r = await window.voxai.sessionsDelete(s.id);
+      if (r && r.ok === false) { alert(r.error || 'Could not delete the session.'); return; }
       viewStore.delete(s.id);
       if (activeId === s.id) {
         activeId = null; const th = $('thread'); if (th) th.innerHTML = '';
@@ -4949,7 +4966,7 @@ async function handleSessMenuAct(act){
       refreshSessionList();
       return;
     }
-    if (act === 'export') { exportActiveSession(); return; }
+    if (act === 'export') { await exportSession(s.id); return; }
     if (act === 'rename') {
       // In place, in the sidebar row. This used prompt(), which Electron does not
       // implement, so Rename silently did nothing.
@@ -5296,9 +5313,28 @@ function renderMemory(){
 })();
 
 // ---- session export (in the session context menu) ----
-function exportActiveSession(){
-  if (!activeId) return;
-  try { window.voxai.sessionsExport(activeId).then((r) => { if (r && r.ok) setStatus('Exported to ' + relPath(r.path || '', viewDir(actView()))); }); } catch(e){}
+/**
+ * A short message at the foot of the window, with at most one action. For things done
+ * outside the conversation (an export), which have nowhere else to say they happened.
+ */
+function toast(text, action){
+  let t = $('toast');
+  if (!t) { t = el('div', 'toast'); t.id = 'toast'; t.setAttribute('role', 'status'); document.body.appendChild(t); }
+  t.innerHTML = '';
+  t.appendChild(el('span', 'toast-t', esc(text)));
+  if (action) { const b = el('button', 'toast-a', esc(action.label)); b.type = 'button'; b.onclick = () => { try { action.onClick(); } catch {} hide(); }; t.appendChild(b); }
+  const hide = () => { t.hidden = true; };
+  t.hidden = false;
+  clearTimeout(t._timer); t._timer = setTimeout(hide, 7000);
+}
+// The session that was right-clicked, not the one that happens to be open: Export on
+// another session's menu wrote out the open one. And it said so only in a status
+// line that is hidden when nothing runs. Found in a live run.
+async function exportSession(id){
+  if (!id) return;
+  const r = await window.voxai.sessionsExport(id);
+  if (!r || !r.ok) { toast('Export failed' + (r && r.error ? ': ' + r.error : '.')); return; }
+  toast('Exported “' + (r.title || 'session').slice(0, 60) + '” as JSONL', { label: 'Show in folder', onClick: () => window.voxai.sessionsShowExport(id) });
 }
 
 // boot

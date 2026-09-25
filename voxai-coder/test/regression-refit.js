@@ -663,6 +663,36 @@ async function drain(gen) {
       check('and stays on it without re-attaching', sent.slice(before).filter((m) => m === 'Page.enable').length === 0, sent.slice(before));
       cdp.cleanup();
     }
+    // A link in an answer loaded the site IN PLACE of the app, and the site got the
+    // full bridge (agentSend, saveSettings, agentPermission).
+    {
+      const PRE = read('src/preload/preload.js');
+      const exposedOn = (href) => {
+        let exposed = false;
+        const u = new URL(href);
+        new vm.Script(PRE).runInNewContext({
+          require: () => ({ contextBridge: { exposeInMainWorld: () => { exposed = true; } }, ipcRenderer: { invoke() {}, on() {}, send() {}, removeListener() {} } }),
+          location: { protocol: u.protocol, pathname: u.pathname }, URL, decodeURIComponent,
+        });
+        return exposed;
+      };
+      check('the app page gets the bridge', exposedOn('file:///C:/Users/me/AppData/Local/Programs/voxai-coder/resources/app.asar/src/renderer/index.html'), 'not exposed');
+      check('a web page never does', !exposedOn('https://example.com/') && !exposedOn('file:///C:/Users/me/evil.html') && !exposedOn('https://x.test/renderer/index.html'), 'exposed');
+      const M = read('src/main/main.js');
+      check('the app page cannot navigate away; web links open in the browser', M.includes('guardTrustedView(chatV.webContents);') && M.includes("wc.on('will-navigate', (e, url) => { if (!isAppPage(url)) { e.preventDefault(); outside(url); } });") && M.includes("return { action: 'deny' };"), 'navigates');
+      const H = read('src/renderer/index.html');
+      check('a clicked link never navigates the page', H.includes("const a = e.target && e.target.closest && e.target.closest('a[href]');") && H.includes("if (/^https?:\\/\\//i.test(href) && window.voxai && window.voxai.openExternal)"), 'navigates');
+    }
+    // The session menu: Export wrote out the OPEN session, not the one right-clicked,
+    // and said so nowhere visible; Delete erased the file for good.
+    {
+      const H = read('src/renderer/index.html'), M = read('src/main/main.js');
+      check('Export exports the session that was right-clicked', H.includes("if (act === 'export') { await exportSession(s.id); return; }") && !H.includes('exportActiveSession'), 'the open one');
+      check('and says so, with a way to find the file', H.includes("toast('Exported “'") && H.includes("label: 'Show in folder', onClick: () => window.voxai.sessionsShowExport(id)") && M.includes("require('electron').shell.showItemInFolder(out);"), 'silent');
+      check('the message can hide', H.includes('.toast[hidden]{display:none}'), 'always shown');
+      check('Delete goes to the Recycle Bin', M.includes("await require('electron').shell.trashItem(file);") && !/sessions:delete[\s\S]{0,200}store\.deleteSession/.test(M), 'erased');
+      check('and a failed move deletes nothing and says why', H.includes("if (r && r.ok === false) { alert(r.error || 'Could not delete the session.'); return; }") && H.includes('to the Recycle Bin?'), 'silent');
+    }
     // A one-line file read as "2 lines": the newline that ends a line does not start one.
     {
       const { buildTools } = require(path.join(ROOT, 'src/backend/tools/index.js'));
