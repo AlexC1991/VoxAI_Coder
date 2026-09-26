@@ -276,8 +276,8 @@ function Ps-Scroll { param([int]$X, [int]$Y, [int]$ScrollD)
   [CU32]::mouse_event(0x0800, 0, 0, [uint32]$ScrollD, [UIntPtr]::Zero); Emit @{ ok = $true; x = $X; y = $Y; delta = $ScrollD }
 }
 function Ps-Launch { param([string]$FilePath, [string]$WinArgs)
-  if ($WinArgs) { Start-Process -FilePath $FilePath -ArgumentList $WinArgs } else { Start-Process -FilePath $FilePath }
-  Emit @{ ok = $true; path = $FilePath; args = $WinArgs }
+  if ($WinArgs) { $p = Start-Process -FilePath $FilePath -ArgumentList $WinArgs -PassThru } else { $p = Start-Process -FilePath $FilePath -PassThru }
+  Emit @{ ok = $true; path = $FilePath; args = $WinArgs; pid = $(if ($p) { $p.Id } else { 0 }) }
 }
 
 $op = $args[0]; $prm = @{}

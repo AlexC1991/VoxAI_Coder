@@ -20,6 +20,7 @@ const os = require('os');
 const { runAgent, pendingAsk, answerPendingAsk } = require('../backend/agent');
 const { chatOnce, normalizeReasoning } = require('../backend/providers/openrouter');
 const store = require('../backend/sessions');
+const goalLib = require('../backend/goal');
 const { compactSession, estimateSessionTokens } = require('../backend/compact');
 
 const isDev = process.argv.includes('--dev');
@@ -101,6 +102,10 @@ function getSettings(redacted = true) {
     hardFraction: raw.hardFraction || process.env.VOX_HARD_LIMIT_FRACTION || '0.9',
     // Hard spend ceiling per run, in USD. Sub-agents draw from the same allowance.
     runBudgetUsd: raw.runBudgetUsd || process.env.VOX_RUN_BUDGET_USD || '1.00',
+    // A goal's runs together, in USD (see goalStep). A run that hits its own limit is followed by the next.
+    goalBudgetUsd: raw.goalBudgetUsd || '5.00',
+    // Looks at screenshots for a model that cannot, and says what it sees. '' = off.
+    visionHelperModel: typeof raw.visionHelperModel === 'string' ? raw.visionHelperModel : 'deepseek/deepseek-v4.1-flash',
     // Per-project: has the user said "always show previews here"? Claude Code saves
     // the equivalent choice into .claude/launch.json; this is the same idea, kept in
     // settings so it survives without writing into the user's repo.
@@ -895,7 +900,7 @@ app.whenReady().then(() => {
     return ids.sort((a, b) => (waiting.has(b) ? 1 : 0) - (waiting.has(a) ? 1 : 0));
   });
 
-  async function launchRun({ sessionId, text, attachments, resume = false }) {
+  async function launchRun({ sessionId, text, attachments, resume = false, goalContinue = false }) {
     const s = getSettings(false);
     if (!s.openrouterKey) throw new Error('No OpenRouter API key — open Settings and paste one.');
     const sess = await getLive(sessionId);
@@ -905,28 +910,31 @@ app.whenReady().then(() => {
       images: (attachments || []).filter((a) => a && (a.type === 'image_url' || a.dataUrl)).length,
     });
     if (!resume && sess.title === 'New session') sess.title = text.slice(0, 60);
+    // A message from you while a goal is paused picks it back up ("continue" works).
+    if (!goalContinue && sess.goal && sess.goal.status === 'active') { sess.goal.paused = false; sess.goal.pausedReason = ''; sess.goal.idle = 0; }
+    let runEnd = 'error', runTools = 0, runCost = 0;   // for the goal loop (goalStep)
 
     const runKey = `${sessionId}:${Date.now()}`;
     const ctl = new AbortController();
     controllers.set(runKey, ctl);
     const w = win();
 
-    const askPermission = ({ kind, target, note, alwaysKey, alwaysLabel }) => new Promise((resolve) => {
+    const askPermission = ({ kind, target, note, alwaysKey, alwaysLabel, noAlways }) => new Promise((resolve) => {
       // whole-session allow (prototype "allow for the whole session"): remember
       // this exact target so future identical requests auto-allow without prompting.
       // An action on a website is remembered by its site (alwaysKey), not word for word.
       const key = kind + '\u0000' + String(alwaysKey || target || '');
       // 'always': allowed without a prompt (truthy, like yes). The desktop's mouse check needs to know
       // nobody just moved the mouse to answer one.
-      if (sessionAlwaysAllow.get(sessionId) && sessionAlwaysAllow.get(sessionId).has(key)) { resolve('always'); return; }
+      if (!noAlways && sessionAlwaysAllow.get(sessionId) && sessionAlwaysAllow.get(sessionId).has(key)) { resolve('always'); return; }
       const permId = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
       // It waits until you answer or the run ends (see the finally below). It used to
       // count as "no" after two minutes, so stepping away turned approvals into refusals.
-      const msg = { permId, sessionId, kind, target, canAlways: true, note: note || '', ...(alwaysLabel ? { alwaysLabel } : {}) };
+      const msg = { permId, sessionId, kind, target, canAlways: !noAlways, note: note || '', ...(alwaysLabel ? { alwaysLabel } : {}) };
       pendingPerms.set(permId, {
         msg, runKey,
         resolve: (v, always) => {
-          if (v && always) {
+          if (v && always && !noAlways) {
             if (!sessionAlwaysAllow.has(sessionId)) sessionAlwaysAllow.set(sessionId, new Set());
             sessionAlwaysAllow.get(sessionId).add(key);
           }
@@ -965,6 +973,7 @@ app.whenReady().then(() => {
           priceOut: modelPrice(sess.model || s.openrouterModel).out,
           // Whether screenshots are handed over as images or described as unseen.
           modelVision: modelVision(sess.model || s.openrouterModel),
+          visionHelper: s.visionHelperModel || '',
           // Which thinking levels this model takes, so the chip's choice means something.
           reasoningSpec: modelReasoning(sess.model || s.openrouterModel),
           subagentModel: s.subagentModel, subagentMaxTurns: s.subagentMaxTurns, subagentTimeoutMs: s.subagentTimeoutMs, mcpServers: readSettingsFile().mcpServers || {},
@@ -993,7 +1002,8 @@ app.whenReady().then(() => {
             scheduleSessionSave(sessionId);
           }
           if (ev.type === 'desktop_control') armDesktopEsc(runKey, ctl, ev.phase);
-          if (ev.type === 'done' || ev.type === 'error' || ev.type === 'cancelled' || ev.type === 'limit_reached' || ev.type === 'budget_reached') break;
+          if (ev.type === 'tool_start') runTools++;
+          if (ev.type === 'done' || ev.type === 'error' || ev.type === 'cancelled' || ev.type === 'limit_reached' || ev.type === 'budget_reached') { runEnd = ev.type; break; }
         }
       } catch (err) {
         const c1 = chatWebContents(); c1 && c1.send('agent:event', { sessionId, runKey, event: { type: 'error', message: err.message } });
@@ -1011,14 +1021,82 @@ app.whenReady().then(() => {
         // then clear the run-scoped accumulator so the next run starts fresh.
         try {
           const ru = sess._runUsage;
+          runCost = (ru && Number(ru.cost)) || 0;
           if (ru && (ru.input || ru.output || ru.cost)) store.recordUsage(sess, ru);
           delete sess._runUsage;
         } catch { /* ledger write is best-effort */ }
         try { await store.saveSession(userData(), sess); } catch { /* disk full? surface next time */ }
+        if (sess.goal && sess.goal.status === 'active' && !store.isDeleted(sess)) goalStep(sessionId, runEnd, { tools: runTools, cost: runCost }).catch(() => {});
       }
     })();
     return { runKey };
   }
+
+  // ---- /goal: keep going until a separate check says the goal is met (goal.js) ----
+  const goalChecks = new Map();   // sessionId -> AbortController of a check in progress
+  const goalView = (g) => (g ? { condition: g.condition, status: g.status, paused: !!g.paused, pausedReason: g.pausedReason || '',
+    runs: g.runs, spent: g.spent, last: g.checks && g.checks.length ? g.checks[g.checks.length - 1] : null } : null);
+  const goalEvent = (sessionId, g, event) => {
+    const c = chatWebContents();
+    c && c.send('agent:event', { sessionId, runKey: 'goal', event: { type: 'goal', ...event, goal: goalView(g) } });
+  };
+  async function goalStep(sessionId, end, run) {
+    const sess = live.get(sessionId);
+    const g = sess && sess.goal;
+    if (!g || g.status !== 'active' || store.isDeleted(sess)) return;
+    const s = getSettings(false);
+    let step = goalLib.afterRun(g, end, run, Number(s.goalBudgetUsd) > 0 ? Number(s.goalBudgetUsd) : 5);
+    let reason = '';
+    if (step.next === 'check') {
+      goalEvent(sessionId, g, { phase: 'checking' });
+      const ctl = new AbortController();
+      goalChecks.set(sessionId, ctl);
+      const check = await goalLib.evaluateGoal({ apiKey: s.openrouterKey, host: s.openrouterHost,
+        model: sess.model || s.openrouterModel, goal: g, messages: sess.messages, signal: ctl.signal });
+      goalChecks.delete(sessionId);
+      if (check.cost > 0) { try { store.recordUsage(sess, { cost: check.cost }); } catch {} }
+      reason = check.reason;
+      step = (g.paused || sess.goal !== g || g.status !== 'active') ? { next: 'pause', reason: 'you stopped it' } : goalLib.applyCheck(g, check);
+    }
+    if (step.next === 'pause') { g.paused = true; g.pausedReason = step.reason; goalEvent(sessionId, g, { phase: 'paused', reason: step.reason }); }
+    else if (step.next === 'end') goalEvent(sessionId, g, { phase: g.status, reason });
+    try { await store.saveSession(userData(), sess); } catch {}
+    if (step.next !== 'continue') return;
+    // You sent something meanwhile (a queued message): that run is the next step; its end is checked in turn.
+    if ([...controllers.keys()].some((k) => k.startsWith(sessionId + ':'))) return;
+    try {
+      const r = await launchRun({ sessionId, text: step.message, goalContinue: true });
+      goalEvent(sessionId, g, { phase: 'continue', reason, limit: !reason, runKey: r.runKey });
+    } catch (e) {
+      g.paused = true; g.pausedReason = String((e && e.message) || e).slice(0, 200);
+      goalEvent(sessionId, g, { phase: 'paused', reason: g.pausedReason });
+      try { await store.saveSession(userData(), sess); } catch {}
+    }
+  }
+  ipcMain.handle('goal:get', async (_e, sessionId) => goalView((await getLive(sessionId)).goal));
+  ipcMain.handle('goal:set', async (_e, { sessionId, condition }) => {
+    const sess = await getLive(sessionId);
+    const c = String(condition || '').trim();
+    if (!c) throw new Error('A goal needs a condition, like /goal all tests pass');
+    sess.goal = goalLib.newGoal(c, sess.messages.length);
+    await store.saveSession(userData(), sess);
+    return goalView(sess.goal);
+  });
+  ipcMain.handle('goal:clear', async (_e, sessionId) => {
+    const sess = await getLive(sessionId);
+    const ctl = goalChecks.get(sessionId); if (ctl) { try { ctl.abort(); } catch {} }
+    if (sess.goal && sess.goal.status === 'active') sess.goal.status = 'cleared';
+    await store.saveSession(userData(), sess);
+    return goalView(sess.goal);
+  });
+  // Stop: the run ends, and the goal waits for you instead of starting the next one.
+  ipcMain.handle('goal:pause', async (_e, sessionId) => {
+    const sess = live.get(sessionId);
+    const g = sess && sess.goal;
+    const ctl = goalChecks.get(sessionId); if (ctl) { try { ctl.abort(); } catch {} }
+    if (g && g.status === 'active' && !g.paused) { g.paused = true; g.pausedReason = 'you stopped it'; goalEvent(sessionId, g, { phase: 'paused', reason: g.pausedReason }); }
+    return goalView(g);
+  });
 
   ipcMain.handle('agent:cancel', (_e, runKey) => {
     const ctl = controllers.get(runKey);

@@ -170,7 +170,10 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
         maxTurns: Number(task.maxTurns) > 0 ? Number(task.maxTurns)
           : (Number(agentOpts.defaultSubMaxTurns) > 0 ? Number(agentOpts.defaultSubMaxTurns) : 25),
         signal: subCtl.signal,
-        askPermission: async () => true,
+        // Nobody is there to answer a worker's prompts, so they pass -- except ending
+        // processes it did not start (noAlways, see tools/kills.js): that is refused,
+        // and the refusal tells it to end its own by pid.
+        askPermission: async (q) => !(q && q.noAlways),
         userData,
         live,
         budgetUsd: budgetShare,
@@ -183,6 +186,7 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
         modelVision: (task.model || sub.model || agentOpts.defaultSubModel || agentOpts.model) === agentOpts.model
           ? (agentOpts.modelVision === undefined ? null : agentOpts.modelVision) : null,
         priceOut: agentOpts.priceOut || 0,
+        visionHelper: agentOpts.visionHelper || '',
         contextLimit: agentOpts.contextLimit,
         compactThreshold: agentOpts.compactThreshold,
         hardFraction: agentOpts.hardFraction,

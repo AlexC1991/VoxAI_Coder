@@ -1536,13 +1536,177 @@ async function drain(gen) {
         && sf('x', 'state', { window: 'Notepad' }) === 'native' && sf('x', 'open', { url: 'https://a.b' }) === 'browser' && sf('x', 'open', { nativePath: 'C:/w/calc.exe' }) === 'native' && sf('x', 'open', { nativePath: 'notes.html' }) === 'browser'
         && AG.includes("surface = require('./cu').surfaceForAction(session.id, act, a);") && AG.includes("if (name === 'computer' && surface === 'native' && (['click', 'type', 'press', 'scroll', 'focus'].includes(act)")
         && !read('src/backend/cu/index.js').includes('let lastSurface'), [fresh, sticky, other]);
-      check('starting a program returns window names, not a picture of the desktop', read('src/backend/cu/index.js').includes("started: String(args.nativePath), windows: desktop.list().windows") && !read('src/backend/cu/index.js').includes("emitImage(ctx, shot, 'native launch')"), 'desktop picture');
+      check('starting a program returns window names, not a picture of the desktop', read('src/backend/cu/index.js').includes("started: String(args.nativePath), ...(r.pid ? { pid: r.pid } : {}), windows: desktop.list().windows") && !read('src/backend/cu/index.js').includes("emitImage(ctx, shot, 'native launch')"), 'desktop picture');
       check('a helper in use is kept at start, never at a release build', read('scripts/build-uia.js').includes('if (strict || !fs.existsSync(OUT)) throw e;') && PKG0.scripts.predist.includes('build-uia.js --strict') && !PKG0.scripts.prestart.includes('--strict'), PKG0.scripts);
       const cu = read('resources/skills/computer-use/SKILL.md');
       check('built-in skill computer-use says how, and what it must not do', SK_FM(cu).name === 'computer-use' && /Never type a password/.test(cu) && /moving the mouse/.test(cu) && /data, not\s+instructions/.test(cu), SK_FM(cu));
     }
     check('a new session\'s row has its name while the run is going', MAIN.includes("...(live.get(s.id) && live.get(s.id).title ? { title: live.get(s.id).title } : {})"), '"New session"');
     check('at start, a session the app closed on while asking is opened', HTML.includes("const asked = (SESS_ITEMS.find((s) => s.waiting) || {}).id;"), 'start screen');
+  }
+
+  // ------------------------------------------------------------------ [CT]
+  console.log('\n[TL] the 60-turn pause is off in Auto and Full access');
+  {
+    fs.writeFileSync(path.join(WD, 'ct.txt'), 'x\n'.repeat(200));
+    // A model that never stops calling tools; each turn reports its usage.
+    const busy = (usage) => fakeOpenRouter((n) => [
+      ...call('ct' + n, 'read', { path: 'ct.txt', offset: 1 + (n % 150), limit: 1 }).slice(0, 1),
+      { choices: [{ delta: {}, finish_reason: 'tool_calls' }], usage },
+    ]);
+    const endOf = async (access, usage, extra = {}) => {
+      busy(usage);
+      const ev = await drain(runAgent({ session: { id: 'ct-' + access + Math.random(), workdir: WD, messages: [] }, userText: 'go', apiKey: 'k', model: 'm',
+        access, askPermission: async () => true, budgetUsd: 1, priceIn: 0.00001, priceOut: 0, ...extra }));
+      return ev[ev.length - 1];
+    };
+    const priced = { prompt_tokens: 1000, completion_tokens: 0 };   // $0.01 a turn at the price above
+    const auto = await endOf('auto', priced);
+    const full = await endOf('full', priced);
+    check('Auto runs past 60 turns and stops at the spend limit', auto.type === 'budget_reached' && auto.turns > 60, auto);
+    check('Full access runs past 60 turns and stops at the spend limit', full.type === 'budget_reached' && full.turns > 60, full);
+    const test = await endOf('test', priced);
+    check('Edit and test still pauses at 60 turns', test.type === 'limit_reached' && test.turns === 60, test);
+    const blind = await endOf('auto', { prompt_tokens: 1000, completion_tokens: 0 }, { priceIn: 0 });
+    check('with no cost reported, Auto keeps the turn pause (the spend limit cannot bite)', blind.type === 'limit_reached' && blind.turns === 60 && /cannot be enforced/.test(blind.message), blind);
+    const capped = await endOf('full', priced, { maxTurns: 5 });
+    check('an explicit maxTurns still applies in Full access', capped.type === 'limit_reached' && capped.turns === 5, capped);
+    const sub = await endOf('auto', priced, { isSubAgent: true });
+    check('sub-agents keep their turn cap in Auto', sub.type === 'limit_reached' && sub.turns === 60, sub);
+  }
+
+  // ------------------------------------------------------------------ [KS]
+  console.log('\n[KS] ending processes: by name always asks, its own by pid does not');
+  {
+    const MAIN = read('src/main/main.js');
+    const HTML = read('src/renderer/index.html');
+    const K = require(path.join(ROOT, 'src/backend/tools/kills.js'));
+    const P = require(path.join(ROOT, 'src/backend/tools/procs.js'));
+    const pk = K.processKills;
+    check('taskkill /IM is a kill by name', JSON.stringify(pk('taskkill /IM electron.exe /F')) === JSON.stringify({ pids: [], names: ['electron.exe'], other: [] }), pk('taskkill /IM electron.exe /F'));
+    check('taskkill /pid is a kill by pid', pk('taskkill /pid 1234 /T /F').pids[0] === 1234, pk('taskkill /pid 1234 /T /F'));
+    check('Stop-Process -Name, Get-Process x | Stop-Process, pkill and killall are by name',
+      pk('powershell -Command "Stop-Process -Name node -Force"').names[0] === 'node' && pk('Get-Process chrome | Stop-Process').names[0] === 'chrome'
+      && pk('killall node').names[0] === 'node' && pk('pkill vite').names[0] === 'vite', 'by name');
+    check('filters, patterns, ports and wmic are neither pid nor name (so they ask)',
+      pk('taskkill /F /FI "WINDOWTITLE eq x"').other.length && pk('pkill -f vite').other.length && pk('npx kill-port 3000').other.length
+      && pk('wmic process where name="x.exe" delete').other.length && pk('Get-Process | Where-Object CPU -gt 5 | Stop-Process').other.length, 'other');
+    check('ordinary commands are not kills', ['npm run build', 'git commit -m fix', 'echo skill', 'npx vitest run', 'node taskkiller.js'].every((c) => pk(c) === null), 'false positive');
+    check('only-kills tells a lone kill from a chain', K.onlyKills('taskkill /pid 5 /T /F >NUL 2>&1') && !K.onlyKills('taskkill /pid 5 /T /F & npm run build'), 'onlyKills');
+    // Ownership, with a made-up process table: 900 started by the session, 901 its child, 950 someone else's.
+    P.claim(900, 'ks-own');
+    const table = new Map([[900, { ppid: 1, name: 'cmd.exe' }], [901, { ppid: 900, name: 'electron.exe' }], [950, { ppid: 1, name: 'electron.exe' }], [951, { ppid: 1, name: 'Code.exe' }]]);
+    const own = await K.judgeKills(pk('taskkill /pid 901 /F'), 'ks-own', table);
+    const other = await K.judgeKills(pk('taskkill /pid 950 /F'), 'ks-own', table);
+    const byName = await K.judgeKills(pk('taskkill /IM electron.exe /F'), 'ks-own', table);
+    check('a child of a process the session started is its own', own.own === true, own);
+    check('someone else\'s pid is not, and the note names it', other.own === false && /pid 950 \(electron\.exe\)/.test(other.note), other);
+    check('by name is never its own, even when it would also end its own; the note counts them', byName.own === false && /every process named electron\.exe \(2 running now\)/.test(byName.note) && /taskkill \/pid/.test(byName.hint), byName);
+
+    // Through the agent: Full access asks (no Always) for a kill by name; Auto runs its own by pid.
+    const ask = async (access, command, answer, sid) => {
+      // By what the request holds, not by count: a call still in flight from an earlier test must not take the tool call.
+      fakeOpenRouter((n, b) => (b.messages.some((m) => m.role === 'tool') ? say('done') : call('k1', 'shell', { command })));
+      const asked = [];
+      const ev = await drain(runAgent({ session: { id: sid || ('ks-' + access), workdir: WD, messages: [] }, userText: 'go', apiKey: 'k', model: 'm', access,
+        askPermission: async (q) => { asked.push(q); return answer; }, maxTurns: 3 }));
+      return { asked, end: ev.find((e) => e.type === 'tool_end' && e.name === 'shell') };
+    };
+    const full = await ask('full', 'taskkill /IM voxai-no-such-app.exe /F', false);
+    check('Full access asks before a kill by name, without an Always button', full.asked.length === 1 && full.asked[0].noAlways === true && /every process named/.test(full.asked[0].note), full.asked);
+    check('and a no tells the agent to end its own by pid', full.end && full.end.ok === false && /by its pid/.test(JSON.stringify(full.end.result)), full.end);
+    const auto = await ask('auto', 'taskkill /IM voxai-no-such-app.exe /F', false);
+    check('Auto never lets its safety check wave a kill by name through', auto.asked.length === 1 && auto.asked[0].noAlways === true, { asked: auto.asked, end: auto.end });
+    check('and its no carries the same advice', auto.end && /by its pid/.test(JSON.stringify(auto.end.result)), auto.end);
+    P.claim(987654, 'ks-auto-own');
+    const mine = await ask('auto', 'taskkill /pid 987654 /T /F', false, 'ks-auto-own');
+    check('Auto ends a process it started, by pid, without asking', mine.asked.length === 0, mine.asked);
+    const SP = read('src/backend/tools/spawn.js');
+    check('a worker refuses kills it would have to ask about (nobody is there to answer)', SP.includes('askPermission: async (q) => !(q && q.noAlways),'), 'spawn.js');
+    check('programs opened on the desktop and every shell command are claimed as the session\'s own',
+      read('src/backend/cu/index.js').includes("if (r.pid) require('../tools/procs').claim(r.pid, ctx && ctx.session && ctx.session.id);")
+      && read('src/backend/cu/native.js').includes('-PassThru') && read('src/backend/tools/index.js').includes('procs.claim(child.pid, ctx.session && ctx.session.id);'), 'claims');
+    check('the prompt can hide Always, and a yes is never remembered', MAIN.includes('canAlways: !noAlways') && MAIN.includes('if (v && always && !noAlways) {'), 'main');
+  }
+
+  // ------------------------------------------------------------------ [VH]
+  console.log('\n[VH] a model that cannot see gets screenshots described');
+  {
+    const MAIN = read('src/main/main.js');
+    const HTML = read('src/renderer/index.html');
+    const { describeScreenshot } = require(path.join(ROOT, 'src/backend/agent.js'));
+    let sent = null;
+    global.fetch = async (_url, opts) => {
+      sent = JSON.parse(opts.body);
+      return { ok: true, text: async () => JSON.stringify({ choices: [{ message: { content: 'A settings page. The Update rate control overflows its card on the right.' } }], usage: { cost: 0.0012 } }) };
+    };
+    const d = await describeScreenshot({ apiKey: 'k', model: 'vision/model', url: 'data:image/png;base64,AAAA', about: 'computer {"action":"screenshot"}', request: 'fix the layout' });
+    check('the picture goes to the helper model, with what to look for', sent && sent.model === 'vision/model' && sent.messages[0].content[1].image_url.url === 'data:image/png;base64,AAAA'
+      && /overflowing/.test(sent.messages[0].content[0].text) && /fix the layout/.test(sent.messages[0].content[0].text), sent && sent.model);
+    check('its description and cost come back', /overflows its card/.test(d.text) && d.cost === 0.0012, d);
+    global.fetch = async () => { throw new Error('offline'); };
+    const bad = await describeScreenshot({ apiKey: 'k', model: 'vision/model', url: 'data:image/png;base64,AAAA', about: 'x', request: '' });
+    check('a failed description falls back quietly', bad.text === '' && bad.cost === 0, bad);
+    const AG2 = read('src/backend/agent.js');
+    check('the run uses it only when the model cannot see, and counts its cost', AG2.includes('if (modelVision !== true && visionHelper) {') && AG2.includes("source: 'screenshot description'"), 'agent.js');
+    check('it is on by default with a model that can see, and can be turned off', MAIN.includes("visionHelperModel: typeof raw.visionHelperModel === 'string' ? raw.visionHelperModel : 'deepseek/deepseek-v4.1-flash',")
+      && HTML.includes('id="fVisionHelper"') && HTML.includes("patch.visionHelperModel = $('fVisionHelper').value.trim();"), 'settings');
+  }
+
+  // ------------------------------------------------------------------ [GL]
+  console.log('\n[GL] /goal keeps going until a separate check says it is met');
+  {
+    const MAIN = read('src/main/main.js');
+    const HTML = read('src/renderer/index.html');
+    const G = require(path.join(ROOT, 'src/backend/goal.js'));
+    check('/goal parses set, show and clear', G.parseGoalCommand('/goal all tests pass').condition === 'all tests pass' && G.parseGoalCommand('/goal').op === 'show'
+      && ['clear', 'stop', 'off', 'reset', 'none', 'cancel'].every((w) => G.parseGoalCommand('/goal ' + w).op === 'clear') && G.parseGoalCommand('goal x') === null, 'parse');
+    const g = G.newGoal('tests pass', 0);
+    check('a run that did work is checked', G.afterRun(g, 'done', { tools: 3, cost: 0.1 }, 5).next === 'check' && g.runs === 1 && g.tools === 3, g);
+    check('a run stopped at a limit carries straight on', G.afterRun(g, 'limit_reached', { tools: 60, cost: 0.2 }, 5).next === 'continue'
+      && G.afterRun(g, 'budget_reached', { tools: 9, cost: 1 }, 5).next === 'continue', g);
+    const g2 = G.newGoal('x', 0);
+    const idle = [1, 2, 3].map(() => G.afterRun(g2, 'done', { tools: 0, cost: 0 }, 5).next);
+    check('three answers in a row with no work pause it', idle.join() === 'check,check,pause', idle);
+    const g3 = G.newGoal('x', 0);
+    check('Stop, a failed run and the goal\'s spend limit pause it', G.afterRun(G.newGoal('x', 0), 'cancelled', { tools: 1 }, 5).next === 'pause'
+      && G.afterRun(G.newGoal('x', 0), 'error', { tools: 1 }, 5).next === 'pause' && G.afterRun(g3, 'done', { tools: 1, cost: 5.01 }, 5).next === 'pause', g3);
+    const g4 = G.newGoal('ship it', 0);
+    const nm = G.applyCheck(g4, { verdict: 'not_met', reason: 'No cbx submit output shows the save.', cost: 0.001 });
+    check('not met: the next run is told what is missing', nm.next === 'continue' && /^\[VOX GOAL\] Not met yet: No cbx submit output/.test(nm.message) && /ship it/.test(nm.message), nm);
+    check('met and impossible end it', G.applyCheck(G.newGoal('a', 0), { verdict: 'met', reason: 'ok' }).next === 'end'
+      && G.applyCheck(G.newGoal('a', 0), { verdict: 'impossible', reason: 'no' }).next === 'end', 'end');
+    check('a check that fails pauses rather than guessing', G.applyCheck(G.newGoal('a', 0), { verdict: null, reason: 'x', error: true }).next === 'pause', 'err');
+    const msgs = [
+      { role: 'user', content: 'before the goal' },
+      { role: 'user', content: 'Goal: tests pass' },
+      { role: 'assistant', content: 'Running them.', tool_calls: [{ id: 't', function: { name: 'shell', arguments: '{"command":"npm test"}' } }] },
+      { role: 'tool', tool_call_id: 't', content: '{"exit":0,"stdout":"42 passed"}' },
+      { role: 'user', content: [{ type: 'text', text: '[VOX TOOL SCREENSHOTS] 1 screenshot' }, { type: 'image_url', image_url: { url: 'data:x' } }] },
+    ];
+    const tr = G.goalTranscript(msgs, 1);
+    check('the checker reads from the goal on: calls and results, not pictures', !/before the goal/.test(tr) && /TOOL CALL shell: \{"command":"npm test"\}/.test(tr) && /TOOL RESULT: .*42 passed/.test(tr) && !/SCREENSHOTS/.test(tr), tr);
+    let asked = null;
+    const fake = async (req) => { asked = req; return { choices: [{ message: { content: 'Sure: {"verdict":"not_met","reason":"Run the app from fresh."}' } }], usage: { cost: 0.002 } }; };
+    const v1 = await G.evaluateGoal({ apiKey: 'k', model: 'm', goal: G.newGoal('tests pass and the app starts', 1), messages: msgs, chat: fake });
+    check('the check judges evidence, not the agent\'s word', /not evidence unless a tool/.test(asked.messages[0].content) && /GOAL: tests pass and the app starts/.test(asked.messages[1].content), asked && asked.messages[0].content.slice(0, 80));
+    check('its answer is read even with words around the JSON', v1.verdict === 'not_met' && v1.reason === 'Run the app from fresh.' && v1.cost === 0.002, v1);
+    const v2 = await G.evaluateGoal({ apiKey: 'k', model: 'm', goal: G.newGoal('x', 0), messages: [], chat: async () => ({ choices: [{ message: { content: 'probably fine' } }] }) });
+    check('no clear answer is an error, not a pass', v2.verdict === null && v2.error === true, v2);
+    const { goalPrompt } = require(path.join(ROOT, 'src/backend/agent.js'));
+    check('while a goal is on, the agent is told it is checked on evidence', /GOAL \(set by the user with \/goal\): ship it/.test(goalPrompt(G.newGoal('ship it', 0))) && goalPrompt({ status: 'met', condition: 'x' }) === '', 'prompt');
+    const SS = require(path.join(ROOT, 'src/backend/sessions.js'));
+    const UD = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-goal-'));
+    const gs = { id: 'goal-save', title: 't', workdir: WD, model: 'm', messages: [{ role: 'user', content: 'hi' }], todos: [], goal: G.newGoal('persist me', 1) };
+    await SS.saveSession(UD, gs);
+    const back = await SS.loadSession(UD, 'goal-save');
+    check('a goal is saved with its session and read back', back.goal && back.goal.condition === 'persist me' && back.goal.status === 'active', back.goal);
+    try { fs.rmSync(UD, { recursive: true, force: true }); } catch {}
+    check('main runs the loop after each run, and never alongside a run you started', MAIN.includes("goalStep(sessionId, runEnd, { tools: runTools, cost: runCost })")
+      && MAIN.includes("if ([...controllers.keys()].some((k) => k.startsWith(sessionId + ':'))) return;") && MAIN.includes("if (!goalContinue && sess.goal && sess.goal.status === 'active') { sess.goal.paused = false;"), 'main');
+    check('the page: /goal in the box, a goal bar, Stop pauses it, its messages are not your bubbles',
+      HTML.includes("if (/^\\/goal(\\s|$)/i.test(text) && !v.pendingAsk) { await goalCommand(v, text); return; }") && HTML.includes('id="shGoal"')
+      && HTML.includes("try { window.voxai.goalPause(v.id); } catch {}") && HTML.includes("if (/^\\[VOX GOAL\\]/.test(first)) {"), 'page');
   }
 
   try { fs.rmSync(WD, { recursive: true, force: true }); } catch {}

@@ -79,6 +79,8 @@ async function saveSession(userData, session) {
     // Where runs stopped at a limit or failed, so a reopened session says so.
     ...(session.stops || []).map((st) => JSON.stringify({ kind: 'stop', stop: st })),
     JSON.stringify({ kind: 'todos', todos: session.todos }),
+    // The session's goal (/goal): set, met, failed or paused -- it outlives the app.
+    ...(session.goal ? [JSON.stringify({ kind: 'goal', goal: session.goal })] : []),
   ];
   await fsp.writeFile(path.join(dir, `${session.id}.jsonl`), lines.join('\n'), 'utf8');
   return session;
@@ -122,6 +124,7 @@ async function loadSession(userData, id) {
     else if (o.kind === 'message') session.messages.push(o.message);
     else if (o.kind === 'usage') session.usage.push(o.usage);
     else if (o.kind === 'todos') session.todos = o.todos;
+    else if (o.kind === 'goal') session.goal = o.goal;
     else if (o.kind === 'stop') (session.stops || (session.stops = [])).push(o.stop);
   }
   // rebuild accumulated stats for older sessions that predate the ledger

@@ -318,6 +318,7 @@ const SHELL_DESC = process.platform === 'win32'
     + 'There is no ls, cat, grep, head or 2>/dev/null. Avoid nesting powershell -Command "..." — cmd '
     + 'mangles the quoting; for anything beyond one simple command, write a .py/.js/.ps1 file and run '
     + 'that instead. Long output is truncated. '
+    + 'timeout /t does not work here (there is no console); to wait N seconds use ping -n N+1 127.0.0.1 >NUL. '
     + 'For a server, a watcher or anything else that keeps running, pass background: true (do not use start /b): '
     + 'it returns once it has started and keeps running until the app closes.'
   : 'Run a command in the session workdir with /bin/sh. Long output is truncated. '
@@ -365,6 +366,9 @@ const shell = tool('shell', SHELL_DESC, {
     while (s.size - s.chunks[0].length >= TAIL) s.size -= s.chunks.shift().length;
   };
   const child = spawn(exe, argv, { cwd: ctx.workdir, env: procs.childEnv(), windowsHide: true, windowsVerbatimArguments: isWin });
+  // Its own, for kills.js: a program this command starts (`start app.exe`) keeps this
+  // pid as its parent's, so the session can later end it by pid without being asked.
+  procs.claim(child.pid, ctx.session && ctx.session.id);
   child.stdout.on('data', (b) => keep(outS, b));
   child.stderr.on('data', (b) => keep(errS, b));
   child.on('close', async (code) => {

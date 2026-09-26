@@ -31,6 +31,7 @@ const tools = require('./tools');
 const { compactSession, estimateSessionTokens } = require('./compact');
 const crypto = require('crypto');
 const { checkToolAllowed, checkShellCommand, isReadOnlyCommand } = require('./tools/sandbox');
+const { processKills, onlyKills, judgeKills } = require('./tools/kills');
 const { chatOnce, reasoningParam } = require('./providers/openrouter');
 
 // Auto mode's safety check: one short question per action that would otherwise ask.
@@ -388,8 +389,26 @@ const SYSTEM = (workdir, access, planMode = false, durable = '', webSearchOn = t
   `Before you finish a task, call build_state (action "set" or "merge") to record what ` +
   `was completed, what is still in progress, anything blocked, and the agreed next steps — ` +
   `that record is what the next session starts from. ` +
+  // Found in a live build: the brief ended "commit, then save to CodeRook"; the agent did
+  // neither, and said the folder was not linked -- from its notes, while cbx status said it was.
+  `Before you say a task is done, re-read what the user asked and check that every part of it was actually done, ` +
+  `confirming each with a tool (git status, cbx status, the test output, the app started from fresh) -- not from memory, ` +
+  `notes, build_state or earlier sessions, which can be out of date. If a part could not be done, say plainly which and why. ` +
+  `To stop a program you started, end it by the pid you were given, as a command on its own -- never by name. ` +
   `When done, summarise files changed and test results.` +
   (durable ? `\n\n${durable}` : ``);
+
+/**
+ * The session's goal (/goal), while it is being worked on. Fixed for the life of the
+ * goal, so it moves the cached prefix once, when the goal is set.
+ */
+function goalPrompt(goal) {
+  if (!goal || goal.status !== 'active' || !goal.condition) return '';
+  return '\n\nGOAL (set by the user with /goal): ' + String(goal.condition).slice(0, 2000) + '\n'
+    + 'Keep working until this is met. When you stop, a separate check reads your transcript and decides whether it is met, '
+    + 'judging only by evidence in tool results (command output, tests, files), not by what you say. If it is not met you '
+    + 'are sent back with what is missing. So prove each part with a tool, and do not stop to ask whether to carry on.';
+}
 
 function looksLikeTestCmd(cmd) {
   return /\b(npm (test|t\b)|pytest|vitest|jest|go test|cargo test|ruff|mypy|tsc\b)/i.test(cmd);
@@ -470,6 +489,8 @@ async function* runAgent(opts) {
     // Can this model read images? true / false from the catalogue; null = unknown.
     // Decides whether a screenshot is handed over as a real image or described.
     modelVision = null,
+    // A model that can see, to describe screenshots for one that cannot. '' = off.
+    visionHelper = '',
     // { enabled, engine, maxResults } from Settings. null = defaults (on, exa, 5).
     webSearch = null,
   } = opts;
@@ -628,6 +649,21 @@ async function* runAgent(opts) {
     // Resolves true when the action may go ahead; throws when it is refused.
     checkPermission: async (kind, target, opts) => {
       if (ctx.callApproved) return true;
+      // Ending processes is judged before any mode's "allow", Full access included: by
+      // name it ends the user's programs too (see tools/kills.js). Its own, by pid, is fine.
+      const kills = kind === 'shell' ? processKills(target) : null;
+      if (kills) {
+        const v = await judgeKills(kills, session.id);
+        if (v.own) {
+          if (['test', 'auto', 'full'].includes(access) && onlyKills(target)) return true;
+        } else {
+          // No "Always": a yes is for this one command, never for every later kill.
+          const allowed = await askPermission({ kind, target, note: v.note, noAlways: true });
+          if (!allowed) throw Object.assign(new Error(`permission denied: ${kind} ${target}. ${v.hint}`), { hint: v.hint });
+          ctx.userAnswered = true;
+          return true;
+        }
+      }
       const auto =
         access === 'full' ||
         (kind === 'write-file' && access !== 'ask') ||
@@ -671,7 +707,7 @@ async function* runAgent(opts) {
   // Search off means the tool is not offered at all, and the prompt must not tell the
   // model to use it -- an instruction naming a missing tool invites made-up calls.
   const webSearchOn = !(webSearch && webSearch.enabled === false);
-  const systemPrompt = SYSTEM(session.workdir, access, planMode, durable, webSearchOn);
+  const systemPrompt = SYSTEM(session.workdir, access, planMode, durable, webSearchOn) + goalPrompt(session.goal);
   const estimatedBefore = estimateSessionTokens(session, systemPrompt);
   // User-visible compaction notices (like Codex/Claude Code): tell the UI before
   // and after we fold older turns, so compaction is never silent.
@@ -763,8 +799,15 @@ async function* runAgent(opts) {
   const budget = Number(budgetUsd) > 0 ? Number(budgetUsd) : DEFAULT_RUN_BUDGET_USD;
   let spent = 0;
   let costUnknown = false;
+  // Auto and Full access are the "let it work" modes: pausing every 60 turns there
+  // only meant someone typing "continue" seven times through one build. The spend
+  // limit is their runaway guard -- unless the provider reports no cost, when the
+  // limit cannot bite and the turn guard comes back. Sub-agents and explicit
+  // maxTurns keep their caps.
+  const turnCapOff = !(Number(maxTurns) > 0) && !isSubAgent && (access === 'auto' || access === 'full');
+  let turnsRun = 0;
 
-  for (let turn = 0; turn < turnLimit; turn++) {
+  for (let turn = 0; (turnCapOff && !costUnknown) || turn < turnLimit; turn++, turnsRun = turn) {
     if (signal && signal.aborted) { bg.cancelAll(session.id); yield { type: 'cancelled' }; return; }
 
     // Deliver any background agent that finished since the last turn. There is no
@@ -807,7 +850,7 @@ async function* runAgent(opts) {
       workdir: session.workdir, session, emit: pushEvent, checkPermission: ctx.checkPermission,
       resolveIn, userData, live, userInput: userInput || (async () => ({ answer: null, cancelled: true })),
       runner: (o) => runAgent(o),
-      agentOpts: { apiKey, host, model, reasoningEffort, reasoningSpec, access, sessionId: session.id, signal, isSubAgent, workdir: session.workdir,
+      agentOpts: { apiKey, host, model, reasoningEffort, reasoningSpec, access, sessionId: session.id, signal, isSubAgent, workdir: session.workdir, visionHelper,
         defaultSubModel: subagentModel, defaultSubMaxTurns: subagentMaxTurns, defaultSubTimeoutMs: subagentTimeoutMs,
         // Sub-agents spend the PARENT's remaining allowance, never a fresh one.
         // Rebuilt each turn so a fan-out later in the run sees the depleted figure.
@@ -1086,10 +1129,11 @@ async function* runAgent(opts) {
             let allowed = false;
             let why = '';
             try { allowed = (await ctx.checkPermission(gate.kind, gate.target, gate)) !== false; }
-            catch (e) { allowed = false; why = String((e && e.message) || ''); }
+            catch (e) { allowed = false; why = String((e && e.hint) || ''); }
             if (allowed) ctx.callApproved = true;
             if (!allowed) {
-              const msg = `DENIED_OR_ERROR: permission denied for ${tc.name} — do NOT retry this tool call.`;
+              // A refusal with advice (a kill: end your own by pid) passes it on.
+              const msg = `DENIED_OR_ERROR: permission denied for ${tc.name} — do NOT retry this tool call.${why ? ' ' + why : ''}`;
               session.messages.push({ role: 'tool', tool_call_id: id, content: msg });
               yield { type: 'tool_end', id, name: tc.name, ok: false, result: msg };
                   continue;
@@ -1190,6 +1234,24 @@ async function* runAgent(opts) {
         // Screenshots out of the text; see extractImages().
         const { result: forModel, images: shots } = extractImages(result);
         for (const im of shots) {
+          // A model that cannot see gets the picture described by one that can. Without
+          // this a text-only model built a UI it never saw -- the first System Monitor
+          // shipped a narrow column and empty bars nobody looked at.
+          if (modelVision !== true && visionHelper) {
+            const d = await describeScreenshot({ apiKey, host, model: visionHelper, url: im.url, signal,
+              about: `${tc.name} ${JSON.stringify(args).slice(0, 200)}`, request: lastUserText(session) });
+            if (d.cost > 0) {
+              spent += d.cost;
+              const ru = session._runUsage || (session._runUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 });
+              ru.cost += d.cost;
+              emitQueue.push({ type: 'usage', usage: { prompt_tokens: 0, completion_tokens: 0, cost: d.cost, total_cost: d.cost, source: 'screenshot description' } });
+              emitQueue.push({ type: 'budget', spent, budget, estimated: false, source: 'screenshot description' });
+            }
+            if (d.text) {
+              forModel[im.field] = `[screenshot: you cannot see images, so ${visionHelper} looked at it for you and says:]\n${d.text}`;
+              continue;
+            }
+          }
           forModel[im.field] = modelVision === true
             ? `[image attached below, ${im.bytes.toLocaleString()} bytes]`
             // Say it plainly, or the model assumes it looked and reports on a page it
@@ -1279,13 +1341,44 @@ async function* runAgent(opts) {
   // Not an error: the work done so far is real and recorded, the run simply hit its
   // runaway guard. The UI renders this as a resumable state with a Continue action
   // rather than a failure.
+  const turns = Math.max(turnsRun, turnLimit);
   yield {
     type: 'limit_reached',
-    turns: turnLimit,
+    turns,
     resumable: true,
-    message: `Paused after ${turnLimit} tool turns. Everything done so far is saved — `
-      + `send "continue" to carry on, or narrow the task.`,
+    message: `Paused after ${turns} tool turns. Everything done so far is saved — `
+      + `send "continue" to carry on, or narrow the task.`
+      + (turnCapOff ? ' (This mode normally has no turn limit, but the spend limit cannot be enforced '
+        + 'because the provider is not reporting cost.)' : ''),
   };
+}
+
+/**
+ * Eyes for a model that cannot see: one call to a vision model, which describes a
+ * screenshot for the agent -- what is on it, and what looks wrong. Never throws; an
+ * empty text means "fall back to saying the picture was not shown".
+ */
+async function describeScreenshot({ apiKey, host, model, url, about, request, signal }) {
+  try {
+    const r = await chatOnce({
+      apiKey, host, model, signal, maxTokens: 900,
+      extra: { usage: { include: true } },
+      messages: [{ role: 'user', content: [
+        { type: 'text', text: 'You are the eyes of a coding agent that cannot see images. It took this screenshot with '
+          + `${about}.\nIts task: ${String(request || '').slice(0, 600)}\n\n`
+          + 'Describe what is on the screen for it, factually and briefly (under 250 words): the window or page, its layout, '
+          + 'the main text and numbers, and anything that looks wrong or unfinished -- text cut off or overflowing, overlapping '
+          + 'or misaligned parts, large empty areas, blank or stuck loading states, placeholder text, error messages, '
+          + 'unreadable contrast. Say where each problem is. Do not guess at what you cannot see.' },
+        { type: 'image_url', image_url: { url } },
+      ] }],
+    });
+    const text = String((r && r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content) || '').trim();
+    const cost = turnCost(r && r.usage, 0, 0).usd || 0;
+    return { text: text.slice(0, 4000), cost };
+  } catch {
+    return { text: '', cost: 0 };
+  }
 }
 
 /** The last thing the user themselves said (not the app's recap or screenshots). */
@@ -1355,4 +1448,4 @@ function answerPendingAsk(session, callId, res) {
 }
 
 module.exports = {
-  extractImages, TOOL_IMAGES_MARKER, runAgent, MAX_TURNS, boundToolResult, accumulateUsage, uniqueToolIds, pendingAsk, answerPendingAsk, compactImage, browserTargetJs };
+  extractImages, TOOL_IMAGES_MARKER, runAgent, MAX_TURNS, describeScreenshot, goalPrompt, boundToolResult, accumulateUsage, uniqueToolIds, pendingAsk, answerPendingAsk, compactImage, browserTargetJs };

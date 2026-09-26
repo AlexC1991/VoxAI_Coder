@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-t7V62LHORAqLkaBQvXV7QFZFn3hl5vPJ9fwSejqJoGk='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-9NmabWN7YXjk97yFNwgXiaXe2+IsBM2U8GhmmVlnqNw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -702,6 +702,10 @@ tests"). Scroll the row instead of breaking words:
 .sh-sp{flex:1;min-width:6px}
 .sh-work,.sh-warn,.sh-steer{display:flex;align-items:center;gap:8px;min-width:0;white-space:nowrap}
 .sh-work[hidden],.sh-warn[hidden],.sh-steer[hidden]{display:none}
+.sh-goal{display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 100%;color:var(--accent,#7aa2ff)}
+.sh-goal[hidden]{display:none}
+.sh-goal #shGoalTxt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;color:var(--fg,inherit)}
+.sh-goal-ic{font-size:14px;line-height:1}
 .sh-work{color:var(--mut)}
 .sh-work .spin{width:12px;height:12px;flex:none;border-radius:50%;background:conic-gradient(var(--gold) 0 90deg,rgba(200,169,97,.18) 90deg 360deg);-webkit-mask:radial-gradient(circle,transparent 52%,#000 54%);mask:radial-gradient(circle,transparent 52%,#000 54%);animation:spin .85s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -934,6 +938,7 @@ tests"). Scroll the row instead of breaking words:
           <div class="qrows" id="qrows" hidden></div>
           <!-- the shelf: ONE line holding what matters most right now -->
           <div class="shelf" id="shelf" hidden>
+            <span class="sh-goal" id="shGoal" hidden><span class="sh-goal-ic" aria-hidden="true">◎</span><span id="shGoalTxt"></span><button class="sh-lnk" id="shGoalClear" type="button">Clear goal</button></span>
             <span class="sh-work" id="shWork" hidden><span class="spin"></span><span id="shWorkTxt">Working</span><span class="tm" id="shWorkTm"></span></span>
             <span class="sh-warn" id="shWarn" hidden><span id="shWarnTxt"></span><button class="sh-lnk" id="shCompact" type="button">Summarise now</button></span>
             <span class="sh-warn" id="shImg" hidden><span id="shImgTxt"></span><button class="sh-lnk" id="shImgFix" type="button"></button></span>
@@ -1083,7 +1088,7 @@ tests"). Scroll the row instead of breaking words:
     <section class="set-page" data-set="spend" hidden>
       <header class="set-top"><h3>Spending</h3><p>A hard stop for each run, so a loop or a big fan-out can’t drain the account.</p></header>
       <div class="set-scroll">
-        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Limit per run</div><div class="set-desc">The run stops when it reaches this. Sub-agents and web searches draw from the same allowance.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease limit per run">−</button><input id="fRunBudget" type="number" min="0.25" max="100" step="0.25" placeholder="1.00" aria-label="limit per run"><span class="num-u">USD</span><button type="button" class="num-b" data-num="1" aria-label="Increase limit per run">+</button></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Quick picks</div><div class="set-desc">Typical runs on a DeepSeek Flash model cost under a cent.</div></div><div class="set-ctl"><div class="presets" id="budgetPresets"><button type="button" data-v="0.25">$0.25</button><button type="button" data-v="1.00">$1</button><button type="button" data-v="5.00">$5</button></div></div></div></div>
+        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Limit per run</div><div class="set-desc">The run stops when it reaches this. Sub-agents and web searches draw from the same allowance.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease limit per run">−</button><input id="fRunBudget" type="number" min="0.25" max="100" step="0.25" placeholder="1.00" aria-label="limit per run"><span class="num-u">USD</span><button type="button" class="num-b" data-num="1" aria-label="Increase limit per run">+</button></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Limit per goal</div><div class="set-desc">A goal (/goal) keeps starting new runs until it is met. It pauses when all its runs together reach this.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease limit per goal">−</button><input id="fGoalBudget" type="number" min="0.5" max="500" step="0.5" placeholder="5.00" aria-label="limit per goal"><span class="num-u">USD</span><button type="button" class="num-b" data-num="1" aria-label="Increase limit per goal">+</button></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Quick picks</div><div class="set-desc">Typical runs on a DeepSeek Flash model cost under a cent.</div></div><div class="set-ctl"><div class="presets" id="budgetPresets"><button type="button" data-v="0.25">$0.25</button><button type="button" data-v="1.00">$1</button><button type="button" data-v="5.00">$5</button></div></div></div></div>
       </div>
     </section>
 
@@ -1097,7 +1102,7 @@ tests"). Scroll the row instead of breaking words:
     <section class="set-page" data-set="subs" hidden>
       <header class="set-top"><h3>Sub-agents</h3><p>Workers the agent can hand self-contained jobs to. They report back and share the run’s spending limit.</p></header>
       <div class="set-scroll">
-        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Model</div><div class="set-desc">A cheaper model makes fan-outs cheaper. Leave empty to use the session’s model.</div></div><div class="set-ctl"><input id="fSubModel" class="txt" placeholder="Same as the session" autocomplete="off" aria-label="Sub-agent model"></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Turns before answering</div><div class="set-desc">How many tool steps a worker may take before it must report.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease turns before answering">−</button><input id="fSubMaxTurns" type="number" min="1" max="100" step="5" placeholder="25" aria-label="turns before answering"><span class="num-u">turns</span><button type="button" class="num-b" data-num="1" aria-label="Increase turns before answering">+</button></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Time limit</div><div class="set-desc">A worker still running after this is stopped and returns what it has.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease time limit">−</button><input id="fSubTimeout" type="number" min="10" max="3600" step="30" placeholder="300" aria-label="time limit"><span class="num-u">sec</span><button type="button" class="num-b" data-num="1" aria-label="Increase time limit">+</button></div></div></div></div>
+        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Model</div><div class="set-desc">A cheaper model makes fan-outs cheaper. Leave empty to use the session’s model.</div></div><div class="set-ctl"><input id="fSubModel" class="txt" placeholder="Same as the session" autocomplete="off" aria-label="Sub-agent model"></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Eyes for models that cannot see</div><div class="set-desc">When the session’s model cannot read images, this model looks at each screenshot and describes it, problems included. Empty turns it off.</div></div><div class="set-ctl"><input id="fVisionHelper" class="txt" placeholder="Off" autocomplete="off" aria-label="Model that describes screenshots"></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Turns before answering</div><div class="set-desc">How many tool steps a worker may take before it must report.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease turns before answering">−</button><input id="fSubMaxTurns" type="number" min="1" max="100" step="5" placeholder="25" aria-label="turns before answering"><span class="num-u">turns</span><button type="button" class="num-b" data-num="1" aria-label="Increase turns before answering">+</button></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Time limit</div><div class="set-desc">A worker still running after this is stopped and returns what it has.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease time limit">−</button><input id="fSubTimeout" type="number" min="10" max="3600" step="30" placeholder="300" aria-label="time limit"><span class="num-u">sec</span><button type="button" class="num-b" data-num="1" aria-label="Increase time limit">+</button></div></div></div></div>
       </div>
     </section>
 
@@ -1141,8 +1146,8 @@ const ACCESS_NOTES = {
   ask: 'Reads and searches the project. Asks before any change.',
   edit: 'Edits files and searches the web. Asks before running commands.',
   test: 'Also runs tests and checks, like npm test or pytest. Asks before other commands.',
-  auto: 'Like Edit and test, and a safety check handles the rest: what is safe for your request runs, anything it is unsure of asks you first.',
-  full: 'Runs any command without asking. Destructive system commands are still blocked.',
+  auto: 'Like Edit and test, and a safety check handles the rest: what is safe for your request runs, anything it is unsure of asks you first. Works until done, or until the spend limit.',
+  full: 'Runs any command without asking. Destructive system commands are still blocked, and ending programs it did not start asks you first. Works until done, or until the spend limit.',
 };
 // OpenRouter's thinking levels, least to most, as the menu names them.
 const EFFORT_ORDER = ['none','minimal','low','medium','high','xhigh','max'];
@@ -1565,6 +1570,17 @@ function paintShelf(){
       const fx = $('shImgFix');
       fx.hidden = !img.fix;
       if (img.fix) { fx.textContent = 'Use ' + describeModel(img.fix).name; fx.title = img.fix.id + ' \u00b7 ' + modelPrice(img.fix) + ' per 1M'; fx.onclick = async () => { await setModel(img.fix.id); paintShelf(); }; }
+    }
+  }
+  const gb = $('shGoal'), g = v && v.goal;
+  if (gb) {
+    const on = !!(g && g.status === 'active');
+    gb.hidden = !on;
+    if (on) {
+      const state = g.paused ? 'paused' + (g.pausedReason ? ' \u2014 ' + g.pausedReason : '') : (v.goalChecking ? 'checking\u2026' : 'working');
+      $('shGoalTxt').textContent = 'Goal: ' + g.condition + '  \u00b7  ' + state
+        + (g.runs ? '  \u00b7  ' + g.runs + ' run' + (g.runs === 1 ? '' : 's') + ', $' + Number(g.spent || 0).toFixed(2) : '');
+      $('shGoalTxt').title = g.condition + (g.last && g.last.reason ? '\n\nLast check: ' + g.last.reason : '');
     }
   }
   const w = v ? contextWarning(v.ctxFill) : '';
@@ -3933,6 +3949,13 @@ async function openSession(id){
         // user "saying" a wall of recap text or "sending" screenshots they never took.
         const first = typeof m.content === 'string' ? m.content
           : ((m.content || []).find((p) => p && p.type === 'text') || {}).text || '';
+        if (/^\[VOX GOAL\]/.test(first)) {
+          finalizeRunCard();
+          const why = first.replace(/^\[VOX GOAL\]\s*/, '').split('\n')[0].replace(/^Not met yet:\s*/, '');
+          const carry = /^Carry on/.test(why);
+          v.root.appendChild(noticeRow({ tone: 'info', icon: 'info', title: carry ? 'Goal: carrying on' : 'Goal not met yet', text: carry ? 'The run stopped at a limit.' : why }));
+          continue;
+        }
         if (/^\[VOX (COMPACTED CONTEXT|TOOL SCREENSHOTS)\]/.test(first)) {
           if (first.startsWith('[VOX COMPACTED')) {
             finalizeRunCard();
@@ -4257,6 +4280,7 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
   const v = viewOf(sid);        // register session even if we haven't opened it yet
   T = v;
   if (event.type === 'user_input' && event.inputId) (v.shownInputs || (v.shownInputs = new Set())).add(event.inputId);
+  if (event.type === 'goal') { onGoalEvent(v, event); T = null; return; }
   // A finished run takes its approval, if one was still showing, with it.
   if (['done', 'error', 'cancelled', 'limit_reached', 'budget_reached'].includes(event.type) && v.perm) {
     clearTimeout(v.perm.timer); v.perm = null; if (sid === activeId) paintAsk();
@@ -4992,6 +5016,8 @@ function prefillAdvanced(){
   if ($('fContextLimit')) $('fContextLimit').value = cl;
   if ($('fHardFraction')) $('fHardFraction').value = hf;
   if ($('fRunBudget')) $('fRunBudget').value = s.runBudgetUsd || '1.00';
+  if ($('fGoalBudget')) $('fGoalBudget').value = s.goalBudgetUsd || '5.00';
+  if ($('fVisionHelper')) $('fVisionHelper').value = s.visionHelperModel || '';
   // sub-agent knobs
   const sm = s.subagentModel || '';
   const smt = s.subagentMaxTurns || '25';
@@ -5067,6 +5093,9 @@ async function saveSettingsNow(withKeys){
   if ($('fContextLimit').value) patch.contextLimit = String(Math.round(Number($('fContextLimit').value)));
   if ($('fHardFraction').value) patch.hardFraction = Number($('fHardFraction').value).toString();
   if ($('fRunBudget').value) patch.runBudgetUsd = Number($('fRunBudget').value).toFixed(2);
+  if ($('fGoalBudget') && $('fGoalBudget').value) patch.goalBudgetUsd = Number($('fGoalBudget').value).toFixed(2);
+  // Always sent: clearing it turns the describing off.
+  if ($('fVisionHelper')) patch.visionHelperModel = $('fVisionHelper').value.trim();
   // Always sent, so clearing the field really goes back to "same as the session".
   patch.subagentModel = $('fSubModel').value.trim();
   if ($('fSubMaxTurns').value) patch.subagentMaxTurns = String(Math.round(Number($('fSubMaxTurns').value)));
@@ -5659,14 +5688,73 @@ function updateSendState(){
 }
 function stopCurrent(){
   const v = actView();
+  // Between runs, while the goal is being checked: Stop stops the goal.
+  if (v && !v.busy && v.goalChecking) { try { window.voxai.goalPause(v.id); } catch {} return; }
   if (!v || !v.busy) { updateSendState(); return; }
   // Stop means stop: queued messages wait for you rather than starting the next run.
   v.stopRequested = true;
+  // A goal waits for you instead of starting its next run.
+  if (v.goal && v.goal.status === 'active') { try { window.voxai.goalPause(v.id); } catch {} }
   for (const rk of [...(v.runKeys || [])]) {
     try { window.voxai.agentCancel(rk); } catch {}
   }
   v.runKeys.clear();
   updateSendState();
+}
+
+/** /goal typed in the box: set one and start, show the one there is, or clear it. */
+async function goalCommand(v, text){
+  $('prompt').value = ''; $('prompt').dispatchEvent(new Event('input', { bubbles: true }));
+  const m = /^\/goal(?:\s+([\s\S]*))?$/i.exec(text);
+  const rest = String((m && m[1]) || '').trim();
+  const say = (tone, title, body) => { T = v; const r = RR(); if (r) { r.appendChild(noticeRow({ tone, icon: tone === 'bad' ? 'alert' : 'info', title, text: body })); followThread(); } T = null; };
+  try {
+    if (!rest) {
+      const g = v.id ? await window.voxai.goalGet(v.id) : null;
+      if (!g || g.status !== 'active') say('info', 'No goal set', 'Type /goal and what done means, for example: /goal all tests pass and the app starts. It keeps working until a separate check agrees.');
+      else say('info', 'Goal: ' + g.condition, (g.paused ? 'Paused' + (g.pausedReason ? ': ' + g.pausedReason : '') + '. ' : 'Working. ')
+        + g.runs + ' run' + (g.runs === 1 ? '' : 's') + ', $' + Number(g.spent || 0).toFixed(2) + ' so far.' + (g.last ? ' Last check: ' + g.last.reason : ''));
+      return;
+    }
+    if (/^(clear|stop|off|reset|none|cancel)$/i.test(rest)) {
+      v.goal = v.id ? await window.voxai.goalClear(v.id) : null;
+      v.goalChecking = false; paintShelf();
+      say('info', 'Goal cleared', 'It will not start any more runs. A run going now carries on until it stops.');
+      return;
+    }
+    if (v.busy) { toast('Stop the current run first, or wait for it to finish, then set the goal.'); $('prompt').value = text; return; }
+    const id = await ensureSession();
+    v.goal = await window.voxai.goalSet(id, rest);
+    paintShelf();
+    await doSend(v, 'Goal: ' + rest, []);
+  } catch (e) {
+    say('bad', 'Couldn\u2019t set the goal', tidyPaths(ipcMessage(e)));
+  }
+}
+
+/** The goal loop's steps, sent by main.js goalStep. */
+function onGoalEvent(v, ev){
+  v.goal = ev.goal || v.goal;
+  const row = (tone, title, text) => { const r = RR(); if (r) { r.appendChild(noticeRow({ tone, icon: tone === 'bad' ? 'alert' : 'info', title, text })); followThread(); } };
+  v.goalChecking = ev.phase === 'checking';
+  // Stop sends one pause and the run it stopped a second: say it once, until the goal moves again.
+  if (ev.phase !== 'paused') v._goalPausedShown = null;
+  if (ev.phase === 'continue') {
+    finalizeRunCard();
+    // Stopped at a limit, nothing was checked: say so rather than "not met".
+    if (ev.limit) row('info', 'Goal: carrying on', 'The run stopped at a limit.');
+    else row('info', 'Goal not met yet', (ev.reason || '') + ' Carrying on.');
+    if (ev.runKey) { v.runKeys.add(ev.runKey); v.busy = true; v.runT0 = Date.now(); v.activity = 'Working'; v.stopRequested = false; }
+  } else if (ev.phase === 'met') row('good', 'Goal met', ev.reason || '');
+  else if (ev.phase === 'failed') row('bad', 'Goal can\u2019t be met', ev.reason || '');
+  else if (ev.phase === 'paused') {
+    if (v._goalPausedShown !== String(ev.reason)) {
+      v._goalPausedShown = String(ev.reason);
+      const why = ev.reason ? ev.reason.charAt(0).toUpperCase() + ev.reason.slice(1) + '. ' : '';
+      row('warn', 'Goal paused', why + 'Send a message (like "continue") to pick it up, or type /goal clear.');
+    }
+  }
+  if (v === actView()) { $('runDot').style.display = v.busy ? 'block' : 'none'; updateSendState(); paintShelf(); }
 }
 
 async function send(){
@@ -5691,6 +5779,8 @@ async function send(){
     if (!v) return;
   }
   const text = $('prompt').value.trim();
+  // /goal <condition> | /goal (show) | /goal clear -- see backend/goal.js
+  if (/^\/goal(\s|$)/i.test(text) && !v.pendingAsk) { await goalCommand(v, text); return; }
   // An empty box with messages waiting (after a Stop): send the next one.
   if (!text && !v.busy && v.queue && v.queue.length) { drainQueue(v.id, true); return; }
   if (!text) return;
@@ -5733,6 +5823,7 @@ async function send(){
 }
 
 async function doSend(v, text, parts){
+  v._goalPausedShown = null;   // a message picks a paused goal up; a later pause is news
   T = v; const bubble = addUser(text, parts); T = null;
   v.busy = true; v.runT0 = Date.now(); v.activity = 'Thinking'; v.planLive = false;
   $('runDot').style.display = 'block'; updateSendState(); refreshSessionList(); paintShelf();

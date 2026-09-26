@@ -38,7 +38,19 @@ function killTree(pid) {
 
 function alive(pid) { try { process.kill(pid, 0); return true; } catch (e) { return e && e.code === 'EPERM'; } }
 
-function track(rec) { running.set(rec.pid, { startedAt: Date.now(), ...rec }); return rec; }
+function track(rec) { running.set(rec.pid, { startedAt: Date.now(), ...rec }); claim(rec.pid, rec.sessionId); return rec; }
+
+// Every pid a session started, including programs it opened on the desktop. Only for
+// telling its own processes from the user's when it wants to end one (kills.js):
+// unlike `running`, nothing here is ended when the app quits -- a program the agent
+// opened for you stays open.
+const owned = new Map();   // sessionId -> Set<pid>
+function claim(pid, sessionId) {
+  if (!pid || !sessionId) return;
+  if (!owned.has(sessionId)) owned.set(sessionId, new Set());
+  owned.get(sessionId).add(Number(pid));
+}
+function ownedBy(sessionId) { return owned.get(sessionId) || new Set(); }
 
 /** What is still running, for this session or all of them. Dead entries are dropped. */
 function list(sessionId) {
@@ -118,4 +130,4 @@ function startBackground(command, { cwd, sessionId, waitMs = 3000 } = {}) {
   });
 }
 
-module.exports = { startBackground, leftovers, track, list, stop, stopAll, killTree, shellArgs, childEnv };
+module.exports = { startBackground, leftovers, track, claim, ownedBy, list, stop, stopAll, killTree, shellArgs, childEnv };
