@@ -119,7 +119,17 @@ if (DRY) {
 const entry = cbxEntry();
 for (const s of steps) {
   console.log('> cbx ' + s[0] + ' ' + (s[1] || ''));
-  execFileSync(process.execPath, [entry, ...s], { cwd: RELEASES_DIR, stdio: 'inherit' });
+  // The 110 MB installer upload timed out part-way twice running (0.2.53, 0.2.54), after
+  // the save had gone through, and the release had to be finished by hand. An attach is
+  // safe to repeat, so it gets two more tries; the save and the naming run once.
+  const tries = s[0] === 'attach' ? 3 : 1;
+  for (let t = 1; ; t++) {
+    try { execFileSync(process.execPath, [entry, ...s], { cwd: RELEASES_DIR, stdio: 'inherit' }); break; }
+    catch (e) {
+      if (t >= tries) throw e;
+      console.log(`  that failed; trying again (${t + 1} of ${tries})`);
+    }
+  }
 }
 
 // ---- 3. what installed copies will see
