@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-xIAX49FHz7DCl/0SMA5E+WlA/gZbC6RG9mWdOTADRuQ='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-8A9GwtuD9/IFm4Nn3pOFa4vFngwlwg6SGEt69XmTn74='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -430,6 +430,16 @@ tests"). Scroll the row instead of breaking words:
 .mem-fact .mf-text{flex:1;font-size:13.5px;line-height:1.5;color:var(--ink);overflow-wrap:anywhere;white-space:pre-wrap}
 .mem-fact .mf-del{flex:none;border:1px solid transparent;background:transparent;color:var(--dim);cursor:pointer;font:12.5px Chivo,sans-serif;padding:3px 9px;border-radius:6px}
 .mem-fact .mf-del:hover{color:var(--del);border-color:var(--edge2)}
+.sk-row{align-items:stretch}
+.sk-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
+.sk-top{display:flex;align-items:center;gap:8px}
+.sk-name{font-family:"Sometype Mono",monospace;font-size:13px;color:var(--ink)}
+.sk-src{font-size:11px;color:var(--faint);border:1px solid var(--edge2);border-radius:999px;padding:1px 8px;letter-spacing:.02em}
+.sk-desc{font-size:13px;line-height:1.5;color:var(--dim)}
+.sk-desc.none{color:var(--faint);font-style:italic}
+.sk-open{margin-left:auto;flex:none}
+.sk-help{margin:14px 2px 4px;font-size:12.5px;line-height:1.6;color:var(--faint)}
+.sk-help code{font-family:"Sometype Mono",monospace;font-size:12px;color:var(--dim)}
 .mem-empty{padding:18px 16px;font-size:13px;color:var(--dim);line-height:1.6}
 /* ---- Settings: Keyboard ---- */
 .key-row{display:flex;align-items:center;gap:16px;padding:10px 16px;border-top:1px solid var(--edge)}
@@ -1038,6 +1048,7 @@ tests"). Scroll the row instead of breaking words:
     <button type="button" data-set="subs"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="14" width="7" height="7" rx="1.5"/></svg>Sub-agents</button>
     <button type="button" data-set="ctx"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/></svg>Context</button>
     <button type="button" data-set="memory"><svg viewBox="0 0 24 24"><path d="M9 4a3 3 0 0 0-3 3v1a3 3 0 0 0-2 5 3 3 0 0 0 2 5 3 3 0 0 0 6 1V4.5A2.5 2.5 0 0 0 9 4zM15 4a3 3 0 0 1 3 3v1a3 3 0 0 1 2 5 3 3 0 0 1-2 5 3 3 0 0 1-6 1"/></svg>Memory</button>
+    <button type="button" data-set="skills"><svg viewBox="0 0 24 24"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5zM5 19.5A1.5 1.5 0 0 0 6.5 21H19M9 7h6M9 10.5h4"/></svg>Skills</button>
     <button type="button" data-set="keys"><svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>Keyboard</button>
     <div class="set-foot">Changes save as you make them.<br><span id="setVersion">VoxAI Coder</span></div>
   </nav>
@@ -1085,6 +1096,14 @@ tests"). Scroll the row instead of breaking words:
       <div class="set-scroll">
         <div class="mem-bar"><span class="mem-where" id="memWhere"></span><input id="memSearch" type="search" placeholder="Search" aria-label="Search remembered facts" autocomplete="off"><span class="mem-count" id="memCount"></span></div>
         <div class="mem-list" id="memBody"></div>
+      </div>
+    </section>
+    <section class="set-page" data-set="skills" hidden>
+      <header class="set-top"><h3>Skills</h3><p>Instructions the agent loads when a task needs them: how to use a tool, a service or the preview browser. It sees each skill's one-line description at the start of every run and loads the whole skill when a task calls for it.</p></header>
+      <div class="set-scroll">
+        <div class="mem-bar"><span class="mem-where" id="skWhere"></span><span class="mem-count" id="skCount"></span><button type="button" class="btn ghost sk-open" id="skOpen">Open my skills folder</button></div>
+        <div class="mem-list" id="skBody"></div>
+        <p class="sk-help">To add a skill, make a folder with a <code>SKILL.md</code> in your skills folder (for all projects) or in a project's <code>.voxai/skills</code> folder (for that project). Start the file with a <code>name:</code> and a one-line <code>description:</code> between <code>---</code> lines; the description is what the agent reads to decide when to load it. Skills in Claude Code's and Codex's folders are read too.</p>
       </div>
     </section>
     <section class="set-page" data-set="keys" hidden>
@@ -4871,6 +4890,7 @@ function showSetPage(key){
   document.querySelectorAll('.set-page').forEach((p) => { p.hidden = p.dataset.set !== key; });
   if (key === 'memory') { const ms = $('memSearch'); if (ms) ms.value = ''; loadMemory(); }
   if (key === 'keys') renderKeys();
+  if (key === 'skills') loadSkills();
 }
 /** Paint the switch, the engine picker, the percentages and the presets from the fields. */
 function syncSetControls(){
@@ -5748,6 +5768,44 @@ window.__syncTitlebar = syncTitlebarTitle;
 (function(){
   const bc = $('btnCompact');
   if (bc) bc.onclick = compactNow;
+})();
+
+// ---- Settings > Skills ----
+/** Every skill the agent can load for the open project, first match by name. */
+async function loadSkills(){
+  const box = $('skBody');
+  if (!box || !window.voxai || !window.voxai.skillsList) return;
+  const wd = memoryDir();
+  let r = null;
+  try { r = await window.voxai.skillsList(wd); } catch {}
+  const list = (r && r.skills) || [];
+  const where = $('skWhere'); if (where) where.textContent = wd ? 'For ' + folderName(wd) : 'No project open';
+  const cnt = $('skCount'); if (cnt) cnt.textContent = list.length + (list.length === 1 ? ' skill' : ' skills');
+  box.innerHTML = '';
+  if (!list.length) { box.appendChild(el('div', 'mem-empty', 'No skills yet. Open your skills folder to add one.')); return; }
+  for (const s of list) {
+    const row = el('div', 'mem-fact sk-row');
+    const main = el('div', 'sk-main');
+    const top = el('div', 'sk-top');
+    const nm = el('span', 'sk-name'); nm.textContent = s.name;
+    const src = el('span', 'sk-src'); src.textContent = s.source;
+    top.appendChild(nm); top.appendChild(src);
+    const d = el('div', 'sk-desc');
+    d.textContent = s.description || 'No description, so the agent is not told about it: add a description line to its SKILL.md.';
+    if (!s.description) d.classList.add('none');
+    main.appendChild(top); main.appendChild(d);
+    main.title = s.root || '';
+    row.appendChild(main);
+    box.appendChild(row);
+  }
+}
+(function(){
+  const b = $('skOpen');
+  if (b) b.onclick = async () => {
+    let r = null;
+    try { r = await window.voxai.skillsOpenFolder(); } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
+    if (!r || !r.ok) toast('Could not open the folder' + (r && r.error ? ': ' + r.error : '.'));
+  };
 })();
 
 // ---- project memory panel ----

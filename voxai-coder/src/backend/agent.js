@@ -232,7 +232,7 @@ function accumulateUsage(session, usage) {
  * Anything volatile (retrieval, search) stays a TOOL, so its output lands at the end
  * of the transcript where changing content is free.
  */
-async function loadDurableContext(workdir) {
+async function loadDurableContext(workdir, userData) {
   let memFacts = [];
   let buildState = '';
   try {
@@ -252,6 +252,12 @@ async function loadDurableContext(workdir) {
       + `Add durable conventions and decisions with the memory tool.)\n${shown.join('\n')}`);
   }
   if (buildState) parts.push(buildState);
+  // Which skills there are and what each is for, so the agent loads one when a task
+  // touches it. Read once per run like the rest of this block, so the prompt cache holds.
+  try {
+    const idx = await require('./tools/skills').skillsIndex({ workdir, userData });
+    if (idx) parts.push(idx);
+  } catch { /* no skills */ }
   return parts.join('\n\n');
 }
 
@@ -356,6 +362,12 @@ const SYSTEM = (workdir, access, planMode = false, durable = '', webSearchOn = t
     ? `For research outside the repo: web_search to find sources, web_fetch to read them. Never guess a URL, `
     : `Web search is turned off: use web_fetch only on URLs you already have (from the user or from a page's links). Never guess a URL, `) +
   `and only cite or describe pages you actually fetched — if a source could not be reached, say so. ` +
+  // The index alone (below) was read as background: asked how to put a folder on
+  // Cloudflare Pages, a model answered from memory with the wrangler skill listed.
+  (/\[SKILLS\]/.test(durable)
+    ? `Skills (listed under [SKILLS] below) hold current, specific instructions for tools and services. Whenever a task involves one of them -- `
+      + `even just planning or advising -- load the matching skill with the skill tool first, and prefer what it says to your own memory. `
+    : ``) +
   `write/edit/patch syntax-check the file automatically and return the result. If one comes back ` +
   `"was written, but it does not parse", the change IS already on disk — do not re-apply it; read the ` +
   `reported error and make a corrective edit. ` +
@@ -630,7 +642,7 @@ async function* runAgent(opts) {
   //         self-check that shrinks the keep window until the result fits.
   // Read once per run and reuse for every turn. It MUST be identical across turns of
   // a run or it would move the cache boundary and defeat the whole point.
-  const durable = await loadDurableContext(session.workdir);
+  const durable = await loadDurableContext(session.workdir, userData);
   // Search off means the tool is not offered at all, and the prompt must not tell the
   // model to use it -- an instruction naming a missing tool invites made-up calls.
   const webSearchOn = !(webSearch && webSearch.enabled === false);
@@ -1157,7 +1169,9 @@ async function* runAgent(opts) {
               + `Work from the page text and elements instead, and do not describe what it looks like.]`;
           if (modelVision === true) turnImages.push({ tool: tc.name, url: im.url });
         }
-        let text = boundToolResult(JSON.stringify(forModel), toolResultMaxChars);
+        // A skill is instructions asked for in order to be followed: cut to the usual
+        // limit, the middle of a long one was lost. It comes in parts instead (skills.js).
+        let text = boundToolResult(JSON.stringify(forModel), tc.name === 'skill' ? Math.max(Number(toolResultMaxChars) || 0, 32000) : toolResultMaxChars);
         // Keep the plan moving. Models set a plan out and then forget it (seen live: 0 of
         // 7 ticked through two minutes of work), and the user follows it on the input bar.
         // After a few actions with open steps and no update, say so -- once per stretch.

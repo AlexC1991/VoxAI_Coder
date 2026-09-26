@@ -99,6 +99,8 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
   sessionsExport: (id) => ipcRenderer.invoke('sessions:export', { id }),
   sessionsSearch: (query) => ipcRenderer.invoke('sessions:search', query),
   sessionsShowExport: (id) => ipcRenderer.invoke('sessions:showExport', id),
+  skillsList: (workdir) => ipcRenderer.invoke('skills:list', { workdir }),
+  skillsOpenFolder: () => ipcRenderer.invoke('skills:openFolder'),
   memoryList: (workdir) => ipcRenderer.invoke('memory:list', { workdir }),
   memoryDelete: (workdir, query) => ipcRenderer.invoke('memory:delete', { workdir, query }),
   memoryForget: (workdir, exact, index) => ipcRenderer.invoke('memory:delete', { workdir, exact, index }),

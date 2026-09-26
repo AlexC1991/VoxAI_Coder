@@ -498,7 +498,8 @@ const FACADES = [
   },
   {
     name: 'skill',
-    describe: 'Project skills: list the available skills, or load one by name. Use `action` to pick.',
+    describe: 'Skills: instructions for particular tools, services and kinds of work. `list` shows them with what each is for; '
+      + '`load` reads one (long ones in parts; its reference files with `file`). Load a skill before working in its area.',
     members: { list: 'skills_list', load: 'skill_load' },
   },
   {
@@ -587,7 +588,7 @@ function buildTools(opts) {
   const { makeComputerUseTool } = require('../cu');
 
   const mcpT = makeMcpTool({ getSettings: opts.getSettings, mcpDir: opts.mcpDir });
-  const skillsT = makeSkillsTool();
+  const skillsT = makeSkillsTool({ workdir, userData });
   const fsT = makeFsOpsTool({ resolveIn, checkPermission });
   const docRagT = makeDocRagTool({ resolveIn, checkPermission });
   const spawnT = makeSpawnTool({ runner: opts.runner, agentOpts: opts.agentOpts || {}, userData, live, emit });

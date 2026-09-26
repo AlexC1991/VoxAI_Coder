@@ -634,6 +634,18 @@ app.whenReady().then(() => {
     // file is next saved, and the row said "New session" meanwhile.
     return items.map((s) => ({ ...s, ...(live.get(s.id) && live.get(s.id).title ? { title: live.get(s.id).title } : {}), waiting: open.has(s.id) || (!!s.asking && !running.has(s.id)) }));
   });
+  // Settings > Skills: every skill the agent can load, and your own folder for more.
+  ipcMain.handle('skills:list', async (_e, arg) => {
+    const workdir = arg && typeof arg === 'object' ? arg.workdir : '';
+    const found = await require('../backend/tools/skills').findSkills({ workdir: workdir || '', userData: userData() });
+    return { mine: path.join(userData(), 'skills'), skills: found.map((s) => ({ name: s.name, description: s.description, source: s.source, root: s.root })) };
+  });
+  ipcMain.handle('skills:openFolder', async () => {
+    const d = path.join(userData(), 'skills');
+    try { await fs.promises.mkdir(d, { recursive: true }); } catch {}
+    const err = await require('electron').shell.openPath(d);
+    return { ok: !err, path: d, error: err || '' };
+  });
   ipcMain.handle('sessions:search', (_e, query) => store.searchSessions(userData(), query));
   ipcMain.handle('sessions:create', async (_e, { title, workdir, model }) => {
     const s = getSettings(false);

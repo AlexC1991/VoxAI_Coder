@@ -14,6 +14,7 @@ const vm = require('vm');
 
 const ROOT = process.env.VOX_ROOT || path.join(__dirname, '..');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
+const SK_FM = (t) => require(path.join(ROOT, 'src/backend/tools/skills.js')).frontMatter(t);
 
 let pass = 0;
 let fail = 0;
@@ -1387,6 +1388,40 @@ async function drain(gen) {
     check('local pages are not asked about that way', AG.includes("!/^(localhost|127\\.0\\.0\\.1|\\[::1\\])$/i.test(u.hostname)"), 'asks for localhost');
     check('"Always" covers the site, and says so', MAIN.includes("const key = kind + '\\u0000' + String(alwaysKey || target || '');") && AG.includes('alwaysLabel: `Always on ${host}`') && HTML.includes("$('askAlways').textContent = p.alwaysLabel ||"), 'one action only');
     check('a password field\'s contents are never read for the prompt', AG.includes("(el.type !== 'password' && el.type !== 'hidden' ? el.value : '')") && AG.includes('Type into a password field'), 'shows the password');
+    // Skills the agent knows about, can read whole, and can open the references of.
+    {
+      const SK = require(path.join(ROOT, 'src/backend/tools/skills.js'));
+      const T0 = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-skills-'));
+      const proj = path.join(T0, 'proj'), ud = path.join(T0, 'ud');
+      const mk = (dir, name, fm, body) => { fs.mkdirSync(path.join(dir, name), { recursive: true }); fs.writeFileSync(path.join(dir, name, 'SKILL.md'), fm + '\n' + body); };
+      mk(path.join(proj, '.voxai', 'skills'), 'deploy', '---\nname: deploy\ndescription: "How this project deploys."\n---', '# Deploy\nnpm run ship');
+      mk(path.join(ud, 'skills'), 'deploy', '---\nname: deploy\ndescription: yours, shadowed by the project\n---', 'x');
+      mk(path.join(ud, 'skills'), 'long', '---\nname: long\ndescription: >\n  A long skill\n  in two lines.\n---', 'A'.repeat(SK.PART_CHARS + 500));
+      fs.mkdirSync(path.join(ud, 'skills', 'long', 'references', 'a'), { recursive: true });
+      fs.writeFileSync(path.join(ud, 'skills', 'long', 'references', 'a', 'x.md'), 'ref x');
+      const where = { workdir: proj, userData: ud };
+      const found = await SK.findSkills(where);
+      const dep = found.find((s) => s.name === 'deploy'), lng = found.find((s) => s.name === 'long');
+      check('skills come from the project, yours and the app, the project first', dep && dep.source === 'project' && dep.description === 'How this project deploys.' && lng && lng.source === 'yours' && found.some((s) => s.source === 'built in'), found.map((s) => s.name + ':' + s.source));
+      check('a description over several lines is read', lng && lng.description === 'A long skill in two lines.', lng && lng.description);
+      const p1 = await SK.loadSkill('long', where), p2 = await SK.loadSkill('long', where, { part: 2 });
+      check('a long skill comes whole, in parts, and says there is more', p1.content.length === SK.PART_CHARS && /1 of 2 -- load again with part 2/.test(p1.part) && p1.content + p2.content === fs.readFileSync(path.join(ud, 'skills', 'long', 'SKILL.md'), 'utf8') && p1.files.includes('references/a/x.md'), [p1.part, p2.content.length, p1.files]);
+      const ref = await SK.loadSkill('long', where, { file: 'references/a/x.md' }), dirl = await SK.loadSkill('long', where, { file: 'references' });
+      const esc = await SK.loadSkill('long', where, { file: '../deploy/SKILL.md' });
+      check('its reference files open, and nothing outside its folder does', ref.ok && ref.content === 'ref x' && dirl.files[0] === 'references/a/x.md' && esc.ok === false, [ref, dirl, esc]);
+      const idx = await SK.skillsIndex(where);
+      check('the agent gets an index of what each skill is for', /^\[SKILLS\]/.test(idx) && idx.includes('- deploy: How this project deploys.') && idx.includes('- preview-browser: ') && idx.includes('- service-setup: '), idx.slice(0, 300));
+      fs.rmSync(T0, { recursive: true, force: true });
+    }
+    check('the index is part of every run\'s context', AG.includes("const idx = await require('./tools/skills').skillsIndex({ workdir, userData });") && AG.includes('await loadDurableContext(session.workdir, userData)'), 'not told');
+    check('the agent is told to load a matching skill, even to plan or advise', AG.includes('load the matching skill with the skill tool first, and prefer what it says to your own memory') && AG.includes('(/\\[SKILLS\\]/.test(durable)'), 'answers from memory');
+    check('a skill is not cut to the usual result limit', AG.includes("tc.name === 'skill' ? Math.max(Number(toolResultMaxChars) || 0, 32000) : toolResultMaxChars"), 'middle lost');
+    for (const b of ['preview-browser', 'service-setup']) {
+      const t = read('resources/skills/' + b + '/SKILL.md');
+      check('built-in skill ' + b + ' has a name and a description', SK_FM(t).name === b && SK_FM(t).description.length > 60, SK_FM(t));
+    }
+    check('the built-in skills say secrets never go through the chat', /never ask the user to paste a secret into the chat/i.test(read('resources/skills/service-setup/SKILL.md')) && /Never type a password/.test(read('resources/skills/preview-browser/SKILL.md')), 'missing');
+    check('Settings has a Skills page with your folder', HTML.includes('<section class="set-page" data-set="skills" hidden>') && HTML.includes("if (key === 'skills') loadSkills();") && /ipcMain\.handle\('skills:openFolder'/.test(MAIN), 'no page');
     check('a new session\'s row has its name while the run is going', MAIN.includes("...(live.get(s.id) && live.get(s.id).title ? { title: live.get(s.id).title } : {})"), '"New session"');
     check('at start, a session the app closed on while asking is opened', HTML.includes("const asked = (SESS_ITEMS.find((s) => s.waiting) || {}).id;"), 'start screen');
   }
