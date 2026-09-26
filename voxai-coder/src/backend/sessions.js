@@ -133,6 +133,24 @@ function isSubSession(meta) {
   return !!(meta && (meta.parentId || /^subagent(:|$)/.test(String(meta.title || ''))));
 }
 
+/**
+ * Does the conversation end on a question nobody answered (the app closed while the
+ * agent was asking)? Reads only the last turn: its trailing tool results and the
+ * assistant message whose calls they answer.
+ */
+function endsOnQuestion(lines) {
+  const answered = new Set();
+  for (let i = lines.length - 1; i > 0; i--) {
+    if (!lines[i].startsWith('{"kind":"message"')) continue;     // usage, stops, todos
+    let m;
+    try { m = JSON.parse(lines[i]).message || {}; } catch { return false; }
+    if (m.role === 'tool') { answered.add(m.tool_call_id); continue; }
+    return m.role === 'assistant' && Array.isArray(m.tool_calls)
+      && m.tool_calls.some((c) => c && c.function && (c.function.name === 'ask_user' || c.function.name === 'ask_confirm') && !answered.has(c.id));
+  }
+  return false;
+}
+
 /** Conversations, newest first; with { subs: true }, sub-agent sessions instead. */
 async function listSessions(userData, limit = 50, { subs = false } = {}) {
   const dir = sessionsDir(userData);
@@ -142,11 +160,11 @@ async function listSessions(userData, limit = 50, { subs = false } = {}) {
   const metas = [];
   for (const f of files) {
     try {
-      const first = (await fsp.readFile(path.join(dir, f), 'utf8')).split('\n')[0];
-      const o = JSON.parse(first);
+      const lines = (await fsp.readFile(path.join(dir, f), 'utf8')).split('\n');
+      const o = JSON.parse(lines[0]);
       // Sub-agent sessions stay on disk (a worker can be resumed) but are not listed
       // as conversations: each fan-out used to add one "session" per worker.
-      if (o.kind === 'meta' && isSubSession(o) === subs) metas.push({ id: o.id, title: o.title, workdir: o.workdir, model: o.model, parentId: o.parentId || null, updatedAt: o.updatedAt });
+      if (o.kind === 'meta' && isSubSession(o) === subs) metas.push({ id: o.id, title: o.title, workdir: o.workdir, model: o.model, parentId: o.parentId || null, updatedAt: o.updatedAt, asking: endsOnQuestion(lines) });
     } catch { /* skip corrupt */ }
   }
   metas.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
@@ -212,4 +230,4 @@ function exportSession(session) {
   return lines.join('\n');
 }
 
-module.exports = { createSession, saveSession, loadSession, listSessions, searchSessions, deleteSession, sessionsDir, recordUsage, exportSession, isSubSession };
+module.exports = { createSession, saveSession, loadSession, listSessions, searchSessions, endsOnQuestion, deleteSession, sessionsDir, recordUsage, exportSession, isSubSession };

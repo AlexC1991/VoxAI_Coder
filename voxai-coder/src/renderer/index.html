@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-mNQEEAyT/x9v1L6qcOtwgBWssh7i0tOsxSaWKDsiMvE='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-GImvsXr7jRfiddMwe1ifgb5FaUEXGAAYx9GqHdRgj0M='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -83,6 +83,9 @@ button{font-family:inherit} ::selection{background:rgba(200,169,97,.26)}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* finished-ready: gold dot with soft glow */
 .dot.done{background:var(--gold);box-shadow:0 0 5px var(--goldedge)}
+/* waiting on you: a question or approval is open */
+.dot.wait{width:8px;height:8px;background:var(--gold);box-shadow:0 0 6px var(--goldedge);animation:pulse 1.6s infinite;margin:0 1px}
+.sess.waiting time{color:var(--gold)}
 .side-foot{display:flex;align-items:center;gap:8px;border:0;border-top:1px solid var(--edge);background:transparent;cursor:pointer;padding:10px 8px 4px;font-size:12.5px;color:var(--dim);font-family:inherit;text-align:left}
 .side-foot:hover .sf-label,.side-foot:hover .sf-bal{color:var(--ink)}
 .side-foot:focus-visible{outline:2px solid var(--goldedge);outline-offset:2px;border-radius:6px}
@@ -1578,8 +1581,12 @@ function toolActivity(name, args){
 }
 function setActivity(v, label){
   if (!v) return;
+  const waitWas = /^Waiting for/.test(v.activity || ''), waitNow = /^Waiting for/.test(label || '');
   v.activity = label;
   if (v === actView()) paintWork(v);
+  // The sidebar marks sessions that need you. After this event is done, since a card
+  // clears its question just after it says it is working again.
+  if (waitWas !== waitNow) { clearTimeout(setActivity._t); setActivity._t = setTimeout(renderSessionList, 0); }
 }
 function fmtClock(ms){
   const sec = Math.max(0, Math.floor(ms / 1000));
@@ -3883,6 +3890,7 @@ async function openSession(id){
     v.ctxFill = full.context || null;
     v.todos = Array.isArray(full.todos) ? full.todos : [];
     v.planKey = v.todos.map((t) => t && t.text).join('\n');
+    v.opened = true;
     T = prevT;
   }
   // ---- self-heal on EVERY open (stuck-state fix) ----
@@ -4004,6 +4012,13 @@ async function refreshSessionList(){
  * marked, and each has its own "new session here".
  */
 let CONTENT_HITS = new Map(), CONTENT_Q = '', contentTimer = null;
+// Needs you: a question or approval open in it. A session not opened since the app
+// started goes by the list, which knows about a question the app closed on.
+function sessWaiting(s){
+  const v = viewStore.get(s.id);
+  if (v && (v.pendingAsk || v.perm)) return true;
+  return !(v && v.opened) && !!s.waiting;
+}
 function renderSessionList(){
   const items = SESS_ITEMS;
   const box = $('sessions'); box.innerHTML = '';
@@ -4026,6 +4041,7 @@ function renderSessionList(){
     const open = q ? true : expandedFolders.has(k);
     const g = el('section', 'proj' + (open ? ' open' : '') + ((activeWd || 'Default') === k && activeId ? ' current' : ''));
     const busyHere = list.some((s) => viewStore.get(s.id) && viewStore.get(s.id).busy);
+    const waitHere = list.some(sessWaiting);
     const h = el('div', 'proj-h');
     h.setAttribute('role', 'button');
     h.tabIndex = 0;
@@ -4034,7 +4050,7 @@ function renderSessionList(){
     h.innerHTML = '<span class="chev">\u25b8</span>'
       + '<svg class="fic" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>'
       + '<span class="nm"></span>'
-      + (busyHere ? '<span class="dot busy" title="Working"></span>' : '<span class="ct">' + list.length + '</span>');
+      + (waitHere ? '<span class="dot wait" title="Waiting for your answer"></span>' : busyHere ? '<span class="dot busy" title="Working"></span>' : '<span class="ct">' + list.length + '</span>');
     h.querySelector('.nm').textContent = folderName(k);
     if (k !== 'Default') {
       const add = el('button', 'proj-add', '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>');
@@ -4065,11 +4081,14 @@ function renderSessionList(){
       b.type = 'button';
       b.dataset.sid = s.id;
       const busy = !!(viewStore.get(s.id) && viewStore.get(s.id).busy);
+      const waiting = sessWaiting(s);
       // A dot only while it is working. Every idle session used to carry the same gold
       // dot, which said nothing. How long ago it was used is what tells them apart.
-      b.innerHTML = (busy ? '<span class="dot busy"></span>' : '') + '<span class="s-t"></span><time></time>';
+      // One waiting on you says so instead: a pulsing dot and "needs you".
+      b.innerHTML = (waiting ? '<span class="dot wait"></span>' : busy ? '<span class="dot busy"></span>' : '') + '<span class="s-t"></span><time></time>';
+      if (waiting) b.classList.add('waiting');
       b.querySelector('.s-t').textContent = s.title || 'Session';
-      b.querySelector('time').textContent = relTime(s.updatedAt);
+      b.querySelector('time').textContent = waiting ? 'needs you' : relTime(s.updatedAt);
       // Found by what was said in it: show where.
       if (q && CONTENT_Q === q && CONTENT_HITS.has(s.id)) {
         const snip = el('span', 's-snip');
@@ -4077,7 +4096,7 @@ function renderSessionList(){
         if (at >= 0) { snip.appendChild(document.createTextNode(t.slice(0, at))); const mk = document.createElement('mark'); mk.textContent = t.slice(at, at + q.length); snip.appendChild(mk); snip.appendChild(document.createTextNode(t.slice(at + q.length))); } else snip.textContent = t;
         b.classList.add('has-snip'); b.appendChild(snip);
       }
-      b.title = (s.title || '') + '\n' + (s.updatedAt ? new Date(s.updatedAt).toLocaleString() : '');
+      b.title = (s.title || '') + '\n' + (waiting ? 'Waiting for your answer' : (s.updatedAt ? new Date(s.updatedAt).toLocaleString() : ''));
       b.onclick = () => openSession(s.id);
       b.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); showSessMenu(e, s); };
       inner.appendChild(b);
@@ -4651,9 +4670,8 @@ window.voxai.onAgentPermission(onAgentPerm);
 function onAgentPerm({ permId, sessionId, kind, target, canAlways, note }){
   const v = sessionId ? viewOf(sessionId) : actView();
   if (!v) return;
-  // The main process gives up after two minutes and treats it as a no; so does this.
-  const timer = setTimeout(() => { if (v.perm && v.perm.permId === permId) { v.perm = null; if (v === actView()) paintAsk(); } }, 120000);
-  v.perm = { permId, kind, target: String(target || ''), canAlways: !!canAlways, timer, shownAt: Date.now(), before: v.activity, note: note || '' };
+  // It stays until you answer or the run ends (it used to lapse to "no" after two minutes).
+  v.perm = { permId, kind, target: String(target || ''), canAlways: !!canAlways, timer: null, shownAt: Date.now(), before: v.activity, note: note || '' };
   setActivity(v, 'Waiting for you');
   if (v === actView()) paintAsk();
   refreshSessionList();
@@ -6090,7 +6108,12 @@ function addCodeCopy(root){
   await refreshSessionList();
   // A reloaded window: a session still running -- one waiting on you first -- opens
   // again, instead of the start screen with the run and its question out of sight.
-  try { const ids = await window.voxai.agentLiveSessions(); if (ids && ids.length && !activeId) await openSession(ids[0]); } catch {}
+  // Failing that, one the app closed on while it was asking you something.
+  try {
+    const ids = await window.voxai.agentLiveSessions();
+    const asked = (SESS_ITEMS.find((s) => s.waiting) || {}).id;
+    if (!activeId && (ids && ids.length ? ids[0] : asked)) await openSession(ids && ids.length ? ids[0] : asked);
+  } catch {}
   if(!S.hasOpenRouterKey){ openModal(); $('keyState').textContent='Set your OpenRouter API key to use agent turns — then hit Test, then Save.'; }
   $('backendState').className = 'sf-dot ok';
   $('backendDetail').textContent = 'Ready';

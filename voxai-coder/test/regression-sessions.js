@@ -542,8 +542,8 @@ function loadWith(file, stubs) {
     check('no empty Sessions heading', !HTML.includes('<div class="projhead">SESSIONS</div>') && !code.includes("'PROJECTS'"), 'still there');
     check('one status row replaces three cards', HTML.includes('id="sideStatus"') && !HTML.includes('class="usage"') && !HTML.includes('id="backendBox"'), 'cards remain');
     check('the model is not repeated in the sidebar', !HTML.includes('id="modelTag"') && !code.includes("$('modelTag')"), 'shown twice');
-    check('sessions show how long ago', code.includes('function relTime(') && code.includes("b.querySelector('time').textContent = relTime(s.updatedAt)"), 'no times');
-    check('only a working session gets a dot', code.includes("(busy ? '<span class=\"dot busy\"></span>' : '')"), 'every row dotted');
+    check('sessions show how long ago', code.includes('function relTime(') && code.includes("b.querySelector('time').textContent = waiting ? 'needs you' : relTime(s.updatedAt)"), 'no times');
+    check('only a working session gets a dot', code.includes("(waiting ? '<span class=\"dot wait\"></span>' : busy ? '<span class=\"dot busy\"></span>' : '')"), 'every row dotted');
 
     // rename: prompt() does not exist in Electron
     check('rename happens in place', code.includes('function renameInPlace(s)') && code.includes('renameInPlace(s);'), 'no inline rename');

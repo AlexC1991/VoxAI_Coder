@@ -1342,6 +1342,27 @@ async function drain(gen) {
     check('tool output is not searched', (await store.searchSessions(UD, 'zebra')).length === 0, 'matched tool output');
     fs.rmSync(UD, { recursive: true, force: true });
     check('the Copy button sits outside the scrolling code', HTML.includes("const wrap = el('div', 'code-wrap');") && HTML.includes('.code-wrap{position:relative}'), 'scrolls away');
+
+    // 0.2.42: prompts wait for you; sessions that need you are marked and reopened.
+    check('a question waits for an answer, with no time limit', !/setTimeout\(\(\) => \{ pendingInputs\.delete/.test(MAIN) && MAIN.includes('pendingInputs.set(inputId, { sessionId, runKey, event, resolve });'), 'skipped after ten minutes');
+    check('an approval waits too, in the app and the window', !/setTimeout\(\(\) => \{ pendingPerms\.delete\(permId\); resolve\(false\)/.test(MAIN) && HTML.includes('canAlways: !!canAlways, timer: null,'), 'lapses to no');
+    check('a run that ends takes its open prompts with it', /controllers\.delete\(runKey\);\s*\/\/[^\n]*\n[^\n]*\n\s*for \(const \[k, p\] of pendingInputs\) if \(p\.runKey === runKey\)[\s\S]{0,200}for \(const \[k, p\] of pendingPerms\) if \(p\.runKey === runKey\)/.test(MAIN), 'left waiting forever');
+    const UD2 = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-asking-'));
+    const q1 = store.createSession({ workdir: UD2, model: 'm', title: 'asked' });
+    q1.messages.push({ role: 'user', content: 'go' }, { role: 'assistant', content: null, tool_calls: [call('a1', 'read', {}), call('a2', 'ask_confirm', { message: 'ok?' })] }, { role: 'tool', tool_call_id: 'a1', content: '{}' });
+    const q2 = store.createSession({ workdir: UD2, model: 'm', title: 'answered' });
+    q2.messages.push({ role: 'assistant', content: null, tool_calls: [call('b1', 'ask_user', ask)] }, { role: 'tool', tool_call_id: 'b1', content: '{}' }, { role: 'assistant', content: 'done' });
+    const q3 = store.createSession({ workdir: UD2, model: 'm', title: 'plain' });
+    q3.messages.push({ role: 'assistant', content: null, tool_calls: [call('c1', 'read', {})] });
+    for (const s of [q1, q2, q3]) { s.usage = [{ input: 1 }]; await store.saveSession(UD2, s); }
+    const listed = Object.fromEntries((await store.listSessions(UD2)).map((s) => [s.title, s.asking]));
+    check('the list knows which conversations end on an unanswered question', listed.asked === true && listed.answered === false && listed.plain === false, listed);
+    fs.rmSync(UD2, { recursive: true, force: true });
+    check('the app says which sessions need you', /ipcMain\.handle\('sessions:list'[\s\S]{0,900}waiting: open\.has\(s\.id\) \|\| \(!!s\.asking && !running\.has\(s\.id\)\)/.test(MAIN), 'not reported');
+    check('the sidebar marks them "needs you"', HTML.includes('function sessWaiting(s){') && HTML.includes("waiting ? 'needs you' : relTime(s.updatedAt)") && HTML.includes('.dot.wait{'), 'unmarked');
+    check('the mark follows the question as it opens and closes', HTML.includes("if (waitWas !== waitNow) { clearTimeout(setActivity._t); setActivity._t = setTimeout(renderSessionList, 0); }"), 'stale mark');
+    check('a new session\'s row has its name while the run is going', MAIN.includes("...(live.get(s.id) && live.get(s.id).title ? { title: live.get(s.id).title } : {})"), '"New session"');
+    check('at start, a session the app closed on while asking is opened', HTML.includes("const asked = (SESS_ITEMS.find((s) => s.waiting) || {}).id;"), 'start screen');
   }
 
   try { fs.rmSync(WD, { recursive: true, force: true }); } catch {}

@@ -143,8 +143,13 @@ function saveSettings(patch) {
 const live = new Map(); // id → session object
 const controllers = new Map(); // runKey → AbortController
 const sessionAlwaysAllow = new Map(); // sessionId -> Set<string> (normalized target) 
-const pendingPerms = new Map(); // permId → {resolve, timer}
-const pendingInputs = new Map(); // inputId → {resolve, timer}  (ask_user / ask_confirm)
+const pendingPerms = new Map(); // permId → {msg, runKey, resolve}
+const pendingInputs = new Map(); // inputId → {sessionId, runKey, event, resolve}  (ask_user / ask_confirm)
+/** Sessions with a question or an approval open right now. */
+function waitingIds() {
+  return new Set([...pendingInputs.values()].map((p) => p.sessionId)
+    .concat([...pendingPerms.values()].map((p) => p.msg && p.msg.sessionId)).filter(Boolean));
+}
 
 function userData() { return app.getPath('userData'); }
 async function getLive(id) {
@@ -584,7 +589,16 @@ app.whenReady().then(() => {
   ipcMain.handle('settings:keychain', () => ({ available: safeStorage.isEncryptionAvailable() }));
 
   // sessions
-  ipcMain.handle('sessions:list', () => store.listSessions(userData()));
+  // `waiting`: it needs you -- a question or approval open in a run, or a question the
+  // app closed on (store's `asking`) with no run going. The sidebar marks these.
+  ipcMain.handle('sessions:list', async () => {
+    const items = await store.listSessions(userData());
+    const running = new Set([...controllers.keys()].map((k) => k.split(':')[0]));
+    const open = waitingIds();
+    // The title in memory: a run names its session from the first message before the
+    // file is next saved, and the row said "New session" meanwhile.
+    return items.map((s) => ({ ...s, ...(live.get(s.id) && live.get(s.id).title ? { title: live.get(s.id).title } : {}), waiting: open.has(s.id) || (!!s.asking && !running.has(s.id)) }));
+  });
   ipcMain.handle('sessions:search', (_e, query) => store.searchSessions(userData(), query));
   ipcMain.handle('sessions:create', async (_e, { title, workdir, model }) => {
     const s = getSettings(false);
@@ -766,7 +780,7 @@ app.whenReady().then(() => {
   }));
   // Sessions with a run going, the ones waiting on the user first.
   ipcMain.handle('agent:live-sessions', () => {
-    const waiting = new Set([...pendingInputs.values()].map((p) => p.sessionId).concat([...pendingPerms.values()].map((p) => p.msg && p.msg.sessionId)));
+    const waiting = waitingIds();
     const ids = [...new Set([...controllers.keys()].map((k) => k.split(':')[0]))];
     return ids.sort((a, b) => (waiting.has(b) ? 1 : 0) - (waiting.has(a) ? 1 : 0));
   });
@@ -793,12 +807,12 @@ app.whenReady().then(() => {
       const key = kind + '\u0000' + String(target || '');
       if (sessionAlwaysAllow.get(sessionId) && sessionAlwaysAllow.get(sessionId).has(key)) { resolve(true); return; }
       const permId = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
-      const timer = setTimeout(() => { pendingPerms.delete(permId); resolve(false); }, 120000);
+      // It waits until you answer or the run ends (see the finally below). It used to
+      // count as "no" after two minutes, so stepping away turned approvals into refusals.
       const msg = { permId, sessionId, kind, target, canAlways: true, note: note || '' };
       pendingPerms.set(permId, {
-        msg,
+        msg, runKey,
         resolve: (v, always) => {
-          clearTimeout(timer);
           if (v && always) {
             if (!sessionAlwaysAllow.has(sessionId)) sessionAlwaysAllow.set(sessionId, new Set());
             sessionAlwaysAllow.get(sessionId).add(key);
@@ -811,9 +825,10 @@ app.whenReady().then(() => {
 
     const askUserInput = ({ question, options, kind, questions }) => new Promise((resolve) => {
       const inputId = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
-      const timer = setTimeout(() => { pendingInputs.delete(inputId); resolve({ answer: null, cancelled: true }); }, 600000);
+      // No time limit: it used to count as skipped after ten minutes, and the run went
+      // ahead deciding for you. It waits until you answer or the run ends.
       const event = { type: 'user_input', inputId, question, options: options || [], kind: kind || 'ask', ...(Array.isArray(questions) ? { questions } : {}) };
-      pendingInputs.set(inputId, { sessionId, runKey, event, resolve: (v) => { clearTimeout(timer); resolve(v); } });
+      pendingInputs.set(inputId, { sessionId, runKey, event, resolve });
       // Through the agent-event channel the thread already draws. It was sent on its own
       // 'agent:user_input' channel that nothing listened to, so the agent's questions
       // never appeared and the run sat waiting ten minutes for an answer. Found in a live run.
@@ -868,6 +883,10 @@ app.whenReady().then(() => {
         const c1 = chatWebContents(); c1 && c1.send('agent:event', { sessionId, runKey, event: { type: 'error', message: err.message } });
       } finally {
         controllers.delete(runKey);
+        // A run that ended (Stop, an error) takes its open questions and approvals with
+        // it: nothing is left waiting for an answer that can no longer go anywhere.
+        for (const [k, p] of pendingInputs) if (p.runKey === runKey) { pendingInputs.delete(k); try { p.resolve({ answer: null, cancelled: true }); } catch {} }
+        for (const [k, p] of pendingPerms) if (p.runKey === runKey) { pendingPerms.delete(k); try { p.resolve(false, false); } catch {} }
         // flush any pending debounced save now (dupe with the final save below is fine)
         if (saveTimers.has(sessionId)) { clearTimeout(saveTimers.get(sessionId)); saveTimers.delete(sessionId); }
         try { if (sess && sess.messages && sess.messages.length) await store.saveSession(userData(), sess); } catch {}
