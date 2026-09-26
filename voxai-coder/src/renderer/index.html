@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-npa5kcLWv8TQHieR84x3t4TFaM8MHl3sgij6aLCYJVc='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-mIw9e/9+szWdJEfFLDHhyy/gIlk8BmTMRMSE09ipL7Q='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -2907,6 +2907,8 @@ function rowMeta(rec){
     if (rec.name === 'ask_confirm') return { html: o.cancelled ? 'no answer' : (o.confirmed ? 'confirmed' : 'denied') };
     if (o.cancelled) return { html: 'skipped' };
     if (o.answer != null && o.answer !== '') return { html: esc(trunc(String(o.answer), 60)) };
+    // Several questions answered in one typed sentence arrive as a note.
+    if (o.note) return { html: esc(trunc(String(o.note), 60)) };
     const n = Object.keys(o.answers || {}).length;
     return { html: n ? n + (n === 1 ? ' answer' : ' answers') : 'no answer' };
   }
@@ -3032,6 +3034,22 @@ function fillDetail(box, rec){
   box.appendChild(body);
   const term = (text) => { const t = el('div', 'tr-term'); if (text != null) t.textContent = text; body.appendChild(t); return t; };
   const line = (t, cls, text) => { const sp = el('span', cls); sp.textContent = text; t.appendChild(sp); };
+  // What was asked and what you answered, question by question -- not the raw JSON.
+  if (rec.name === 'ask_user' && rec.result) {
+    let o = null; try { o = JSON.parse(rec.result); } catch { o = null; }
+    const qs = Array.isArray(a.questions) && a.questions.length ? a.questions : (a.question ? [{ question: a.question }] : []);
+    if (o && qs.length) {
+      const t = term();
+      qs.forEach((q, i) => {
+        const ans = o.answers ? o.answers[q.question] : undefined;
+        const shown = o.cancelled ? 'skipped' : Array.isArray(ans) ? ans.join(', ') : (ans != null && ans !== '' ? String(ans) : (qs.length === 1 && o.answer ? String(o.answer) : '—'));
+        line(t, 'p', (i ? '\n' : '') + (q.header ? q.header + ': ' : '') + String(q.question || ''));
+        t.appendChild(document.createTextNode('\n  ' + shown));
+      });
+      if (o.note) t.appendChild(document.createTextNode('\n\nIn your words: ' + o.note));
+      return;
+    }
+  }
   if (rec.name === 'spawn_agent' || rec.name === 'spawn_parallel') {
     box.removeChild(body);
     if (rec.subs && rec.subs.size) { fillSubs(box, rec); return; }
@@ -4376,7 +4394,35 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     }, true);
     const uqIn = box.querySelector('#uqText');
     if (uqIn) uqIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') settle(uqIn.value); }, true);
+    // It waits like a question. Esc dismisses it -- it used to stop the whole run -- and
+    // the message box answers it: "yes" confirms, "no" declines, anything else declines
+    // with your words passed on ("no, call it open-hours.txt"). Found in a live run.
+    const onKeyC = (e) => {
+      if (!box.isConnected || v !== actView()) return;
+      if (e.key === 'Escape' && !(isField(e.target) && e.target.value)) { e.preventDefault(); e.stopImmediatePropagation(); cancel.click(); }
+    };
+    document.addEventListener('keydown', onKeyC, true);
+    const endWait = () => { if (v.pendingAsk && v.pendingAsk.box === box) v.pendingAsk = null; document.removeEventListener('keydown', onKeyC, true); if (v === actView()) updateSendState(); };
+    box.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('button')) endWait(); });
+    v.pendingAsk = {
+      box, kind: event.kind === 'confirm' ? 'confirm' : 'ask',
+      answerTyped: (text) => {
+        const t = String(text).trim();
+        const yes = /^(y|yes|yeah|yep|ok|okay|confirm|go( ahead)?|do it|proceed|sure)\b/i.test(t);
+        const no = /^(n|no|nope|deny|stop|cancel)\b/i.test(t) && t.split(/\s+/).length <= 2;
+        const val = event.kind === 'confirm' ? (yes ? 'yes' : no ? 'no' : t) : t;
+        try { window.voxai.agentAnswer(event.inputId, val); } catch {}
+        settle(t); endWait();
+      },
+      expire: () => {
+        const line = el('div', 'uq-done');
+        line.appendChild(el('span', 'uq-q', esc(event.question || '')));
+        line.appendChild(el('span', 'uq-a', 'Not answered — the run ended'));
+        box.replaceWith(line); endWait();
+      },
+    };
     setActivity(v, 'Waiting for your answer');
+    if (v === actView()) updateSendState();
     const rq = RR(); if (rq) { rq.appendChild(box); followThread(); }
   } else if (event.type === 'warning' && event.code === 'cache-miss') {
     if (!v._cacheNoted) {
@@ -5280,7 +5326,7 @@ function updateSendState(){
   const keys = $('cmpKeys');
   if (keys) {
     const k = (v && v.perm) ? ['\u21b5 allow once', 'Esc deny']
-      : (v && v.pendingAsk) ? (hasText ? ['\u21b5 answer the question'] : ['pick an option above, or type an answer', 'Esc skip'])
+      : (v && v.pendingAsk) ? (hasText ? ['\u21b5 answer'] : v.pendingAsk.kind === 'confirm' ? ['Confirm or Deny above, or type yes / no', 'Esc dismiss'] : ['pick an option above, or type an answer', 'Esc skip'])
       : busy ? (hasText ? ['\u21b5 queue', '\u21e7\u21b5 new line'] : ['\u21b5 stop', 'type to queue a message'])
       : (!hasText && queued) ? ['\u21b5 send the next queued message']
       : ['\u21b5 send', '\u21e7\u21b5 new line'];
@@ -5288,7 +5334,7 @@ function updateSendState(){
   }
   const p = $('prompt');
   // While the agent waits on a question, the box answers it (send() routes it there).
-  if (p) p.placeholder = (v && v.pendingAsk) ? 'Type your answer, or pick above\u2026' : busy ? (queued ? 'Type to queue another\u2026' : 'Type to queue a message\u2026') : 'Ask anything';
+  if (p) p.placeholder = (v && v.pendingAsk) ? (v.pendingAsk.kind === 'confirm' ? 'Type yes or no, or say what to do instead\u2026' : 'Type your answer, or pick above\u2026') : busy ? (queued ? 'Type to queue another\u2026' : 'Type to queue a message\u2026') : 'Ask anything';
 }
 function stopCurrent(){
   const v = actView();
@@ -5785,7 +5831,9 @@ function askCard(v, event){
     try { window.voxai.agentAnswer(event.inputId, cancelled ? null : payload, cancelled); } catch {}
     const rec = el('div', 'uq-done ask2-done');
     if (cancelled) { rec.appendChild(el('span', 'uq-q', esc(qs.length === 1 ? qs[0].question : qs.length + ' questions'))); rec.appendChild(el('span', 'uq-a', 'Skipped')); }
-    else if (typeof payload === 'string') { rec.appendChild(el('span', 'uq-q', esc(qs[0].question))); rec.appendChild(el('span', 'uq-a', esc(payload))); }
+    // Typed in the message box: with several questions it answers all of them, so
+    // it is not labelled with the first one alone.
+    else if (typeof payload === 'string') { rec.appendChild(el('span', 'uq-q', esc(qs.length === 1 ? qs[0].question : qs.length + ' questions'))); rec.appendChild(el('span', 'uq-a', esc(payload))); }
     else qs.forEach((q) => {
       const a = payload.answers[q.question];
       const line = el('div', 'uq-line');

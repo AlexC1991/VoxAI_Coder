@@ -655,7 +655,9 @@ function buildTools(opts) {
     required: ['message'], additionalProperties: false,
   }, async (args, c) => {
     const res = await c.userInput({ question: String(args.message || ''), options: [{ label: 'Confirm', value: 'yes' }, { label: 'Deny', value: 'no' }], kind: 'confirm' });
-    return { confirmed: res ? res.answer === 'yes' : false, cancelled: res ? !!res.cancelled : true };
+    // Declined in the user's own words ("no, call it open-hours.txt"): pass them on.
+    const ans = res && typeof res.answer === 'string' ? res.answer : '';
+    return { confirmed: ans === 'yes', cancelled: res ? !!res.cancelled : true, ...(ans && ans !== 'yes' && ans !== 'no' ? { note: ans } : {}) };
   });
 
   const ALL = [

@@ -829,6 +829,17 @@ async function drain(gen) {
       check('the message box answers a waiting question', H.includes('if (v.pendingAsk) {\n    v.pendingAsk.answerTyped(text);'), 'queued instead');
       check('a run that ends first leaves no live card', H.includes('if (v.pendingAsk) v.pendingAsk.expire();'), 'clickable');
       check('Esc skips the question rather than stopping the run', H.includes('|| !!(v && v.pendingAsk) ||'), 'stops the run');
+      // The confirmation card: Esc stopped the whole run, and typed text was queued
+      // behind the run waiting for it.
+      check('a confirmation waits like a question: Esc dismisses, typing answers', H.includes("box, kind: event.kind === 'confirm' ? 'confirm' : 'ask',") && H.includes("if (e.key === 'Escape' && !(isField(e.target) && e.target.value)) { e.preventDefault(); e.stopImmediatePropagation(); cancel.click(); }"), 'stops the run');
+      let cAsked = null;
+      const cctx = { ...actx, userInput: async (q) => { cAsked = q; return { answer: 'no, call it store-hours.txt instead', cancelled: false }; } };
+      const conf = buildTools(cctx).ALL.find((t) => t.def.function.name === 'ask_confirm');
+      const cr = await conf.run({ message: 'Rename it?' }, cctx);
+      check('declining in your own words reaches the agent', cr.confirmed === false && cr.note === 'no, call it store-hours.txt instead', cr);
+      const cy = await conf.run({ message: 'Rename it?' }, { ...cctx, userInput: async () => ({ answer: 'yes', cancelled: false }) });
+      check('"yes" confirms', cy.confirmed === true && !cy.note, cy);
+      check('several questions answered in one sentence are labelled as such', H.includes("esc(qs.length === 1 ? qs[0].question : qs.length + ' questions')") && H.includes("if (o.note) return { html: esc(trunc(String(o.note), 60)) };"), 'first question only');
       check('the model is told when to ask, and when not to', read('src/backend/agent.js').includes('ask with ask_user before building rather than guessing: put up to 4 related questions in one call'), 'not told');
     }
     // 0.2.37: the Memory page back, Esc to stop, a Content-Security-Policy, Copy on code
