@@ -164,6 +164,17 @@ function armDesktopEsc(runKey, ctl) {
   clearTimeout(escArm.timer);
   escArm.timer = setTimeout(() => disarmDesktopEsc(runKey), 30000);
 }
+// The agent's own Esc (closing a menu) must reach the app and must not end its run.
+try {
+  require('../backend/cu/desktop').setEscHooks({
+    suspend: () => { if (escArm) { try { require('electron').globalShortcut.unregister('Escape'); } catch { /* not registered */ } } },
+    resume: () => {
+      const a = escArm;
+      if (!a) return;
+      try { require('electron').globalShortcut.register('Escape', () => { const x = escArm; disarmDesktopEsc(); if (x) { try { x.ctl.abort(); } catch { /* ended */ } } }); } catch { /* taken */ }
+    },
+  });
+} catch { /* no desktop control on this platform */ }
 /** Sessions with a question or an approval open right now. */
 function waitingIds() {
   return new Set([...pendingInputs.values()].map((p) => p.sessionId)

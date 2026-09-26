@@ -228,10 +228,13 @@ function makeComputerUseTool(opts) {
       switch (name) {
         case 'cu_launch': {
           if (backend === 'native') {
+            // Started, then the windows by name: not a picture of the whole desktop and every window's
+            // handle and position, which is more than the next step needs (it reads the one window).
             const r = native.launch(args.nativePath, '');
-            const shot = r && r.ok ? native.screenshot(0).dataUrl : null;
-            emitImage(ctx, shot, 'native launch');
-            return { backend, ok: true, windows: native.listWindows().windows, screenshot: shot || null };
+            if (!r || !r.ok) return { backend, ok: false, error: (r && r.error) || 'Windows could not start it' };
+            await new Promise((res) => setTimeout(res, 1500));
+            return { backend, ok: true, started: String(args.nativePath), windows: desktop.list().windows,
+              next: 'state with backend "native" and window (its title) to work in it; it may take a moment to appear.' };
           }
           if (!args.url) throw new Error('open needs something to open: a url (http(s):// or file:///), '
             + 'or nativePath — a file to view, or an .exe to launch.');

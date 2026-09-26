@@ -23,10 +23,19 @@ if (fs.existsSync(OUT) && fs.statSync(OUT).mtimeMs > fs.statSync(SRC).mtimeMs) {
   process.exit(0);
 }
 fs.mkdirSync(OUT_DIR, { recursive: true });
-execFileSync(CSC, [
-  '/nologo', '/optimize+', '/platform:anycpu', '/target:exe', `/out:${OUT}`,
-  `/r:${path.join(FW, 'WPF', 'UIAutomationClient.dll')}`, `/r:${path.join(FW, 'WPF', 'UIAutomationTypes.dll')}`,
-  `/r:${path.join(FW, 'WPF', 'WindowsBase.dll')}`, `/r:${path.join(FW, 'System.Web.Extensions.dll')}`,
-  SRC,
-], { stdio: 'inherit' });
+// --strict (release builds): a helper that could not be rebuilt must not ship. Otherwise (npm start) a
+// helper still held by a running copy of the app is kept, with a note, instead of failing the start.
+const strict = process.argv.includes('--strict');
+try {
+  execFileSync(CSC, [
+    '/nologo', '/optimize+', '/platform:anycpu', '/target:exe', `/out:${OUT}`,
+    `/r:${path.join(FW, 'WPF', 'UIAutomationClient.dll')}`, `/r:${path.join(FW, 'WPF', 'UIAutomationTypes.dll')}`,
+    `/r:${path.join(FW, 'WPF', 'WindowsBase.dll')}`, `/r:${path.join(FW, 'System.Web.Extensions.dll')}`,
+    SRC,
+  ], { stdio: 'inherit' });
+} catch (e) {
+  if (strict || !fs.existsSync(OUT)) throw e;
+  console.log('build-uia: the helper is in use (VoxAI Coder is running), so the existing one is kept -- close the app and start again to rebuild');
+  process.exit(0);
+}
 console.log(`build-uia: built ${path.relative(ROOT, OUT)} (${(fs.statSync(OUT).size / 1024).toFixed(0)} KB)`);

@@ -516,7 +516,9 @@ async function* runAgent(opts) {
     const act = String(a.action || '');
     // The desktop: your real keyboard and mouse, in any app. Always yours to approve, naming the app
     // and the control; "Always for <app>" covers that app for the session (cu/desktop.js).
-    if (name === 'computer' && (a.backend === 'native' || act === 'focus') && ['click', 'type', 'press', 'scroll', 'focus'].includes(act)) {
+    if (name === 'computer' && ((a.backend === 'native' || act === 'focus') && ['click', 'type', 'press', 'scroll', 'focus'].includes(act)
+      // Starting a program, named with or without .exe ("calc" slipped past an extension check).
+      || (act === 'open' && a.nativePath && (a.backend === 'native' || /\.(exe|bat|cmd|lnk|msc)$/i.test(String(a.nativePath)))))) {
       let d = null;
       try { d = require('./cu/desktop').describe(session.id, act, a); } catch { d = null; }
       if (d) return { kind: 'desktop-act', target: d.target, alwaysKey: d.alwaysKey, alwaysLabel: d.alwaysLabel };

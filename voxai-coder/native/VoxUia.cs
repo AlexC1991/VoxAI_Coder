@@ -226,6 +226,11 @@ static class ByteUia
         Rect win = root.Current.BoundingRectangle;
         var watch = Stopwatch.StartNew();
         var found = new List<KeyValuePair<int, AutomationElement>>();   // rank, element
+        // What the window says: static text (a calculator's display, a label, a status line). Not
+        // controls, so it is not numbered; without it a model that cannot see images could not read
+        // a result at all. (VoxAI addition.)
+        var texts = new List<object>();
+        var seenText = new HashSet<string>();
         var queue = new Queue<KeyValuePair<AutomationElement, int>>();
         queue.Enqueue(new KeyValuePair<AutomationElement, int>(root, 0));
         var walker = TreeWalker.ControlViewWalker;
@@ -238,6 +243,13 @@ static class ByteUia
             seen++;
             AutomationElement.AutomationElementInformation c;
             try { c = el.Current; } catch { continue; }
+            if (!menu && item.Value > 0 && !c.IsOffscreen && c.ControlType == ControlType.Text && texts.Count < 60)
+            {
+                string t = Clip(c.Name, 160);
+                Rect tr = c.BoundingRectangle;
+                if (t.Length > 0 && !tr.IsEmpty && tr.IntersectsWith(win) && (near.IsEmpty || tr.IntersectsWith(near))
+                    && (needle.Length == 0 || t.ToLowerInvariant().Contains(needle)) && seenText.Add(t)) texts.Add(t);
+            }
             if (item.Value > 0 && !c.IsOffscreen && (menu ? c.ControlType == ControlType.MenuItem : Interactive.Contains(c.ControlType)))
             {
                 Rect r = c.BoundingRectangle;
@@ -269,7 +281,7 @@ static class ByteUia
             try { list.Add(Describe(f.Value, IdFor(f.Value))); } catch { }
         }
         return new Dictionary<string, object> {
-            { "window", Clip(root.Current.Name, 80) }, { "elements", list }, { "seen", seen }, { "ms", watch.ElapsedMilliseconds },
+            { "window", Clip(root.Current.Name, 80) }, { "elements", list }, { "texts", texts }, { "seen", seen }, { "ms", watch.ElapsedMilliseconds },
             { "complete", queue.Count == 0 } };
     }
 

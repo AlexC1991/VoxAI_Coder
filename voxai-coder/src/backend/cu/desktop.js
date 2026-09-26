@@ -18,6 +18,9 @@ const native = require('./native');
 const { UiaHelper } = require('./uia');
 
 const uia = new UiaHelper();
+// Set by main.js, which owns the Esc kill switch.
+const escHooks = { suspend: () => {}, resume: () => {} };
+function setEscHooks(h) { if (h && typeof h.suspend === 'function' && typeof h.resume === 'function') Object.assign(escHooks, h); }
 const MOVED_PX = 40;
 const MAX_TEXT = 8000;
 const MENU_MS = 450;
@@ -34,7 +37,12 @@ function privacyBlock(w) {
   const t = String(w.title || '').toLowerCase();
   return PRIVATE_TITLES.some((p) => t.includes(p)) ? 'that is a private browsing window' : null;
 }
-const appName = (w) => String((w && w.app) || '').replace(/\.exe$/i, '') || 'the app';
+// A Store app's window belongs to Windows' host (ApplicationFrameHost): name it by its title instead.
+const appName = (w) => {
+  const exe = String((w && w.app) || '').replace(/\.exe$/i, '');
+  if (/^applicationframehost$/i.test(exe) && w && w.title) return String(w.title).split(' - ').pop().slice(0, 40);
+  return exe || 'the app';
+};
 
 // Per session: the window being worked in, its listed controls, the last picture, where the mouse was left.
 const states = new Map();
@@ -125,6 +133,13 @@ function describeAll(s, elements) {
       + `${e.enabled ? '' : ' (disabled)'}${e.password ? ' (password box: the user types it)' : ''}${at ? ` at ${at.x},${at.y}` : ''}`;
   }).join('\n');
 }
+/** What the window says (texts from the helper), without repeating the controls' own names. */
+function readText(texts, elements) {
+  const names = new Set((elements || []).map((e) => String(e.name || '')));
+  // Single characters are icon glyphs (a font's symbols), not words.
+  return (texts || []).filter((t) => !names.has(t) && String(t).trim().length > 1).slice(0, 30);
+}
+
 function elementFor(s, index) {
   if (index === undefined || index === null || index === '') throw new Error('this needs a control number: call state (with window) first, then use its [number]');
   const e = s.elements.get(Number(index));
@@ -140,9 +155,15 @@ async function after(s, ctx, w, did) {
   try { const f = await uia.focused(); if (f && f.type) focused = `${f.type} "${f.name || ''}"`; } catch { /* no helper */ }
   const shot = native.screenshot({ hwnd: w.hwnd });
   recordCapture(s, shot);
+  // What the window says now: the result of the step, for a model that cannot see the picture.
+  let text = [];
+  if (uia.available) {
+    try { const r = await uia.list(w.hwnd, '', 80); remember(s, w.hwnd, r.elements || []); text = readText(r.texts, r.elements); } catch { /* the picture still shows it */ }
+  }
   return {
     backend: 'native', ok: true, did, window: { title: w.title, app: appName(w) },
     ...(focused ? { keyboardFocus: focused } : {}),
+    ...(text.length ? { text } : {}),
     screenshot: shot.ok ? shot.dataUrl : null,
     next: 'Check the picture (or call state again) before the next step.',
   };
@@ -175,7 +196,7 @@ async function state(args, ctx) {
   if (w.minimised) { input.restoreQuietly(w.hwnd); await sleep(400); }
   const shot = native.screenshot({ hwnd: w.hwnd });
   recordCapture(s, shot);
-  let controls = '', count = 0, complete = true, note = '';
+  let controls = '', count = 0, complete = true, note = '', text = [];
   if (uia.available) {
     try {
       const r = await uia.list(w.hwnd, String((args && args.find) || '').slice(0, 40), 80);
@@ -183,11 +204,13 @@ async function state(args, ctx) {
       count = (r.elements || []).length;
       complete = r.complete !== false;
       controls = count ? describeAll(s, r.elements) : `no controls${args && args.find ? ` matching "${args.find}"` : ''} found: use the picture and x/y`;
+      text = readText(r.texts, r.elements);
     } catch (e) { note = `The control list failed (${e.message}): use the picture and x/y.`; }
   } else note = 'The control list is not available on this computer: use the picture and x/y.';
   return {
     backend: 'native', surface: 'native', window: { title: w.title, app: appName(w) },
     controls, elementCount: count, ...(complete ? {} : { more: 'there are more: use find to narrow the list' }),
+    ...(text.length ? { text } : {}),
     ...(note ? { note } : {}),
     screenshot: shot.ok ? shot.dataUrl : null,
     how: 'Act on a control by its [number] (index): click, type (with index to type into it). x and y, when needed, are pixels in this picture.',
@@ -261,10 +284,14 @@ async function press(args, ctx) {
   const s = stateFor(ctx);
   guard(s, ctx);
   const w = resolveTarget(s, args);
-  input.parseKeys(String(args.key || ''));   // refuse Windows-key shortcuts before touching anything
+  const keys = input.parseKeys(String(args.key || ''));   // refuse Windows-key shortcuts before touching anything
   busy(ctx);
   await focusOn(w);
-  await input.pressKeys(String(args.key));
+  // Esc is the user's kill switch (a global shortcut while this runs): it would take the agent's own
+  // Esc too -- ending the run -- and the app would never get it. Step it aside for this key press.
+  const esc = keys.some((k) => k.vk === 0x1b);
+  if (esc) escHooks.suspend();
+  try { await input.pressKeys(String(args.key)); } finally { if (esc) setTimeout(() => escHooks.resume(), 150); }
   return after(s, ctx, w, `pressed ${args.key}`);
 }
 
@@ -304,6 +331,10 @@ function screenshot(args, ctx) {
  * and the app its "Always" covers. Null when this is not a desktop action.
  */
 function describe(sessionId, act, a) {
+  if (act === 'open' && a.nativePath) {
+    const exe = String(a.nativePath).split(/[\\/]/).pop();
+    return { target: `Start ${exe}${/[\\/]/.test(String(a.nativePath)) ? ` (${String(a.nativePath).slice(0, 120)})` : ''}`, alwaysKey: 'start:' + exe.toLowerCase(), alwaysLabel: `Always for ${exe}` };
+  }
   if (!['click', 'type', 'press', 'scroll', 'focus'].includes(act)) return null;
   const s = states.get(sessionId) || { elements: new Map() };
   let w = null;
@@ -321,4 +352,4 @@ function describe(sessionId, act, a) {
   return { target, alwaysKey: 'app:' + app.toLowerCase(), alwaysLabel: `Always for ${app}` };
 }
 
-module.exports = { list, focus, state, click, type, press, scroll, screenshot, describe, privacyBlock, findWindow, fitScale, uia, _states: states };
+module.exports = { list, focus, state, click, type, press, scroll, screenshot, describe, privacyBlock, findWindow, fitScale, appName, setEscHooks, uia, _states: states };
