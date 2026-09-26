@@ -514,24 +514,28 @@ async function* runAgent(opts) {
   const browserGate = async (name, a) => {
     a = a || {};
     const act = String(a.action || '');
+    // Where the call will really go -- the same answer the tool uses (cu/index.js surfaceFor), so a
+    // desktop click without `backend` is not asked about as a click on the website in the preview.
+    let surface = a.backend === 'native' ? 'native' : 'browser';
+    if (name === 'computer') { try { surface = require('./cu').surfaceForAction(session.id, act, a); } catch { /* keep the guess */ } }
     // The desktop: your real keyboard and mouse, in any app. Always yours to approve, naming the app
     // and the control; "Always for <app>" covers that app for the session (cu/desktop.js).
-    if (name === 'computer' && ((a.backend === 'native' || act === 'focus') && ['click', 'type', 'press', 'scroll', 'focus'].includes(act)
+    if (name === 'computer' && surface === 'native' && (['click', 'type', 'press', 'scroll', 'focus'].includes(act)
       // Starting a program, named with or without .exe ("calc" slipped past an extension check).
-      || (act === 'open' && a.nativePath && (a.backend === 'native' || /\.(exe|bat|cmd|lnk|msc)$/i.test(String(a.nativePath)))))) {
+      || (act === 'open' && a.nativePath))) {
       let d = null;
       try { d = require('./cu/desktop').describe(session.id, act, a); } catch { d = null; }
       if (d) return { kind: 'desktop-act', target: d.target, alwaysKey: d.alwaysKey, alwaysLabel: d.alwaysLabel };
     }
     // Looking at the desktop, in words: the prompt read {"action":"state","backend":"native",...}.
-    if (name === 'computer' && a.backend === 'native' && ['list', 'state', 'screenshot'].includes(act)) {
+    if (name === 'computer' && surface === 'native' && ['list', 'state', 'screenshot'].includes(act)) {
       const win = String(a.window || '').slice(0, 60);
       const target = act === 'list' ? 'See which windows are open on your desktop'
         : act === 'state' ? (win ? `Read the buttons and boxes in "${win}" and take a picture of it` : 'Read the buttons and boxes in the window it is working in')
           : (win ? `Take a picture of the "${win}" window` : 'Take a picture of your whole screen');
       return { kind: 'desktop-look', target, alwaysKey: 'look:' + (win.toLowerCase() || act), alwaysLabel: win ? `Always for "${win}"` : 'Always for this' };
     }
-    if (name !== 'computer' || a.backend === 'native' || !['click', 'type', 'press'].includes(act)) return null;
+    if (name !== 'computer' || surface === 'native' || !['click', 'type', 'press'].includes(act)) return null;
     let wc = null;
     let host = '';
     try {
@@ -618,6 +622,9 @@ async function* runAgent(opts) {
     // Set while a call the user has just approved at the sandbox gate is running, so
     // the tool's own check does not ask the same question a second time.
     callApproved: false,
+    // Set when the user has just answered a prompt for this call (not when "Always" or a rule allowed
+    // it): answering moved their mouse, which the desktop's stop-on-mouse-move check must not count.
+    userAnswered: false,
     // Resolves true when the action may go ahead; throws when it is refused.
     checkPermission: async (kind, target, opts) => {
       if (ctx.callApproved) return true;
@@ -646,6 +653,7 @@ async function* runAgent(opts) {
       // ask the UI via callback; must resolve true/false (timeout → false)
       const allowed = await askPermission({ kind, target, note, ...(opts && opts.alwaysKey ? { alwaysKey: opts.alwaysKey, alwaysLabel: opts.alwaysLabel } : {}) });
       if (!allowed) throw new Error(`permission denied: ${kind} ${target}`);
+      ctx.userAnswered = allowed !== 'always';
       return true;
     },
   };
@@ -989,6 +997,7 @@ async function* runAgent(opts) {
       const tc = toolCalls[i];
       const id = tc.id || `call_${turn}_${i}`;
       ctx.callApproved = false;
+      ctx.userAnswered = false;
       let args = {};
       try { args = tc.arguments ? JSON.parse(tc.arguments) : {}; }
       catch (e) {
@@ -1125,6 +1134,10 @@ async function* runAgent(opts) {
         const result = outcome.value;
         // PLAN MODE: an approved ask_confirm unlocks mutating tools for the run.
         if (planMode && tc.name === 'ask_confirm' && result && result.confirmed) planApproved = true;
+        // An answer from the user lifts a desktop pause that their moving the mouse caused.
+        if ((tc.name === 'ask_user' || tc.name === 'ask_confirm') && result && !result.cancelled) {
+          try { require('./cu/desktop').userAnswered(session.id); } catch { /* no desktop control here */ }
+        }
         if (planMode && tc.name === 'ask_user' && result && (result.answer === 'yes' || result.answer === 'approve' || result.answer === 'continue')) {
           const planStr = String(args.question || '').toLowerCase();
           if (/plan|proceed|approve|go ahead|continue/i.test(planStr) || /proceed|approve/i.test(planStr)) planApproved = true;

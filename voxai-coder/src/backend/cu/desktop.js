@@ -85,19 +85,28 @@ function resolveTarget(s, args, { allowPrivate = false } = {}) {
   return w;
 }
 
-/** Stop if the user took the mouse since the last action (not when they have just clicked Allow). */
+/**
+ * Stop if the user has moved the mouse since the agent last knew where it was. That point is taken
+ * once, and moved only when the agent itself moves the pointer (leftAt), as Byte does. It used to be
+ * re-read at the end of every step, so a move made while a step was running (most of the time: a step
+ * takes a second or two) became the new starting point and was never noticed.
+ */
 function guard(s, ctx) {
-  if (s.stopped || (ctx && ctx.signal && ctx.signal.aborted)) throw new Error('stopped by the user');
-  if (ctx && ctx.callApproved) { s.cursorAt = null; return; }   // answering the prompt moved the mouse
-  if (s.cursorAt) {
-    const c = input.cursor();
-    if (Math.hypot(c.x - s.cursorAt.x, c.y - s.cursorAt.y) > MOVED_PX) {
-      s.stopped = true;
-      throw new Error('The user moved the mouse, so desktop control stopped. Stop here and ask them what they want to do next.');
-    }
+  if (ctx && ctx.signal && ctx.signal.aborted) throw new Error('stopped by the user');
+  if (s.stopped) throw new Error('Desktop control is paused because the user moved the mouse. Ask them (ask_user) whether to carry on; once they have answered, you can continue.');
+  let now = null;
+  try { now = input.cursor(); } catch { return; }
+  // Answering a prompt moved the mouse: not the user taking over, so start again from here. Only a
+  // prompt they answered counts -- "Always for <app>" allows the call too, and treating that the same
+  // switched this check off for good.
+  if ((ctx && ctx.userAnswered) || !s.cursorAt) { s.cursorAt = now; return; }
+  if (Math.hypot(now.x - s.cursorAt.x, now.y - s.cursorAt.y) > MOVED_PX) {
+    s.stopped = true;
+    throw new Error('The user moved the mouse, so desktop control stopped. Stop and ask them (ask_user) whether to carry on; once they have answered, you can continue.');
   }
 }
-const settle = (s) => { try { s.cursorAt = input.cursor(); } catch { /* no cursor */ } };
+/** Where the agent itself just put the pointer: the only moves that are not the user's. */
+const leftAt = (s, x, y) => { s.cursorAt = { x: Math.round(x), y: Math.round(y) }; };
 const busy = (ctx) => { try { if (ctx && typeof ctx.emit === 'function') ctx.emit({ type: 'desktop_control' }); } catch { /* the UI's problem */ } };
 const stopFn = (s, ctx) => () => s.stopped || Boolean(ctx && ctx.signal && ctx.signal.aborted);
 
@@ -150,7 +159,6 @@ function elementFor(s, index) {
 /** A fresh picture of the window, and which control has the keyboard now: what the agent checks after acting. */
 async function after(s, ctx, w, did) {
   await sleep(SETTLE_MS);
-  settle(s);
   let focused = '';
   try { const f = await uia.focused(); if (f && f.type) focused = `${f.type} "${f.name || ''}"`; } catch { /* no helper */ }
   const shot = native.screenshot({ hwnd: w.hwnd });
@@ -167,6 +175,23 @@ async function after(s, ctx, w, did) {
     screenshot: shot.ok ? shot.dataUrl : null,
     next: 'Check the picture (or call state again) before the next step.',
   };
+}
+
+/**
+ * A real click (or wheel) at a screen point in window `w`: only if `w` is what is on top there. The
+ * picture of a window is taken even where something covers it, so the agent can see a button it cannot
+ * press -- Calculator's bottom row under the taskbar took a real click on "=" and nothing happened.
+ */
+async function pointOn(s, w, x, y, act) {
+  await focusOn(w);
+  const hit = input.windowAt(x, y);
+  if (hit && hit.hwnd === w.hwnd) return act();
+  const what = !hit ? 'that part of the window is off the screen, so it cannot be clicked'
+    : /^Shell_(Secondary)?TrayWnd$/.test(hit.className) ? 'the taskbar is over it there, so a real click would land on the taskbar'
+      : `"${hit.title || appName(hit)}" is on top of it there, so a real click would land on that instead`;
+  throw new Error(`That point is not on ${appName(w)} as it is on screen: ${what}. `
+    + 'Use the control by its number (click with index presses it without the mouse), or move the window into view first '
+    + '(maximise it with its Maximize button, or with alt+space then x in classic apps -- Store apps like Calculator ignore that), then take state again.');
 }
 
 async function focusOn(w) {
@@ -227,9 +252,9 @@ async function click(args, ctx) {
   if (args.index !== undefined && args.index !== null) {
     const e = elementFor(s, args.index);
     if (right) {
-      await focusOn(w);
       const [x, y] = centre(e);
-      await input.click(x, y, { button: 'right' });
+      await pointOn(s, w, x, y, () => input.click(x, y, { button: 'right' }));
+      leftAt(s, x, y);
       await sleep(MENU_MS);
       let menu = [];
       try { const r = await uia.list(s.listHwnd || w.hwnd, '', 40, 'menu'); menu = r.elements || []; remember(s, s.listHwnd || w.hwnd, menu); } catch { /* none */ }
@@ -238,22 +263,22 @@ async function click(args, ctx) {
       return res;
     }
     if (double) {
-      await focusOn(w);
       const [x, y] = centre(e);
-      await input.click(x, y, { double: true });
+      await pointOn(s, w, x, y, () => input.click(x, y, { double: true }));
+      leftAt(s, x, y);
       return after(s, ctx, w, `double-clicked [${e.id}] ${e.type} "${e.name}"`);
     }
     const r = await uia.act(e.id, 'invoke');
     if (r.click) {
-      await focusOn(w);
-      await input.click(r.click[0], r.click[1]);
+      await pointOn(s, w, r.click[0], r.click[1], () => input.click(r.click[0], r.click[1]));
+      leftAt(s, r.click[0], r.click[1]);
     }
     return after(s, ctx, w, `${r.click ? 'clicked' : r.done === 'invoke' ? 'pressed' : r.done} [${e.id}] ${e.type} "${e.name}"`);
   }
   if (args.x === undefined || args.y === undefined) throw new Error('click needs index (a control from state) or x and y (pixels in the latest picture)');
   const p = screenPoint(s, args.x, args.y);
-  await focusOn(w);
-  await input.click(p.x, p.y, { button: right ? 'right' : 'left', double });
+  await pointOn(s, w, p.x, p.y, () => input.click(p.x, p.y, { button: right ? 'right' : 'left', double }));
+  leftAt(s, p.x, p.y);
   return after(s, ctx, w, `${double ? 'double-' : ''}${right ? 'right-' : ''}clicked at (${args.x}, ${args.y})`);
 }
 
@@ -268,7 +293,7 @@ async function type(args, ctx) {
     if (e.password) throw new Error('that is a password box: the user types passwords themselves');
     await focusOn(w);   // its window in front first: the keystrokes must go there, not to VoxAI
     const r = await uia.act(e.id, 'set_text', t);
-    if (r.click) await input.click(r.click[0], r.click[1]);
+    if (r.click) { await pointOn(s, w, r.click[0], r.click[1], () => input.click(r.click[0], r.click[1])); leftAt(s, r.click[0], r.click[1]); }
     if (r.type || r.click) await input.typeText(t, { stop: stopFn(s, ctx) });
     return after(s, ctx, w, `typed ${t.length} characters into [${e.id}] ${e.type} "${e.name}"`);
   }
@@ -306,8 +331,8 @@ async function scroll(args, ctx) {
   else { const r = input.windowRect(w.hwnd); if (!r) throw new Error('that window has no size'); x = r.x + r.w / 2; y = r.y + r.h / 2; }
   const raw = Number(args.dy || args.dx || 3);
   const notches = Math.max(-20, Math.min(20, Math.abs(raw) > 20 ? Math.round(raw / 120) || Math.sign(raw) : raw));
-  await focusOn(w);
-  await input.scroll(x, y, notches);
+  await pointOn(s, w, x, y, () => input.scroll(x, y, notches));
+  leftAt(s, x, y);
   return after(s, ctx, w, `scrolled ${notches > 0 ? 'down' : 'up'} ${Math.abs(notches)}`);
 }
 
@@ -352,4 +377,14 @@ function describe(sessionId, act, a) {
   return { target, alwaysKey: 'app:' + app.toLowerCase(), alwaysLabel: `Always for ${app}` };
 }
 
-module.exports = { list, focus, state, click, type, press, scroll, screenshot, describe, privacyBlock, findWindow, fitScale, appName, setEscHooks, uia, _states: states };
+/**
+ * The user has answered the agent since a moved mouse paused it: that pause is over, from wherever
+ * the pointer is now. It used to last the whole run, so "yes, carry on" was followed by nothing but
+ * "stopped by the user" -- and the agent concluded it should give up.
+ */
+function userAnswered(sessionId) {
+  const s = states.get(sessionId || 'default');
+  if (s && s.stopped) { s.stopped = false; s.cursorAt = null; }
+}
+
+module.exports = { list, focus, state, click, type, press, scroll, screenshot, describe, userAnswered, privacyBlock, findWindow, fitScale, appName, setEscHooks, uia, _states: states };

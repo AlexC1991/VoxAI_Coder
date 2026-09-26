@@ -44,6 +44,8 @@ public class CU32 {
   [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint flags);
   [DllImport("user32.dll")] public static extern bool IsHungAppWindow(IntPtr h);
   [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr v);
+  [DllImport("user32.dll")] public static extern IntPtr GetThreadDpiAwarenessContext();
+  [DllImport("user32.dll")] public static extern int GetAwarenessFromDpiAwarenessContext(IntPtr v);
   [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int attr, out RECT r, int size);
   [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int attr, out int v, int size);
   // Top-level windows a person can see, front to back: visible, titled, not owned
@@ -247,7 +249,7 @@ function Ps-Shot {
   $g.CopyFromScreen($vs.X, $vs.Y, 0, 0, $bmp.Size)
   $bmp.Save($ShotPath, [System.Drawing.Imaging.ImageFormat]::Png)
   $g.Dispose(); $bmp.Dispose()
-  Emit @{ ok = $true; path = $ShotPath; x = $vs.X; y = $vs.Y; w = $vs.Width; h = $vs.Height; method = 'desktop' }
+  Emit @{ ok = $true; path = $ShotPath; x = $vs.X; y = $vs.Y; w = $vs.Width; h = $vs.Height; method = 'desktop'; dpi = [CU32]::GetAwarenessFromDpiAwarenessContext([CU32]::GetThreadDpiAwarenessContext()) }
 }
 
 function Ps-Click { param([int]$X, [int]$Y)

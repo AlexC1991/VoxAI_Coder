@@ -73,6 +73,10 @@ function load() {
     EnumWindows: user32.func('int __stdcall EnumWindows(VOX_EnumWindowsProc *proc, intptr_t lParam)'),
     DwmGetWindowAttribute: dwmapi.func('int32 __stdcall DwmGetWindowAttribute(intptr_t hwnd, uint32 attr, _Out_ int32 *value, uint32 size)'),
     DwmGetFrame: dwmapi.func('int32 __stdcall DwmGetWindowAttribute(intptr_t hwnd, uint32 attr, _Out_ VOX_RECT *value, uint32 size)'),
+    WindowFromPoint: user32.func('intptr_t __stdcall WindowFromPoint(VOX_POINT pt)'),
+    MonitorFromPoint: user32.func('intptr_t __stdcall MonitorFromPoint(VOX_POINT pt, uint32 flags)'),
+    GetAncestor: user32.func('intptr_t __stdcall GetAncestor(intptr_t hwnd, uint32 flags)'),
+    GetClassNameW: user32.func('int __stdcall GetClassNameW(intptr_t hwnd, uint8_t *buf, int n)'),
     OpenProcess: kernel32.func('intptr_t __stdcall OpenProcess(uint32 access, int inherit, uint32 pid)'),
     CloseHandle: kernel32.func('int __stdcall CloseHandle(intptr_t h)'),
     QueryFullProcessImageNameW: kernel32.func('int __stdcall QueryFullProcessImageNameW(intptr_t h, uint32 flags, uint8_t *buf, _Inout_ uint32 *size)'),
@@ -116,10 +120,24 @@ async function typeText(text, { stop } = {}) {
 
 const mouse = (flags, data = 0) => ({ type: 0, u: { mi: { dx: 0, dy: 0, mouseData: data >>> 0, dwFlags: flags, time: 0, dwExtraInfo: 0 } } });
 
+/**
+ * Put the pointer on a screen point, and make sure it is there. Windows does not move it to a point
+ * off every screen (and can refuse for other reasons), and a click sent anyway lands wherever the
+ * pointer happens to be -- in a test, on another app on another screen.
+ */
+function pointAt(x, y) {
+  const a = load();
+  const px = Math.round(x), py = Math.round(y);
+  if (!onScreen(px, py)) throw new Error(`(${px}, ${py}) is not on any screen, so the pointer cannot go there`);
+  a.SetCursorPos(px, py);
+  const c = cursor();
+  if (Math.abs(c.x - px) > 1 || Math.abs(c.y - py) > 1) throw new Error(`the pointer would not go to (${px}, ${py}) (it is at ${c.x}, ${c.y}), so nothing was clicked`);
+}
+const onScreen = (x, y) => Boolean(Number(load().MonitorFromPoint({ x: Math.round(x), y: Math.round(y) }, 0)));   // MONITOR_DEFAULTTONULL
+
 /** Click at a physical screen point. */
 async function click(x, y, { button = 'left', double = false } = {}) {
-  const a = load();
-  a.SetCursorPos(Math.round(x), Math.round(y));
+  pointAt(x, y);
   await sleep(40);
   const [down, up] = button === 'right' ? [0x0008, 0x0010] : [0x0002, 0x0004];
   for (let i = 0; i < (double ? 2 : 1); i++) {
@@ -132,8 +150,7 @@ async function click(x, y, { button = 'left', double = false } = {}) {
 
 /** Scroll the wheel at a physical screen point; positive notches scroll down. */
 async function scroll(x, y, notches) {
-  const a = load();
-  a.SetCursorPos(Math.round(x), Math.round(y));
+  pointAt(x, y);
   await sleep(30);
   send(mouse(0x0800, Math.round(-notches * 120)));
 }
@@ -213,8 +230,26 @@ function listWindows(ownPid = process.pid) {
   return out;
 }
 
+/**
+ * The top-level window that is really on top at a screen point, and what it is: a real click goes
+ * there, whatever a window's own picture (captured even when covered) shows. { hwnd, title, className, app }.
+ */
+function windowAt(x, y) {
+  const a = load();
+  // Off every screen, a window can still "cover" the point (it extends past the edge): nothing is there.
+  if (!onScreen(x, y)) return null;
+  const child = Number(a.WindowFromPoint({ x: Math.round(x), y: Math.round(y) }));
+  if (!child) return null;
+  const hwnd = Number(a.GetAncestor(child, 2)) || child;   // GA_ROOT
+  const t = Buffer.alloc(1024), c = Buffer.alloc(512);
+  const tn = a.GetWindowTextW(hwnd, t, 512), cn = a.GetClassNameW(hwnd, c, 256);
+  const pid = [0];
+  a.GetWindowThreadProcessId(hwnd, pid);
+  return { hwnd, title: tn > 0 ? t.toString('utf16le', 0, tn * 2) : '', className: cn > 0 ? c.toString('utf16le', 0, cn * 2) : '', app: processName(pid[0]) };
+}
+
 const foreground = () => Number(load().GetForegroundWindow());
 const isWindow = (hwnd) => Boolean(load().IsWindow(hwnd));
 
 module.exports = { parseKeys, available, pressKeys, typeText, click, scroll, cursor, focusWindow, restoreQuietly, processName,
-  windowRect, listWindows, foreground, isWindow };
+  windowRect, listWindows, foreground, isWindow, windowAt, onScreen };

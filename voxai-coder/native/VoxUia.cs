@@ -111,7 +111,8 @@ static class ByteUia
             case "list": return List(new IntPtr(Convert.ToInt64(req["hwnd"])), Str(req, "find"), Int(req, "max", 60), Str(req, "only") == "menu", Near(req));
             case "act": return Act(Int(req, "id", 0), Str(req, "action"), Str(req, "text"));
             case "focused": return Focused();
-            case "ping": return new Dictionary<string, object> { { "pong", true } };
+            // "dpi": 2 means per-monitor aware -- real screen pixels at any display scaling.
+            case "ping": return new Dictionary<string, object> { { "pong", true }, { "dpi", Native.Awareness() } };
             default: throw new Exception("unknown command");
         }
     }
@@ -422,6 +423,9 @@ static class ByteUia
 static class Native
 {
     [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+    [DllImport("user32.dll")] static extern IntPtr GetThreadDpiAwarenessContext();
+    [DllImport("user32.dll")] static extern int GetAwarenessFromDpiAwarenessContext(IntPtr value);
+    public static int Awareness() { try { return GetAwarenessFromDpiAwarenessContext(GetThreadDpiAwarenessContext()); } catch { return -1; } }
     public const uint WM_MOUSEMOVE = 0x0200, WM_LBUTTONDOWN = 0x0201, WM_LBUTTONUP = 0x0202, WM_RBUTTONDOWN = 0x0204, WM_RBUTTONUP = 0x0205,
         WM_KEYDOWN = 0x0100, WM_KEYUP = 0x0101, WM_CHAR = 0x0102;
     public const int MK_LBUTTON = 0x0001, MK_RBUTTON = 0x0002;

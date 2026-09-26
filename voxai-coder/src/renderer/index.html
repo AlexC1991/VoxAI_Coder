@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-m6SBhr6ExzhWDtHKKVWODaNLKuPahon9G/n3FpIX00U='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-/F0NIQvDeP+RmgcpS/X/lLoBUzrG4re3jORZjrbfxpY='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -2193,7 +2193,9 @@ function paintStream(){ const v = RT(); if(v && v.curStream) paintTyped(v); }
 function finalizeStream(){ const v = RT(); if(v && v.curStream){ flushTyping(v); if (!String(v.shown || '').trim()) v.curStream.remove(); else { v.curStream.classList.remove('live'); v.curStream.innerHTML = renderVTE(v.shown); if (typeof addCodeCopy === 'function') addCodeCopy(v.curStream); } v.curStream = null; } }
 
 // --- run cards (per-view) ---
-function kindName(name){
+function kindName(name, args){
+  // The desktop, not the browser: a step of desktop work was headed "Used the browser".
+  if ((name==='computer' || name.indexOf('cu_') === 0) && args && (args.backend==='native' || args.window || args.action==='focus')) return 'DESK';
   if (name==='read') return 'READ';
   if (name==='write') return 'WRITE';
   if (name==='edit') return 'EDIT';
@@ -2419,11 +2421,12 @@ function stepSummary(counts, stats){
   // read as "Changed 1 file" when nothing changed. Found in a live run.
   const reads = n('READ'), writes = st.files ? st.files.size : n('WRITE') + n('EDIT') + n('PATCH');
   const cmds = n('CMD') + n('SHELL') + n('REPL'), finds = n('GREP') + n('TREE') + n('RAG');
-  const web = n('WEB') + n('FIND'), subs = n('SUB') + n('SUBx'), eye = n('EYE');
+  const web = n('WEB') + n('FIND'), subs = n('SUB') + n('SUBx'), eye = n('EYE'), desk = n('DESK');
   let head, used = {};
   if (writes) { head = 'Changed ' + plural(writes, 'file', 'files'); used.w = 1; }
   else if (cmds) { head = 'Ran ' + plural(cmds, 'command', 'commands'); used.c = 1; }
   else if (subs) { head = 'Worked with sub-agents'; used.s = 1; }
+  else if (desk) { head = 'Used the desktop'; used.e = 1; }
   else if (eye) { head = 'Used the browser'; used.e = 1; }
   // Reading a page is not searching: a step that only fetched example.com was titled
   // "Searched the web". Found in a live run.
@@ -2999,7 +3002,7 @@ function rowMeta(rec){
 }
 function addToolRow(name, args, instant){
   const v = RT(); const card = ensureRunCard(); if(!card) return null;
-  const kind = kindName(name);
+  const kind = kindName(name, args);
   card.counts[kind] = (card.counts[kind]||0)+1;
   // A replayed step has no timing on record; show none rather than "0s".
   if (instant) card.t0 = 0;
@@ -3237,7 +3240,7 @@ function setToolResult(rec, ok, resultText){
   if (denied || planHeld || stoppedByUser) {
     if (blocked) st.blocked = (st.blocked || 0) + 1; else if (denied) st.denied = (st.denied || 0) + 1;
     else if (stoppedByUser) st.stopped = (st.stopped || 0) + 1;
-    const k = kindName(rec.name || '');
+    const k = kindName(rec.name || '', rec.args);
     if (rec.card.counts[k]) rec.card.counts[k]--;
   } else if (!ok) st.errors = (st.errors || 0) + 1;
   const a = rec.args || {};

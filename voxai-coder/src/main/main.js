@@ -883,7 +883,9 @@ app.whenReady().then(() => {
       // this exact target so future identical requests auto-allow without prompting.
       // An action on a website is remembered by its site (alwaysKey), not word for word.
       const key = kind + '\u0000' + String(alwaysKey || target || '');
-      if (sessionAlwaysAllow.get(sessionId) && sessionAlwaysAllow.get(sessionId).has(key)) { resolve(true); return; }
+      // 'always': allowed without a prompt (truthy, like yes). The desktop's mouse check needs to know
+      // nobody just moved the mouse to answer one.
+      if (sessionAlwaysAllow.get(sessionId) && sessionAlwaysAllow.get(sessionId).has(key)) { resolve('always'); return; }
       const permId = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
       // It waits until you answer or the run ends (see the finally below). It used to
       // count as "no" after two minutes, so stepping away turned approvals into refusals.

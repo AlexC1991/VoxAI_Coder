@@ -20,7 +20,27 @@ const cdp = require('./cdp');
 const native = require('./native');
 const desktop = require('./desktop');
 
-let lastSurface = 'browser';
+/**
+ * Which surface a call works on: the browser (the preview) or the Windows desktop. What the call
+ * says wins -- `backend`, a url, a program to start, a window to name -- and otherwise the surface
+ * this session's last call used. One answer for the tool and for its approval (agent.js), per
+ * session: it was one app-wide variable, and the approval assumed "browser" whenever `backend` was
+ * left out, so a desktop click could be approved as an action on the website in the preview.
+ */
+const surfaces = new Map();   // session id -> 'browser' | 'native'
+const LAUNCHABLE = /\.(exe|bat|cmd|lnk|msc)$/i;
+function surfaceFor(sessionId, name, args) {
+  const a = args || {};
+  if (a.backend === 'browser' || a.backend === 'native') return a.backend;
+  if (a.url) return 'browser';
+  if (name === 'cu_launch' && a.nativePath) return LAUNCHABLE.test(String(a.nativePath)) ? 'native' : 'browser';
+  if (name === 'cu_focus' || a.window || a.hwnd || a.pid) return 'native';
+  return surfaces.get(sessionId || 'default') || 'browser';
+}
+const ACTION_TOOL = { open: 'cu_launch', state: 'cu_state', click: 'cu_click', type: 'cu_type', press: 'cu_press',
+  scroll: 'cu_scroll', screenshot: 'cu_screenshot', list: 'cu_list', focus: 'cu_focus' };
+/** The same, for a `computer` call as the model makes it (with `action`). */
+const surfaceForAction = (sessionId, action, args) => surfaceFor(sessionId, ACTION_TOOL[action] || '', args);
 
 function emitImage(ctx, dataUrl, title) {
   if (dataUrl && ctx && typeof ctx.emit === 'function') {
@@ -199,14 +219,13 @@ function makeComputerUseTool(opts) {
       // What the arguments say beats what the last call did. The surface used to be
       // purely sticky, so after one native launch a plain https:// url was sent to
       // the NATIVE backend and "launched" undefined.
-      const implied = args.url ? 'browser' : (name === 'cu_launch' && args.nativePath ? 'native' : null);
-      const backend = args.backend || implied || lastSurface || 'browser';
-      lastSurface = backend;
+      const sid = (ctx && ctx.session && ctx.session.id) || 'default';
+      const backend = surfaceFor(sid, name, args);
+      surfaces.set(sid, backend);
       // The Windows desktop: one named window, its controls by number (desktop.js, from Byte).
       const DESKTOP = { cu_state: desktop.state, cu_click: desktop.click, cu_type: desktop.type, cu_press: desktop.press,
         cu_scroll: desktop.scroll, cu_focus: desktop.focus, cu_list: desktop.list };
-      if (name === 'cu_focus' && backend !== 'native') lastSurface = 'native';
-      if ((backend === 'native' || name === 'cu_focus') && DESKTOP[name]) {
+      if (backend === 'native' && DESKTOP[name]) {
         const r = await DESKTOP[name](args, ctx);
         if (r && r.screenshot) emitImage(ctx, r.screenshot, (r.window && r.window.title) || 'desktop');
         return r;
@@ -354,4 +373,4 @@ function makeComputerUseTool(opts) {
   };
 }
 
-module.exports = { makeComputerUseTool };
+module.exports = { makeComputerUseTool, surfaceFor, surfaceForAction, _surfaces: surfaces };

@@ -1385,7 +1385,7 @@ async function drain(gen) {
     check('the address is a field you can type in', HTML.includes('<input class="pp-urlmono" id="ppUrl" type="text"') && HTML.includes("if (u && document.activeElement !== u) u.value ="), 'read-only');
     check('a new-tab link opens in the preview; a sign-in pop-up is a window over the app', /browserV\.webContents\.setWindowOpenHandler\(\(\{ url, disposition \}\) => \{[\s\S]{0,300}if \(disposition !== 'new-window'\) \{ try \{ browserV\.webContents\.loadURL\(url\)[\s\S]{0,200}action: 'allow'[\s\S]{0,120}parent: win\(\)/.test(MAIN) && /sandbox: true, webSecurity: true/.test(MAIN), 'bare windows');
     check('the app\'s window is never mistaken for a pop-up', MAIN.includes('const w = mainWindow = new BrowserWindow({') && MAIN.includes("function win() { return (mainWindow && !mainWindow.isDestroyed()) ? mainWindow"), 'first window');
-    check('acting on a website asks you, even in Auto', AG.includes("if (name !== 'computer' || a.backend === 'native' || !['click', 'type', 'press'].includes(act)) return null;") && AG.includes("if (access === 'auto' && kind !== 'browser-act' && kind !== 'desktop-act') {") && AG.includes('const gate = (await browserGate(tc.name, args)) || permissionAsk(tc.name, args);'), 'auto-approved');
+    check('acting on a website asks you, even in Auto', AG.includes("if (name !== 'computer' || surface === 'native' || !['click', 'type', 'press'].includes(act)) return null;") && AG.includes("if (access === 'auto' && kind !== 'browser-act' && kind !== 'desktop-act') {") && AG.includes('const gate = (await browserGate(tc.name, args)) || permissionAsk(tc.name, args);'), 'auto-approved');
     check('local pages are not asked about that way', AG.includes("!/^(localhost|127\\.0\\.0\\.1|\\[::1\\])$/i.test(u.hostname)"), 'asks for localhost');
     check('"Always" covers the site, and says so', MAIN.includes("const key = kind + '\\u0000' + String(alwaysKey || target || '');") && AG.includes('alwaysLabel: `Always on ${host}`') && HTML.includes("$('askAlways').textContent = p.alwaysLabel ||"), 'one action only');
     check('a password field\'s contents are never read for the prompt', AG.includes("(el.type !== 'password' && el.type !== 'hidden' ? el.value : '')") && AG.includes('Type into a password field'), 'shows the password');
@@ -1442,7 +1442,28 @@ async function drain(gen) {
       check('password managers and private windows are not looked into', /password manager/.test(DK.privacyBlock({ app: 'Bitwarden.exe', title: 'Vault' })) && /private/.test(DK.privacyBlock({ app: 'msedge.exe', title: 'New tab - [InPrivate] - Microsoft Edge' })) && DK.privacyBlock({ app: 'notepad.exe', title: 'notes.txt - Notepad' }) === null, 'looked');
       check('coordinates follow the picture the model sees', DK.fitScale(1920, 1080) === 1 && DK.fitScale(3840, 1080) === 2560 / 3840, DK.fitScale(3840, 1080));
       const DS = read('src/backend/cu/desktop.js');
-      check('moving the mouse stops it, except after approving', DS.includes("if (ctx && ctx.callApproved) { s.cursorAt = null; return; }") && DS.includes('> MOVED_PX'), 'no guard');
+      check('moving the mouse stops it, except right after answering a prompt', DS.includes("if ((ctx && ctx.userAnswered) || !s.cursorAt) { s.cursorAt = now; return; }") && DS.includes('> MOVED_PX'), 'no guard');
+      // Found by really moving the mouse mid-run: "Always for <app>" switched the check off (it was
+      // skipped for every allowed call), and a move made while a step ran became the new baseline.
+      check('"Always" does not switch the mouse check off: only a prompt the user answered does', MAIN.includes("has(key)) { resolve('always'); return; }") && AG.includes("ctx.userAnswered = allowed !== 'always';") && AG.includes('      ctx.userAnswered = false;\n') && !DS.includes('ctx.callApproved'), 'always = off');
+      check('the pointer baseline moves only when the agent moves the pointer', DS.includes('const leftAt = (s, x, y) =>') && !/settle\(/.test(DS) && (DS.match(/leftAt\(s, /g) || []).length >= 6, 'rebaselined every step');
+      // Found by clicking by position: a window's picture shows buttons that something covers on screen.
+      check('a real click only lands where the window is really on top', DS.includes('async function pointOn(s, w, x, y, act)') && (DS.match(/await pointOn\(s, w, /g) || []).length === 6 && !/await input\.(click|scroll)\((?![^;]*=>)/.test(DS.replace(/\(\) => input\.(click|scroll)\(/g, '')) && INP.includes('function windowAt(x, y)'), 'clicks the taskbar');
+      check('what is in the way is named, with a way round it', DS.includes("'the taskbar is over it there, so a real click would land on the taskbar'") && DS.includes('Store apps like Calculator ignore that'), 'silent');
+      // Re-testing the fixes found these: a stop that outlived the user's "carry on", a click sent to a
+      // point off every screen (it landed wherever the pointer was), and no way to see DPI awareness.
+      DK._states.set('t-pause', { stopped: true, cursorAt: { x: 1, y: 1 }, elements: new Map() });
+      DK.userAnswered('t-pause');
+      const pz = DK._states.get('t-pause');
+      DK._states.delete('t-pause');
+      check('a mouse pause lifts once the user answers', pz.stopped === false && pz.cursorAt === null
+        && AG.includes("if ((tc.name === 'ask_user' || tc.name === 'ask_confirm') && result && !result.cancelled) {") && AG.includes("require('./cu/desktop').userAnswered(session.id);")
+        && DS.includes('Desktop control is paused because the user moved the mouse. Ask them (ask_user) whether to carry on'), pz);
+      check('the pointer is checked to be where it was sent before any click or scroll', INP.includes('function pointAt(x, y) {') && INP.includes("if (!onScreen(px, py)) throw new Error(") && INP.includes('would not go to (')
+        && /async function click\([^)]*\) \{\n  pointAt\(x, y\);/.test(INP) && /async function scroll\([^)]*\) \{\n  pointAt\(x, y\);/.test(INP) && !/a\.SetCursorPos\(Math\.round\(x\)/.test(INP), 'clicks wherever the pointer is');
+      check('a point off every screen is on no window', INP.includes('if (!onScreen(x, y)) return null;') && INP.includes("MonitorFromPoint: user32.func(") && DS.includes("'that part of the window is off the screen, so it cannot be clicked'"), 'covered by its own window');
+      check('the helper and the screenshot script report their DPI awareness', read('native/VoxUia.cs').includes('{ "dpi", Native.Awareness() }') && read('src/backend/cu/native.js').includes("method = 'desktop'; dpi = [CU32]::GetAwarenessFromDpiAwarenessContext("), 'unknown');
+      check('a step of desktop work is headed "Used the desktop"', HTML.includes("return 'DESK';") && HTML.includes("else if (desk) { head = 'Used the desktop'; used.e = 1; }") && HTML.includes('const kind = kindName(name, args);'), 'browser');
       check('a password box is never typed into', DS.includes("if (e.password) throw new Error('that is a password box") && DS.includes("if (f && f.password) throw new Error("), 'types passwords');
       const CS = read('native/VoxUia.cs');
       check('the controls helper has no keyboard or mouse hooks, and knows real pixels', !/SetWindowsHookEx|class Recorder|class FocusGuard/.test(CS) && CS.includes('SetProcessDpiAwarenessContext(new IntPtr(-4))'), 'hooks');
@@ -1457,7 +1478,18 @@ async function drain(gen) {
       check('state and every step return that text, without glyphs or the controls\' own names', DS.includes('text = readText(r.texts, r.elements);') && DS.includes('...(text.length ? { text } : {}),') && DS.includes("String(t).trim().length > 1") && (DS.match(/readText\(r\.texts, r\.elements\)/g) || []).length === 2, 'unreadable');
       check('the agent\'s own Esc reaches the app instead of ending its run', DS.includes('if (esc) escHooks.suspend();') && MAIN.includes("require('../backend/cu/desktop').setEscHooks({"), 'kills itself');
       check('a Store app is named by its title, not its host', DK.appName({ app: 'ApplicationFrameHost.exe', title: 'Calculator' }) === 'Calculator' && DK.appName({ app: 'notepad.exe', title: 'x.txt - Notepad' }) === 'notepad', DK.appName({ app: 'ApplicationFrameHost.exe', title: 'Calculator' }));
-      check('starting any program asks, with or without .exe', AG.includes("(a.backend === 'native' || /\\.(exe|bat|cmd|lnk|msc)$/i.test(String(a.nativePath)))") && DK.describe('x', 'open', { nativePath: 'calc', backend: 'native' }).target === 'Start calc', 'auto-approved');
+      check('starting any program asks, with or without .exe', AG.includes("|| (act === 'open' && a.nativePath))) {") && DK.describe('x', 'open', { nativePath: 'calc', backend: 'native' }).target === 'Start calc', 'auto-approved');
+      // A desktop call without `backend`: the approval and the tool agree on where it goes, per session.
+      const CUX = require(path.join(ROOT, 'src/backend/cu/index.js'));
+      const sf = (sid, act, a) => CUX.surfaceForAction(sid, act, a);
+      const fresh = sf('t-s1', 'click', { index: 3 });
+      CUX._surfaces.set('t-s1', 'native');
+      const sticky = sf('t-s1', 'click', { index: 3 }), other = sf('t-s2', 'click', { index: 3 });
+      CUX._surfaces.delete('t-s1');
+      check('a click without backend goes where the session last worked, and is asked about there', fresh === 'browser' && sticky === 'native' && other === 'browser'
+        && sf('x', 'state', { window: 'Notepad' }) === 'native' && sf('x', 'open', { url: 'https://a.b' }) === 'browser' && sf('x', 'open', { nativePath: 'C:/w/calc.exe' }) === 'native' && sf('x', 'open', { nativePath: 'notes.html' }) === 'browser'
+        && AG.includes("surface = require('./cu').surfaceForAction(session.id, act, a);") && AG.includes("if (name === 'computer' && surface === 'native' && (['click', 'type', 'press', 'scroll', 'focus'].includes(act)")
+        && !read('src/backend/cu/index.js').includes('let lastSurface'), [fresh, sticky, other]);
       check('starting a program returns window names, not a picture of the desktop', read('src/backend/cu/index.js').includes("started: String(args.nativePath), windows: desktop.list().windows") && !read('src/backend/cu/index.js').includes("emitImage(ctx, shot, 'native launch')"), 'desktop picture');
       check('a helper in use is kept at start, never at a release build', read('scripts/build-uia.js').includes('if (strict || !fs.existsSync(OUT)) throw e;') && PKG0.scripts.predist.includes('build-uia.js --strict') && !PKG0.scripts.prestart.includes('--strict'), PKG0.scripts);
       const cu = read('resources/skills/computer-use/SKILL.md');
