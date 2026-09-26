@@ -58,7 +58,17 @@ function createSession({ workdir, model, title, parentId }) {
   };
 }
 
+// Sessions deleted while this app runs. A run still finishing (or a sub-agent of one) saves its session
+// when it ends -- which put a deleted session straight back in the list. Opening a session (restored from
+// the Recycle Bin) takes it off again.
+const deleted = new Set();
+function markDeleted(id) { if (id) deleted.add(String(id)); }
+function isDeleted(session) {
+  return !!session && (deleted.has(String(session.id)) || (!!session.parentId && deleted.has(String(session.parentId))));
+}
+
 async function saveSession(userData, session) {
+  if (isDeleted(session)) return session;
   session.updatedAt = new Date().toISOString();
   const dir = sessionsDir(userData);
   await fsp.mkdir(dir, { recursive: true });
@@ -103,6 +113,7 @@ function recordUsage(session, usage) {
 
 async function loadSession(userData, id) {
   const raw = await fsp.readFile(path.join(sessionsDir(userData), `${id}.jsonl`), 'utf8');
+  deleted.delete(String(id));   // back from the Recycle Bin: its saves count again
   const session = { id, title: 'session', workdir: '', model: '', messages: [], todos: [], usage: [], stats: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, cost: 0, runs: 0 } };
   for (const line of raw.split('\n')) {
     if (!line.trim()) continue;
@@ -230,4 +241,4 @@ function exportSession(session) {
   return lines.join('\n');
 }
 
-module.exports = { createSession, saveSession, loadSession, listSessions, searchSessions, endsOnQuestion, deleteSession, sessionsDir, recordUsage, exportSession, isSubSession };
+module.exports = { markDeleted, isDeleted, createSession, saveSession, loadSession, listSessions, searchSessions, endsOnQuestion, deleteSession, sessionsDir, recordUsage, exportSession, isSubSession };

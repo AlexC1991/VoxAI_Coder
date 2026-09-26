@@ -87,6 +87,29 @@ async function listSnapshots(userData, sessionId) {
   } catch { return []; }
 }
 
+/**
+ * The snapshots a session took, moved together into one folder (snapshots/deleted-<session>-<time>),
+ * so they go to the Recycle Bin as one item with the session. They were left behind for good.
+ * Returns { folder, snapshots } or null when the session took none.
+ */
+async function gatherSessionSnapshots(userData, sessionId) {
+  const dir = snapDir(userData);
+  let names = [];
+  try { names = await fsp.readdir(dir); } catch { return null; }
+  const ids = [];
+  for (const f of names) {
+    if (!f.endsWith('.json')) continue;
+    try { const o = JSON.parse(await fsp.readFile(path.join(dir, f), 'utf8')); if (o && o.sessionId === sessionId && o.id) ids.push(o.id); } catch {}
+  }
+  if (!ids.length) return null;
+  const folder = path.join(dir, `deleted-${String(sessionId).replace(/[^\w.-]/g, '_')}-${Date.now()}`);
+  await fsp.mkdir(folder, { recursive: true });
+  for (const f of names) {
+    if (ids.some((id) => f === id + '.json' || f.startsWith(id + '_'))) { try { await fsp.rename(path.join(dir, f), path.join(folder, f)); } catch {} }
+  }
+  return { folder, snapshots: ids.length };
+}
+
 /** Put the snapshot's files back. Files created since are left alone. */
 async function restoreSnapshot({ userData, id, workdir }) {
   let snap;
@@ -144,4 +167,4 @@ function makeSnapshotTool({ userData }) {
   };
 }
 
-module.exports = { makeSnapshotTool, listSnapshots, createSnapshot, restoreSnapshot, snapDir, projectFiles };
+module.exports = { makeSnapshotTool, listSnapshots, createSnapshot, restoreSnapshot, snapDir, projectFiles, gatherSessionSnapshots };

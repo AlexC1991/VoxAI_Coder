@@ -385,9 +385,12 @@ function describe(sessionId, act, a) {
  * the pointer is now. It used to last the whole run, so "yes, carry on" was followed by nothing but
  * "stopped by the user" -- and the agent concluded it should give up.
  */
+/** A deleted session: its window, controls and pointer baseline go. */
+function forget(sessionId) { states.delete(sessionId || 'default'); }
+
 function userAnswered(sessionId) {
   const s = states.get(sessionId || 'default');
   if (s && s.stopped) { s.stopped = false; s.cursorAt = null; }
 }
 
-module.exports = { list, focus, state, click, type, press, scroll, screenshot, describe, userAnswered, privacyBlock, findWindow, fitScale, appName, setEscHooks, uia, _states: states };
+module.exports = { list, focus, state, click, type, press, scroll, screenshot, describe, userAnswered, forget, privacyBlock, findWindow, fitScale, appName, setEscHooks, uia, _states: states };

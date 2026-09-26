@@ -713,22 +713,51 @@ app.whenReady().then(() => {
   });
   // To the Recycle Bin, not erased: one misclick on Delete lost a whole conversation
   // for good. If the bin refuses, nothing is deleted and the user is told why.
-  ipcMain.handle('sessions:delete', async (_e, id) => {
-    const file = path.join(store.sessionsDir(userData()), `${path.basename(String(id || ''))}.jsonl`);
+  /**
+   * Delete a session: to the Recycle Bin, with everything that was only its own. A run still going is
+   * stopped first -- it used to carry on (spending, even driving the desktop) and, when it ended, save
+   * the session back into the list. Its sub-agents' sessions and its snapshots go too. If the Recycle
+   * Bin refuses the session, nothing is deleted and nothing is stopped.
+   */
+  async function deleteSessionFully(id) {
+    id = path.basename(String(id || ''));
+    if (!id) return { ok: false, error: 'no session' };
+    const trash = (p) => require('electron').shell.trashItem(p);
+    store.markDeleted(id);   // no save can put it back from here on
     try {
-      await require('electron').shell.trashItem(file);
+      await trash(path.join(store.sessionsDir(userData()), `${id}.jsonl`));
     } catch (e) {
+      store.loadSession(userData(), id).catch(() => {});   // still there: its saves count again
       return { ok: false, error: 'Could not move it to the Recycle Bin: ' + String((e && e.message) || e) };
     }
+    // Stop what it is doing: its runs, and any question or approval waiting on the user.
+    let stopped = 0;
+    for (const [k, c] of controllers) if (k.startsWith(id + ':')) { try { c.abort(); stopped++; } catch {} }
+    for (const [k, p] of pendingInputs) if (p.sessionId === id) { pendingInputs.delete(k); try { p.resolve({ answer: null, cancelled: true }); } catch {} }
+    for (const [k, p] of pendingPerms) if (p.msg && p.msg.sessionId === id) { pendingPerms.delete(k); try { p.resolve(false, false); } catch {} }
     live.delete(id);
+    try { require('../backend/cu/desktop').forget(id); } catch { /* no desktop control here */ }
     // Its sub-agents' sessions go with it: they stayed behind, unlisted, for good.
+    let subs = 0;
     try {
-      const subs = (await store.listSessions(userData(), 10000, { subs: true })).filter((s) => s.parentId === id);
-      for (const s of subs) {
-        try { await require('electron').shell.trashItem(path.join(store.sessionsDir(userData()), `${path.basename(s.id)}.jsonl`)); } catch {}
+      for (const s of (await store.listSessions(userData(), 10000, { subs: true })).filter((x) => x.parentId === id)) {
+        try { await trash(path.join(store.sessionsDir(userData()), `${path.basename(s.id)}.jsonl`)); subs++; } catch {}
       }
     } catch {}
-    return { ok: true };
+    // And its snapshots, as one item.
+    let snapshots = 0;
+    try {
+      const g = await require('../backend/tools/snapshot').gatherSessionSnapshots(userData(), id);
+      if (g) { await trash(g.folder); snapshots = g.snapshots; }
+    } catch { /* they stay in the snapshots folder */ }
+    return { ok: true, id, stopped, subs, snapshots };
+  }
+  ipcMain.handle('sessions:delete', (_e, id) => deleteSessionFully(id));
+  // Several at once (a selection, or every session of a project): one after another, each reported.
+  ipcMain.handle('sessions:deleteMany', async (_e, ids) => {
+    const results = [];
+    for (const id of (Array.isArray(ids) ? ids : []).slice(0, 5000)) results.push(await deleteSessionFully(id));
+    return { ok: results.every((r) => r.ok), results };
   });
   // Sub-agent sessions left behind by a conversation deleted before they went with it:
   // to the Recycle Bin, once, a little after start. Only ones that name their parent.

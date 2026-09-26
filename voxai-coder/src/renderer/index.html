@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-JtX8KSR6CwBnWpfZfqAsvtzOMdzXIqBFI34ab7YutD0='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-t7V62LHORAqLkaBQvXV7QFZFn3hl5vPJ9fwSejqJoGk='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -340,6 +340,22 @@ tests"). Scroll the row instead of breaking words:
 .toast-t{line-height:1.45;overflow-wrap:anywhere}
 .toast-a{flex:none;border:1px solid var(--goldedge);background:transparent;color:var(--gold);cursor:pointer;padding:4px 10px;border-radius:6px;font:inherit;font-size:12.5px}
 .toast-a:hover{background:rgba(200,169,97,.08)}
+/* selecting sessions (several at once, or a whole project's) */
+.search .sel-btn{flex:none;border:1px solid transparent;border-radius:5px;background:transparent;color:var(--faint);font:inherit;font-size:11.5px;padding:2px 7px;cursor:pointer}
+.search .sel-btn:hover,.search .sel-btn.on{color:var(--ink);border-color:var(--edge2)}
+.sess .sel-box,.proj-h .sel-box{flex:none;width:14px;height:14px;border:1.5px solid var(--edge2);border-radius:4px;display:inline-grid;place-items:center;font-size:10px;line-height:1;color:transparent}
+.sess.picked{background:var(--sel);color:var(--ink)}
+.sess.picked .sel-box,.proj-h .sel-box.all{background:var(--gold);border-color:var(--gold);color:#16130c}
+.proj-h .sel-box.some{border-color:var(--gold);color:var(--gold)}
+.proj-h .sel-box{cursor:pointer;margin-right:2px}
+.sel-bar{display:flex;align-items:center;gap:6px;padding:8px 6px;border-top:1px solid var(--edge);font-size:12.5px;color:var(--mut)}
+.sel-bar[hidden]{display:none}
+.sel-bar .sel-count{flex:1;min-width:0}
+.sel-bar button{border:1px solid var(--edge2);border-radius:6px;background:transparent;color:var(--mut);font:inherit;font-size:12px;padding:3px 9px;cursor:pointer}
+.sel-bar button:hover{color:var(--ink);background:var(--sel)}
+.sel-bar button.danger{color:var(--del);border-color:var(--del)}
+.sel-bar button.danger:disabled{opacity:.4;cursor:default}
+#projMenu button{display:flex;width:100%;border:0;background:transparent;color:var(--mut);cursor:pointer;padding:7px 10px;text-align:left;font-size:13px;border-radius:5px;font-family:inherit}#projMenu button:hover{background:var(--sel);color:var(--ink)}#projMenu button[data-pact="delete"]:hover{color:var(--del)}
 #sessMenu button{display:flex;width:100%;border:0;background:transparent;color:var(--mut);cursor:pointer;padding:7px 10px;text-align:left;font-size:13px;border-radius:5px;font-family:inherit}#sessMenu button:hover{background:var(--sel);color:var(--ink)}#sessMenu button[data-act="delete"]:hover{color:var(--del)}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 .md{animation:fadeIn .3s ease}
@@ -890,8 +906,9 @@ tests"). Scroll the row instead of breaking words:
   <div class="main">
     <div class="side">
       <button class="newsess" id="btnNew">✎ New session <kbd>Ctrl N</kbd></button>
-      <div class="search">⌕ <input id="q" placeholder="Search sessions"></div>
+      <div class="search">⌕ <input id="q" placeholder="Search sessions"><button class="sel-btn" id="btnSelect" type="button" title="Select sessions to delete several at once (Ctrl+click and Shift+click work too)">Select</button></div>
       <div class="sesslist" id="sessions"></div>
+      <div class="sel-bar" id="selBar" hidden><span class="sel-count" id="selCount"></span><button type="button" id="selAll" title="Select every session in the list">All</button><button type="button" class="danger" id="selDelete" title="Move the selected sessions to the Recycle Bin (Delete)">Delete</button><button type="button" id="selCancel" title="Clear the selection (Esc)">Cancel</button></div>
       <button class="upd-pill" id="updPill" type="button" hidden><span class="upd-dot"></span><span class="upd-txt" id="updTxt"></span></button>
       <button class="side-foot" id="sideStatus" type="button" title="Account and balance">
         <span class="sf-dot" id="backendState"></span>
@@ -4138,6 +4155,18 @@ function renderSessionList(){
       + '<span class="nm"></span>'
       + (waitHere ? '<span class="dot wait" title="Waiting for your answer"></span>' : busyHere ? '<span class="dot busy" title="Working"></span>' : '<span class="ct">' + list.length + '</span>');
     h.querySelector('.nm').textContent = folderName(k);
+    // Every session of this project (also the ones under "Show more"), for its checkbox and menu.
+    const projIds = SESS_ITEMS.filter((x) => (x.workdir || 'Default') === k).map((x) => x.id);
+    if (SELECTING()) {
+      const picked = projIds.filter((id) => SEL.has(id)).length;
+      const box = el('span', 'sel-box' + (picked && picked === projIds.length ? ' all' : picked ? ' some' : ''), picked && picked < projIds.length ? '–' : '✓');
+      box.setAttribute('role', 'checkbox');
+      box.setAttribute('aria-checked', picked === projIds.length ? 'true' : picked ? 'mixed' : 'false');
+      box.title = picked === projIds.length ? 'Unselect this project’s sessions' : 'Select all of this project’s sessions';
+      box.onclick = (e) => { e.stopPropagation(); setSel(projIds, picked !== projIds.length); };
+      h.insertBefore(box, h.firstChild);
+    }
+    h.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); showProjMenu(e, k, projIds); };
     if (k !== 'Default') {
       const add = el('button', 'proj-add', '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>');
       add.type = 'button';
@@ -4171,7 +4200,8 @@ function renderSessionList(){
       // A dot only while it is working. Every idle session used to carry the same gold
       // dot, which said nothing. How long ago it was used is what tells them apart.
       // One waiting on you says so instead: a pulsing dot and "needs you".
-      b.innerHTML = (waiting ? '<span class="dot wait"></span>' : busy ? '<span class="dot busy"></span>' : '') + '<span class="s-t"></span><time></time>';
+      b.innerHTML = (SELECTING() ? '<span class="sel-box" aria-hidden="true">✓</span>' : '') + (waiting ? '<span class="dot wait"></span>' : busy ? '<span class="dot busy"></span>' : '') + '<span class="s-t"></span><time></time>';
+      if (SELECTING()) { b.classList.toggle('picked', SEL.has(s.id)); b.setAttribute('aria-pressed', String(SEL.has(s.id))); }
       if (waiting) b.classList.add('waiting');
       b.querySelector('.s-t').textContent = s.title || 'Session';
       b.querySelector('time').textContent = waiting ? 'needs you' : relTime(s.updatedAt);
@@ -4183,7 +4213,13 @@ function renderSessionList(){
         b.classList.add('has-snip'); b.appendChild(snip);
       }
       b.title = (s.title || '') + '\n' + (waiting ? 'Waiting for your answer' : (s.updatedAt ? new Date(s.updatedAt).toLocaleString() : ''));
-      b.onclick = () => openSession(s.id);
+      b.onclick = (e) => {
+        // Ctrl+click adds or removes one, Shift+click a range; while selecting, a click selects.
+        if (e.ctrlKey || e.metaKey) { toggleSel(s.id); return; }
+        if (e.shiftKey && SEL_ANCHOR) { selectRange(SEL_ANCHOR, s.id); return; }
+        if (SELECTING()) { toggleSel(s.id); return; }
+        openSession(s.id);
+      };
       b.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); showSessMenu(e, s); };
       inner.appendChild(b);
     });
@@ -4217,6 +4253,7 @@ $('q').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.target.v
 
 // ---- agent events: route to the owning session view (any may be active) ----
 function onAgentEvt({ sessionId: sid, runKey, event }){
+  if (typeof DELETED_SIDS !== 'undefined' && DELETED_SIDS.has(sid)) return;   // deleted: its stopped run's last words
   const v = viewOf(sid);        // register session even if we haven't opened it yet
   T = v;
   if (event.type === 'user_input' && event.inputId) (v.shownInputs || (v.shownInputs = new Set())).add(event.inputId);
@@ -4759,6 +4796,7 @@ document.addEventListener('paste', (e) => {
 });
 window.voxai.onAgentPermission(onAgentPerm);
 function onAgentPerm({ permId, sessionId, kind, target, canAlways, note, alwaysLabel }){
+  if (typeof DELETED_SIDS !== 'undefined' && DELETED_SIDS.has(sessionId)) return;
   const v = sessionId ? viewOf(sessionId) : actView();
   if (!v) return;
   // It stays until you answer or the run ends (it used to lapse to "no" after two minutes).
@@ -5448,21 +5486,8 @@ async function handleSessMenuAct(act){
   try {
     if (act === 'open') { openSession(s.id); return; }
     if (act === 'reveal') { await window.voxai.sessionsReveal(s.id); return; }
-    if (act === 'delete') {
-      if (!confirm('Move session "' + (s.title || '') + '" to the Recycle Bin?')) return;
-      const r = await window.voxai.sessionsDelete(s.id);
-      if (r && r.ok === false) { alert(r.error || 'Could not delete the session.'); return; }
-      viewStore.delete(s.id);
-      if (activeId === s.id) {
-        activeId = null; const th = $('thread'); if (th) th.innerHTML = '';
-        const tEl = $('sessTitle'); if (tEl) tEl.textContent = 'New session';
-      if (window.__syncTitlebar) __syncTitlebar('New session');
-        const sEl = $('sessSub'); if (sEl) sEl.textContent = '';
-        const cEl = $('sessCost'); if (cEl) cEl.textContent = '';
-      }
-      refreshSessionList();
-      return;
-    }
+    if (act === 'delete') { await deleteSessions([s.id]); return; }
+    if (act === 'select') { toggleSel(s.id, true); return; }
     if (act === 'export') { await exportSession(s.id); return; }
     if (act === 'rename') {
       // In place, in the sidebar row. This used prompt(), which Electron does not
@@ -5472,6 +5497,119 @@ async function handleSessMenuAct(act){
     }
   } catch (err) { alert('Action failed: ' + (err && err.message || err)); }
 }
+// ---- selecting and deleting several sessions (or all of a project's) ----
+const SEL = new Set();
+let SEL_ANCHOR = null, SEL_MODE = false;
+const DELETED_SIDS = new Set();   // gone: a stopped run's last events must not bring its view back
+function SELECTING(){ return SEL_MODE || SEL.size > 0; }
+function paintSel(){
+  const bar = $('selBar'), n = SEL.size;
+  if (bar) {
+    bar.hidden = !SELECTING();
+    $('selCount').textContent = n ? n + ' selected' : 'Pick sessions';
+    $('selDelete').disabled = !n;
+  }
+  const btn = $('btnSelect'); if (btn) { btn.classList.toggle('on', SELECTING()); btn.textContent = SELECTING() ? 'Done' : 'Select'; }
+  renderSessionList();
+}
+function toggleSel(id, on){
+  if (on === undefined ? !SEL.has(id) : on) SEL.add(id); else SEL.delete(id);
+  SEL_ANCHOR = id;
+  paintSel();
+}
+function setSel(ids, on){ for (const id of ids) { if (on) SEL.add(id); else SEL.delete(id); } paintSel(); }
+/** Shift+click: everything between the last one clicked and this one, in the order the list shows. */
+function selectRange(from, to){
+  const order = [...document.querySelectorAll('#sessions .sess[data-sid]')].map((b) => b.dataset.sid);
+  const a = order.indexOf(from), b = order.indexOf(to);
+  if (a < 0 || b < 0) { toggleSel(to); return; }
+  for (const id of order.slice(Math.min(a, b), Math.max(a, b) + 1)) SEL.add(id);
+  paintSel();
+}
+function clearSel(){ SEL.clear(); SEL_ANCHOR = null; SEL_MODE = false; paintSel(); }
+
+/**
+ * Move sessions to the Recycle Bin, after one confirmation that says how many, whether any are still
+ * running (they are stopped first), and that no project files are touched. `project`: deleting all of
+ * one project's sessions ("workspace"), named in the question.
+ */
+async function deleteSessions(ids, project){
+  ids = [...new Set(ids)].filter(Boolean);
+  if (!ids.length) return;
+  const items = ids.map((id) => SESS_ITEMS.find((x) => x.id === id)).filter(Boolean);
+  const running = ids.filter((id) => { const v = viewStore.get(id); return v && v.busy; }).length;
+  const projects = new Set(items.map((x) => x.workdir || 'Default'));
+  const one = ids.length === 1 && items[0];
+  let msg = project
+    ? 'Move all ' + ids.length + (ids.length === 1 ? ' session' : ' sessions') + ' in "' + folderName(project) + '" to the Recycle Bin?'
+    : one ? 'Move session "' + (one.title || 'Session') + '" to the Recycle Bin?'
+      : 'Move ' + ids.length + ' sessions' + (projects.size > 1 ? ' from ' + projects.size + ' projects' : '') + ' to the Recycle Bin?';
+  if (running) msg += '\n\n' + (ids.length === 1 ? 'It is' : running + (running === 1 ? ' of them is' : ' of them are')) + ' still running and will be stopped first.';
+  msg += '\n\n' + (project ? 'The folder ' + project + ' and its files stay exactly as they are.' : 'No project files are touched.')
+    + ' Snapshots the agent took of your files go with ' + (ids.length === 1 ? 'it' : 'them') + '. You can restore from the Recycle Bin.';
+  if (!confirm(msg)) return;
+  for (const id of ids) DELETED_SIDS.add(id);
+  let r = null;
+  try { r = await window.voxai.sessionsDeleteMany(ids); } catch (e) { r = { ok: false, results: [], error: ipcMessage(e) }; }
+  const results = (r && r.results) || [];
+  const gone = results.filter((x) => x && x.ok).map((x) => x.id);
+  for (const id of ids) if (!gone.includes(id)) DELETED_SIDS.delete(id);
+  for (const id of gone) {
+    viewStore.delete(id); SEL.delete(id);
+    if (activeId === id) {
+      activeId = null; const th = $('thread'); if (th) th.innerHTML = '';
+      const tEl = $('sessTitle'); if (tEl) tEl.textContent = 'New session';
+      if (window.__syncTitlebar) __syncTitlebar('New session');
+      const sEl = $('sessSub'); if (sEl) sEl.textContent = '';
+      const cEl = $('sessCost'); if (cEl) cEl.textContent = '';
+      // Everything else that showed it: "Working" with a Stop button, its cost and tokens, its plan,
+      // its context meter. A session deleted mid-run left them all up. Found in a live test.
+      const rd = $('runDot'); if (rd) rd.style.display = 'none';
+      try { clearStatus(); } catch {}
+      try { updateSessStats(null); paintShelf(); paintPlanTray(); paintCtxBar(); updateSendState(); } catch {}
+    }
+  }
+  const failed = results.filter((x) => x && !x.ok);
+  if (failed.length || (r && r.error)) alert((failed.length ? failed.length + ' could not be deleted: ' + (failed[0].error || '') : '') + (r && r.error ? r.error : ''));
+  else if (gone.length > 1) toast(gone.length + ' sessions moved to the Recycle Bin.');
+  if (project) { expandedFolders.delete(project); rememberOpenProjects(); }
+  if (!SEL.size) SEL_MODE = false;
+  paintSel();
+  await refreshSessionList();
+}
+
+let projMenuTarget = null;
+function showProjMenu(e, k, ids){
+  projMenuTarget = { k, ids };
+  const m = $('projMenu');
+  m.style.left = Math.min(e.clientX, window.innerWidth - 220) + 'px';
+  m.style.top = Math.min(e.clientY, window.innerHeight - 100) + 'px';
+  m.style.display = 'block';
+}
+function hideProjMenu(){ const m = $('projMenu'); if (m) m.style.display = 'none'; }
+document.addEventListener('click', (ev) => {
+  const pm = ev.target && ev.target.closest && ev.target.closest('#projMenu');
+  const t = projMenuTarget;
+  if (pm && t) {
+    const act = ev.target.dataset && ev.target.dataset.pact;
+    hideProjMenu(); projMenuTarget = null;
+    if (act === 'select') { SEL_MODE = true; setSel(t.ids, true); }
+    else if (act === 'delete') deleteSessions(t.ids, t.k);
+  } else if (!pm) hideProjMenu();
+});
+(function wireSelection(){
+  const b = $('btnSelect'); if (b) b.onclick = () => { if (SELECTING()) clearSel(); else { SEL_MODE = true; paintSel(); } };
+  const all = $('selAll'); if (all) all.onclick = () => { SEL_MODE = true; setSel([...document.querySelectorAll('#sessions .sess[data-sid]')].map((x) => x.dataset.sid).concat(SESS_ITEMS.map((x) => x.id)), true); };
+  const del = $('selDelete'); if (del) del.onclick = () => deleteSessions([...SEL]);
+  const c = $('selCancel'); if (c) c.onclick = clearSel;
+  // Delete deletes the selection; Esc clears it (before Esc's other jobs, such as stopping a run).
+  document.addEventListener('keydown', (e) => {
+    if (!SELECTING() || isField(e.target) || overlayOpen()) return;
+    if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); clearSel(); }
+    else if (e.key === 'Delete' && SEL.size) { e.preventDefault(); deleteSessions([...SEL]); }
+  }, true);
+})();
+
 document.addEventListener('click', (ev) => {
   const menu = $('sessMenu');
   if (!menu) return;
@@ -6309,6 +6447,7 @@ if (window.voxai && window.voxai.updates) {
   window.voxai.updates.state().then((st) => { UPD = st || UPD; paintUpdate(); }).catch(() => {});
 }
 </script>
-<div id="sessMenu" style="display:none;position:fixed;z-index:99;min-width:160px;background:var(--panel2);border:1px solid var(--edge2);border-radius:8px;padding:4px;box-shadow:0 10px 34px rgba(0,0,0,.55)"><button data-act="open">Open</button><button data-act="rename">Rename…</button><button data-act="export">Export JSONL</button><button data-act="delete">Delete</button><button data-act="reveal">Open folder</button></div>
+<div id="sessMenu" style="display:none;position:fixed;z-index:99;min-width:160px;background:var(--panel2);border:1px solid var(--edge2);border-radius:8px;padding:4px;box-shadow:0 10px 34px rgba(0,0,0,.55)"><button data-act="open">Open</button><button data-act="rename">Rename…</button><button data-act="export">Export JSONL</button><button data-act="delete">Delete</button><button data-act="select">Select</button><button data-act="reveal">Open folder</button></div>
+<div id="projMenu" style="display:none;position:fixed;z-index:99;min-width:200px;background:var(--panel2);border:1px solid var(--edge2);border-radius:8px;padding:4px;box-shadow:0 10px 34px rgba(0,0,0,.55)"><button data-pact="select">Select all sessions here</button><button data-pact="delete">Delete all sessions here…</button></div>
 </body>
 </html>

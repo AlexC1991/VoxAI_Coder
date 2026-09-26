@@ -1112,8 +1112,8 @@ async function drain(gen) {
       check('Export exports the session that was right-clicked', H.includes("if (act === 'export') { await exportSession(s.id); return; }") && !H.includes('exportActiveSession'), 'the open one');
       check('and says so, with a way to find the file', H.includes("toast('Exported “'") && H.includes("label: 'Show in folder', onClick: () => window.voxai.sessionsShowExport(id)") && M.includes("require('electron').shell.showItemInFolder(out);"), 'silent');
       check('the message can hide', H.includes('.toast[hidden]{display:none}'), 'always shown');
-      check('Delete goes to the Recycle Bin', M.includes("await require('electron').shell.trashItem(file);") && !/sessions:delete[\s\S]{0,200}store\.deleteSession/.test(M), 'erased');
-      check('and a failed move deletes nothing and says why', H.includes("if (r && r.ok === false) { alert(r.error || 'Could not delete the session.'); return; }") && H.includes('to the Recycle Bin?'), 'silent');
+      check('Delete goes to the Recycle Bin', M.includes("const trash = (p) => require('electron').shell.trashItem(p);") && M.includes("await trash(path.join(store.sessionsDir(userData()), `${id}.jsonl`));") && !/deleteSessionFully[\s\S]{0,1500}store\.deleteSession/.test(M), 'erased');
+      check('and a failed move deletes nothing and says why', M.includes("return { ok: false, error: 'Could not move it to the Recycle Bin: '") && H.includes("if (failed.length || (r && r.error)) alert(") && H.includes('to the Recycle Bin?'), 'silent');
     }
     // A one-line file read as "2 lines": the newline that ends a line does not start one.
     {
@@ -1325,7 +1325,7 @@ async function drain(gen) {
     check('a question is not drawn twice', HTML.includes('!(v.shownInputs && v.shownInputs.has(it.event.inputId))'), 'drawn twice');
 
     // Sessions stay small: sub-agents go with their conversation; screenshots saved as JPEG.
-    check('deleting a conversation takes its sub-agents with it', /sessions:delete'[\s\S]{0,900}filter\(\(s\) => s\.parentId === id\)[\s\S]{0,300}trashItem/.test(MAIN), 'left behind');
+    check('deleting a conversation takes its sub-agents with it', /async function deleteSessionFully[\s\S]{0,2500}filter\(\(x\) => x\.parentId === id\)[\s\S]{0,200}await trash\(/.test(MAIN), 'left behind');
     check('orphaned sub-agent sessions are swept to the Recycle Bin', /if \(!s\.parentId \|\| live\.has\(s\.parentId\) \|\| fs\.existsSync\([\s\S]{0,200}trashItem/.test(MAIN), 'kept forever');
     check('screenshots are stored compacted', AG.includes('image_url: { url: compactImage(k.url) }') && /function compactImage\(/.test(AG), 'full PNGs');
 
@@ -1464,6 +1464,42 @@ async function drain(gen) {
       check('a point off every screen is on no window', INP.includes('if (!onScreen(x, y)) return null;') && INP.includes("MonitorFromPoint: user32.func(") && DS.includes("'that part of the window is off the screen, so it cannot be clicked'"), 'covered by its own window');
       check('the helper and the screenshot script report their DPI awareness', read('native/VoxUia.cs').includes('{ "dpi", Native.Awareness() }') && read('src/backend/cu/native.js').includes("method = 'desktop'; dpi = [CU32]::GetAwarenessFromDpiAwarenessContext("), 'unknown');
       check('the input module is per-monitor DPI aware in any process (tests match the app on a 125% screen)', INP.includes("user32.func('int __stdcall SetProcessDpiAwarenessContext(intptr_t v)')(-4)"), 'scaled coordinates in tests');
+      // Deleting: a running session is stopped and never saved back; its snapshots go too; many at once.
+      {
+        const st2 = require(path.join(ROOT, 'src/backend/sessions.js'));
+        const SN = require(path.join(ROOT, 'src/backend/tools/snapshot.js'));
+        const UDd = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-del-'));
+        const sd = st2.createSession({ workdir: UDd, model: 'm', title: 'doomed' });
+        sd.messages.push({ role: 'user', content: 'hi' });
+        await st2.saveSession(UDd, sd);
+        const file = path.join(st2.sessionsDir(UDd), sd.id + '.jsonl');
+        fs.unlinkSync(file); st2.markDeleted(sd.id);
+        sd.messages.push({ role: 'assistant', content: 'still running' });
+        await st2.saveSession(UDd, sd);   // what a run still finishing does
+        const sub = st2.createSession({ workdir: UDd, model: 'm', title: 'subagent', parentId: sd.id });
+        await st2.saveSession(UDd, sub);
+        check('a deleted session is not saved back by its run, nor are its sub-agents', !fs.existsSync(file) && !fs.existsSync(path.join(st2.sessionsDir(UDd), sub.id + '.jsonl')), fs.readdirSync(st2.sessionsDir(UDd)));
+        fs.writeFileSync(file, fs.readFileSync(path.join(ROOT, 'package.json')).length ? JSON.stringify({ kind: 'meta', id: sd.id, title: 'doomed' }) : '');
+        await st2.loadSession(UDd, sd.id); await st2.saveSession(UDd, sd);
+        check('restored from the Recycle Bin and opened, it saves again', /still running/.test(fs.readFileSync(file, 'utf8')), 'stuck deleted');
+        const proj = path.join(UDd, 'proj'); fs.mkdirSync(proj); fs.writeFileSync(path.join(proj, 'a.txt'), 'A');
+        const other = st2.createSession({ workdir: proj, model: 'm', title: 'other' });
+        const mine = await SN.createSnapshot({ userData: UDd, session: { id: sd.id, workdir: proj }, files: ['a.txt'] });
+        const theirs = await SN.createSnapshot({ userData: UDd, session: { id: other.id, workdir: proj }, files: ['a.txt'] });
+        const g = await SN.gatherSessionSnapshots(UDd, sd.id);
+        const left = fs.readdirSync(SN.snapDir(UDd)).filter((f) => !f.startsWith('deleted-'));
+        check('a deleted session\'s snapshots are gathered into one folder, and no one else\'s', g && g.snapshots === 1 && fs.readdirSync(g.folder).some((f) => f === mine.id + '.json') && fs.readdirSync(g.folder).length === 2
+          && left.some((f) => f === theirs.id + '.json') && !left.some((f) => f.startsWith(mine.id)) && (await SN.gatherSessionSnapshots(UDd, 'nobody')) === null, [g, left]);
+        fs.rmSync(UDd, { recursive: true, force: true });
+      }
+      check('deleting stops the session\'s runs and questions, and sends its sub-agents and snapshots to the Recycle Bin', /async function deleteSessionFully\(id\)[\s\S]{0,700}store\.markDeleted\(id\);[\s\S]{0,700}for \(const \[k, c\] of controllers\) if \(k\.startsWith\(id \+ ':'\)\) \{ try \{ c\.abort\(\);[\s\S]{0,600}pendingInputs[\s\S]{0,300}pendingPerms[\s\S]{0,1500}gatherSessionSnapshots\(userData\(\), id\)[\s\S]{0,120}await trash\(g\.folder\)/.test(MAIN)
+        && MAIN.includes("ipcMain.handle('sessions:deleteMany'") && read('src/preload/preload.js').includes("sessionsDeleteMany: (ids) => ipcRenderer.invoke('sessions:deleteMany', ids),"), 'keeps running');
+      check('sessions can be selected (Ctrl, Shift, a project\'s checkbox) and deleted together', HTML.includes('if (e.ctrlKey || e.metaKey) { toggleSel(s.id); return; }') && HTML.includes('if (e.shiftKey && SEL_ANCHOR) { selectRange(SEL_ANCHOR, s.id); return; }')
+        && HTML.includes("box.onclick = (e) => { e.stopPropagation(); setSel(projIds, picked !== projIds.length); };") && HTML.includes('<div class="sel-bar" id="selBar" hidden>') && HTML.includes('.sel-bar[hidden]{display:none}')
+        && HTML.includes("else if (e.key === 'Delete' && SEL.size) { e.preventDefault(); deleteSessions([...SEL]); }"), 'one at a time');
+      check('a whole project\'s sessions can be deleted, saying its folder is untouched', HTML.includes('<button data-pact="delete">Delete all sessions here…</button>') && HTML.includes("' and its files stay exactly as they are.'"), 'no workspace delete');
+      check('the confirmation says how many are running and that files are not touched', HTML.includes("still running and will be stopped first.") && HTML.includes("'No project files are touched.'"), 'vague');
+      check('a deleted session leaves nothing on screen, and its last events are ignored', HTML.includes('try { updateSessStats(null); paintShelf(); paintPlanTray(); paintCtxBar(); updateSendState(); } catch {}') && HTML.includes("if (typeof DELETED_SIDS !== 'undefined' && DELETED_SIDS.has(sid)) return;"), 'Working… left up');
       check('a step of desktop work is headed "Used the desktop"', HTML.includes("return 'DESK';") && HTML.includes("else if (desk) { head = 'Used the desktop'; used.e = 1; }") && HTML.includes('const kind = kindName(name, args);'), 'browser');
       check('a password box is never typed into', DS.includes("if (e.password) throw new Error('that is a password box") && DS.includes("if (f && f.password) throw new Error("), 'types passwords');
       const CS = read('native/VoxUia.cs');

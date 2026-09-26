@@ -83,6 +83,7 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
   sessionsCreate: (opts) => ipcRenderer.invoke('sessions:create', opts || {}),
   sessionsOpen: (id) => ipcRenderer.invoke('sessions:open', id),
   sessionsDelete: (id) => ipcRenderer.invoke('sessions:delete', id),
+  sessionsDeleteMany: (ids) => ipcRenderer.invoke('sessions:deleteMany', ids),
   sessionsRename: (id, title) => ipcRenderer.invoke('sessions:rename', { id, title }),
   sessionsSetModel: (id, model) => ipcRenderer.invoke('sessions:setModel', { id, model }),
   sessionsReveal: (id) => ipcRenderer.invoke('sessions:reveal', id),
