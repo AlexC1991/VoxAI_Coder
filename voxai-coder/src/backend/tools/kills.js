@@ -90,7 +90,17 @@ function processKills(cmd) {
 
   if (/\bwmic\b[^&|;\n]*\bprocess\b[^&|;\n]*\b(delete|terminate)\b/i.test(s)) other.push('wmic process');
   if (/\b(kill-port|fkill|killport)\b/i.test(s)) other.push('by port');
-  if (/\.Kill\s*\(/.test(s)) other.push('.Kill()');
+
+  // Kills written as code in a one-liner. Found live: refused five times, the agent ran
+  // python -c "os.kill(20340, signal.SIGTERM)" -- and ended the user's own app.
+  for (const mm of s.matchAll(/\b(?:os|process)\.kill\s*\(\s*(\d+)/g)) pids.push(Number(mm[1]));
+  for (const mm of s.matchAll(/\bpsutil\.Process\s*\(\s*(\d+)\s*\)\s*\.\s*(?:kill|terminate|send_signal|suspend)\s*\(/g)) pids.push(Number(mm[1]));
+  for (const mm of s.matchAll(/Get-Process\s+-Id\s+(\d+)[^|;&\n]*\)\s*\.\s*Kill\s*\(/gi)) pids.push(Number(mm[1]));
+  for (const mm of s.matchAll(/\bOpenProcess\s*\([^)]*?(\d{2,})\s*\)/g)) pids.push(Number(mm[1]));
+  if (/\bTerminateProcess\b|\bNtTerminateProcess\b/.test(s) && !pids.length) other.push('TerminateProcess');
+  if (/\.Kill\s*\(/.test(s) && !/Get-Process\s+-Id\s+\d+/i.test(s)) other.push('.Kill()');
+  if (/\b(?:os|process)\.kill\s*\(\s*[^\d\s)]/.test(s)) other.push('os.kill');
+  if (/\bos\.killpg\b|\bpsutil\b[\s\S]*\.(?:kill|terminate)\s*\(\s*\)/.test(s)) other.push('a script (psutil or killpg)');
 
   if (!pids.length && !names.length && !other.length) return null;
   return { pids: [...new Set(pids)], names: [...new Set(names.filter(Boolean))], other: [...new Set(other)] };
@@ -131,6 +141,47 @@ function processTable() {
   });
 }
 
+/**
+ * What these processes are: program, command line, when started. pid -> { name, cmd, since }.
+ * The agent took the user's pythonw app (AI_Account_Hub, running since the day before) for
+ * the one it had just started; "pythonw.exe" alone did not tell it otherwise.
+ */
+function pidDetails(pids) {
+  const list = [...new Set(pids)].filter((p) => Number.isInteger(p) && p > 0).slice(0, 8);
+  if (!list.length) return Promise.resolve(new Map());
+  return new Promise((resolve) => {
+    if (!isWin) {
+      execFile('ps', ['-o', 'pid=,lstart=,args=', '-p', list.join(',')], { timeout: 10000 }, (err, out) => {
+        const map = new Map();
+        if (!err) for (const line of String(out).split(/\n/)) {
+          const mm = /^\s*(\d+)\s+(\w{3}\s+\w{3}\s+\d+\s+[\d:]+\s+\d{4})\s+(.*)$/.exec(line);
+          if (mm) map.set(Number(mm[1]), { name: mm[3].split(/\s+/)[0], cmd: mm[3], since: mm[2] });
+        }
+        resolve(map);
+      });
+      return;
+    }
+    const filter = list.map((p) => `ProcessId=${p}`).join(' OR ');
+    execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
+      `Get-CimInstance Win32_Process -Filter '${filter}' | ForEach-Object { "$($_.ProcessId)\`t$($_.Name)\`t$($_.CreationDate.ToString('d MMM HH:mm'))\`t$($_.CommandLine)" }`],
+    { windowsHide: true, timeout: 15000 }, (err, out) => {
+      const map = new Map();
+      if (!err) for (const line of String(out).split(/\r?\n/)) {
+        const [pid, name, since, ...rest] = line.split('\t');
+        if (/^\d+$/.test(pid)) map.set(Number(pid), { name, since, cmd: rest.join('\t').trim() });
+      }
+      resolve(map);
+    });
+  });
+}
+/** "pythonw.exe running A:\...\main.py, started 25 Sep 18:01" -- short enough for a prompt. */
+function whatIs(d, row) {
+  if (!d && !row) return '';
+  const name = (d && d.name) || (row && row.name) || 'a process';
+  const args = d && d.cmd ? d.cmd.replace(/^"[^"]*"\s*|^\S+\s*/, '').trim() : '';
+  return `${name}${args ? ` running ${args.slice(0, 120)}` : ''}${d && d.since ? `, started ${d.since}` : ''}`;
+}
+
 const baseName = (n) => String(n || '').toLowerCase().replace(/\.exe$/, '');
 function nameMatches(pattern, name) {
   const p = baseName(pattern);
@@ -169,14 +220,23 @@ async function judgeKills(kills, sessionId, table = null) {
     parts.push(`every process named ${n}${t.size ? ` (${count} running now)` : ''}`);
   }
   for (const o of kills.other) parts.push(o === 'by port' ? 'whatever is using a port' : `processes matched by ${o}`);
-  for (const pid of kills.pids.filter((p) => !isOwn(p))) {
-    const row = t.get(pid);
-    parts.push(`pid ${pid}${row ? ` (${row.name})` : ''}, which this session did not start`);
+  const others = kills.pids.filter((p) => !isOwn(p));
+  const det = others.length ? await pidDetails(others) : new Map();
+  const notMine = [];
+  for (const pid of others) {
+    const w = whatIs(det.get(pid), t.get(pid));
+    parts.push(`pid ${pid}${w ? ` (${w})` : ''}, which this session did not start`);
+    if (w) notMine.push(`PID ${pid} is ${w}: it is NOT a program you started, so it is not your app.`);
   }
   const note = `This ends ${parts.join(', ')}. `
     + (kills.names.length || kills.other.length ? 'That can include programs you have open. Allow only if you want exactly that.'
       : 'Allow only if you mean to end it.');
-  return { own: false, note, hint };
+  return { own: false, note, hint: (notMine.length ? notMine.join(' ') + ' ' : '') + hint };
 }
 
-module.exports = { processKills, onlyKills, judgeKills, processTable, nameMatches };
+/** Everything a kill aims at, as keys, to remember a refusal by ("pid:20340", "name:pythonw"). */
+function killKeys(kills) {
+  return [...kills.pids.map((p) => 'pid:' + p), ...kills.names.map((n) => 'name:' + baseName(n)), ...kills.other.map((o) => 'other:' + o)];
+}
+
+module.exports = { processKills, onlyKills, judgeKills, killKeys, pidDetails, processTable, nameMatches };

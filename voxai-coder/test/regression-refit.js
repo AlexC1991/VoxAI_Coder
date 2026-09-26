@@ -1801,6 +1801,40 @@ async function drain(gen) {
     check('reopened, the note is a line, not your message', HTMLc.includes("if (/^\\[VOX CUTOFF\\]/.test(first)) {"), 'page');
   }
 
+  // ------------------------------------------------------------------ [KX]
+  console.log('\n[KX] kills written as code are kills; a refused kill stays refused');
+  {
+    const K = require(path.join(ROOT, 'src/backend/tools/kills.js'));
+    const pk = K.processKills;
+    check('os.kill, process.kill, psutil and (Get-Process -Id).Kill() name the pid they end',
+      pk('python -c "import os, signal; os.kill(20340, signal.SIGTERM)"').pids[0] === 20340 && pk('node -e "process.kill(20340)"').pids[0] === 20340
+      && pk('python -c "import psutil; psutil.Process(20340).terminate()"').pids[0] === 20340 && pk('powershell -Command "(Get-Process -Id 20340).Kill()"').pids[0] === 20340,
+      [pk('python -c "import os; os.kill(20340, 9)"'), pk('node -e "process.kill(20340)"')]);
+    check('a script that kills by searching is a kill too', pk('python -c "import psutil; [p.kill() for p in psutil.process_iter()]"').other.length > 0
+      && pk('python -c "import ctypes; ctypes.windll.kernel32.TerminateProcess(h, 0)"').other.length > 0, 'script');
+    check('one-liners that end nothing are not kills', pk('python -c "print(1)"') === null && pk('node -e "console.log(process.pid)"') === null
+      && pk('python -c "import os; print(os.getpid())"') === null, 'false positive');
+    check('a refusal is remembered by what it aims at', K.killKeys({ pids: [20340], names: ['pythonw.exe'], other: [] }).join() === 'pid:20340,name:pythonw', 'keys');
+    const AGK = read('src/backend/agent.js');
+    check('the prompt and the refusal say what the process really is', /function whatIs\(d, row\)/.test(read('src/backend/tools/kills.js'))
+      && read('src/backend/tools/kills.js').includes('it is NOT a program you started, so it is not your app.'), 'identity');
+    // Through the agent: refused once, the same pid by another command is refused without asking.
+    const asked = [];
+    let turn = 0;
+    fakeOpenRouter((n, b) => {
+      turn = n;
+      if (n === 1) return call('x1', 'shell', { command: 'taskkill /pid 987650 /T /F' });
+      if (n === 2) return call('x2', 'shell', { command: 'python -c "import os; os.kill(987650, 15)"' });
+      return say('ok, leaving it');
+    });
+    const sess = { id: 'kx-sess', workdir: WD, messages: [] };
+    const ev = await drain(runAgent({ session: sess, userText: 'restart my app', apiKey: 'k', model: 'm', access: 'full', askPermission: async (q) => { asked.push(q); return false; }, maxTurns: 5 }));
+    const ends = ev.filter((e) => e.type === 'tool_end');
+    check('refused once, the same pid through os.kill is refused without asking again', asked.length === 1 && ends.length === 2 && ends.every((e) => e.ok === false)
+      && /already said no to ending PID 987650/.test(JSON.stringify(ends[1].result)) && /not with another command, not by asking them/.test(JSON.stringify(ends[1].result)), { asked: asked.length, ends: ends.map((e) => String(JSON.stringify(e.result)).slice(0, 160)) });
+    check('the session keeps the refusal', sess._refusedKills && sess._refusedKills.has('pid:987650') && AGK.includes('const again = keys.filter((k) => refused.has(k));'), sess._refusedKills && [...sess._refusedKills]);
+  }
+
   try { fs.rmSync(WD, { recursive: true, force: true }); } catch {}
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

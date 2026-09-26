@@ -31,7 +31,7 @@ const tools = require('./tools');
 const { compactSession, estimateSessionTokens } = require('./compact');
 const crypto = require('crypto');
 const { checkToolAllowed, checkShellCommand, isReadOnlyCommand } = require('./tools/sandbox');
-const { processKills, onlyKills, judgeKills } = require('./tools/kills');
+const { processKills, onlyKills, judgeKills, killKeys } = require('./tools/kills');
 const { chatOnce, reasoningParam } = require('./providers/openrouter');
 
 // Auto mode's safety check: one short question per action that would otherwise ask.
@@ -659,9 +659,22 @@ async function* runAgent(opts) {
         if (v.own) {
           if (['test', 'auto', 'full'].includes(access) && onlyKills(target)) return true;
         } else {
+          // A no stands for the session. Found live: refused, the agent asked again four
+          // times in other words, then got round the check -- and ended the user's app.
+          const keys = killKeys(kills);
+          const refused = session._refusedKills || (session._refusedKills = new Set());
+          const again = keys.filter((k) => refused.has(k));
+          if (again.length) {
+            const hint = `The user already said no to ending ${again.map((k) => k.replace(/^pid:/, 'PID ').replace(/^name:/, '').replace(/^other:/, '')).join(', ')} in this session. `
+              + 'Do not try again, not with another command, not by asking them: carry on without ending it. ' + v.hint;
+            throw Object.assign(new Error(`permission denied: ${kind} ${target}. ${hint}`), { hint });
+          }
           // No "Always": a yes is for this one command, never for every later kill.
           const allowed = await askPermission({ kind, target, note: v.note, noAlways: true });
-          if (!allowed) throw Object.assign(new Error(`permission denied: ${kind} ${target}. ${v.hint}`), { hint: v.hint });
+          if (!allowed) {
+            for (const k of keys) refused.add(k);
+            throw Object.assign(new Error(`permission denied: ${kind} ${target}. ${v.hint}`), { hint: v.hint });
+          }
           ctx.userAnswered = true;
           return true;
         }
