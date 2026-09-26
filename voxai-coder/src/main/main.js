@@ -145,6 +145,25 @@ const controllers = new Map(); // runKey → AbortController
 const sessionAlwaysAllow = new Map(); // sessionId -> Set<string> (normalized target) 
 const pendingPerms = new Map(); // permId → {msg, runKey, resolve}
 const pendingInputs = new Map(); // inputId → {sessionId, runKey, event, resolve}  (ask_user / ask_confirm)
+// Esc stops a run while it drives the desktop (Byte's kill switch): registered for all of Windows only
+// while desktop control is in use, and released 30 s after its last action or when the run ends.
+let escArm = null;   // { runKey, ctl, timer }
+function disarmDesktopEsc(runKey) {
+  if (!escArm || (runKey && escArm.runKey !== runKey)) return;
+  clearTimeout(escArm.timer);
+  try { require('electron').globalShortcut.unregister('Escape'); } catch { /* not registered */ }
+  escArm = null;
+}
+function armDesktopEsc(runKey, ctl) {
+  if (!escArm || escArm.runKey !== runKey) {
+    disarmDesktopEsc();
+    let ok = false;
+    try { ok = require('electron').globalShortcut.register('Escape', () => { const a = escArm; disarmDesktopEsc(); if (a) { try { a.ctl.abort(); } catch { /* ended */ } } }); } catch { ok = false; }
+    escArm = { runKey, ctl, timer: null, ok };
+  }
+  clearTimeout(escArm.timer);
+  escArm.timer = setTimeout(() => disarmDesktopEsc(runKey), 30000);
+}
 /** Sessions with a question or an approval open right now. */
 function waitingIds() {
   return new Set([...pendingInputs.values()].map((p) => p.sessionId)
@@ -927,6 +946,7 @@ app.whenReady().then(() => {
           if (ev.type === 'tool_end' || ev.type === 'tool_start' || ev.type === 'permission') {
             scheduleSessionSave(sessionId);
           }
+          if (ev.type === 'desktop_control') armDesktopEsc(runKey, ctl);
           if (ev.type === 'done' || ev.type === 'error' || ev.type === 'cancelled' || ev.type === 'limit_reached' || ev.type === 'budget_reached') break;
         }
       } catch (err) {
@@ -937,6 +957,7 @@ app.whenReady().then(() => {
         // it: nothing is left waiting for an answer that can no longer go anywhere.
         for (const [k, p] of pendingInputs) if (p.runKey === runKey) { pendingInputs.delete(k); try { p.resolve({ answer: null, cancelled: true }); } catch {} }
         for (const [k, p] of pendingPerms) if (p.runKey === runKey) { pendingPerms.delete(k); try { p.resolve(false, false); } catch {} }
+        disarmDesktopEsc(runKey);   // Esc goes back to the apps
         // flush any pending debounced save now (dupe with the final save below is fine)
         if (saveTimers.has(sessionId)) { clearTimeout(saveTimers.get(sessionId)); saveTimers.delete(sessionId); }
         try { if (sess && sess.messages && sess.messages.length) await store.saveSession(userData(), sess); } catch {}

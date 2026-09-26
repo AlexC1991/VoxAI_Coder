@@ -49,3 +49,6 @@ voxai-coder/dist/
 # ---- design canvas export (source of the UI mockup, not app source) ----
 Electron desktop coding app/
 app-src/
+
+# ---- built from native/VoxUia.cs by scripts/build-uia.js ----
+voxai-coder/resources/uia/

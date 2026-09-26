@@ -14,6 +14,7 @@ const vm = require('vm');
 
 const ROOT = process.env.VOX_ROOT || path.join(__dirname, '..');
 const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
+const PKG0 = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
 const SK_FM = (t) => require(path.join(ROOT, 'src/backend/tools/skills.js')).frontMatter(t);
 
 let pass = 0;
@@ -1373,7 +1374,7 @@ async function drain(gen) {
     check('its own window and a hung one are not asked to draw (that hung for 90 s)', NAT.includes('if (-not $own -and -not $hung) { $printed = [CU32]::PrintWindow') && NAT.includes('self: process.pid'), 'hangs');
     check('minimised, no match and a blank capture are each said', NAT.includes('is minimised, and Windows does not draw a minimised window') && NAT.includes('No open window matches that. Windows open now:') && NAT.includes('(Test-Blank $bmp)'), 'silent');
     check('captures do not pile up in Temp', NAT.includes('try { fs.unlinkSync(p); } catch {}'), 'left in Temp');
-    check('the computer tool takes a window, and says where it is on screen', CU.includes("window: { type: 'string', description: 'native: capture just this window") && CU.includes('Pixel (0,0) of this image is screen point') && TIX.includes('captures just that window, even when other windows cover it'), 'desktop only');
+    check('the computer tool takes a window, and says where it is on screen', CU.includes("window: { type: 'string', description: 'native: capture just this window") && CU.includes('Pixel (0,0) of this image is screen point') && TIX.includes('captures one window even when covered'), 'desktop only');
     check('a desktop or window capture is not called "Used the browser"', HTML.includes("pick('eye', 'Looked at a window', 'Looking at a window')") && HTML.includes("if (name === 'computer' && a.backend === 'native') return 'Using the desktop';"), 'browser');
     // The preview is a browser you can use: an address bar, pop-ups, and your say on websites.
     const addrSrc = (HTML.match(/function ppAddress\(raw, workdir\)\{[\s\S]*?\n\}\n/) || [''])[0];
@@ -1384,7 +1385,7 @@ async function drain(gen) {
     check('the address is a field you can type in', HTML.includes('<input class="pp-urlmono" id="ppUrl" type="text"') && HTML.includes("if (u && document.activeElement !== u) u.value ="), 'read-only');
     check('a new-tab link opens in the preview; a sign-in pop-up is a window over the app', /browserV\.webContents\.setWindowOpenHandler\(\(\{ url, disposition \}\) => \{[\s\S]{0,300}if \(disposition !== 'new-window'\) \{ try \{ browserV\.webContents\.loadURL\(url\)[\s\S]{0,200}action: 'allow'[\s\S]{0,120}parent: win\(\)/.test(MAIN) && /sandbox: true, webSecurity: true/.test(MAIN), 'bare windows');
     check('the app\'s window is never mistaken for a pop-up', MAIN.includes('const w = mainWindow = new BrowserWindow({') && MAIN.includes("function win() { return (mainWindow && !mainWindow.isDestroyed()) ? mainWindow"), 'first window');
-    check('acting on a website asks you, even in Auto', AG.includes("if (name !== 'computer' || a.backend === 'native' || !['click', 'type', 'press'].includes(act)) return null;") && AG.includes("if (access === 'auto' && kind !== 'browser-act') {") && AG.includes('const gate = (await browserGate(tc.name, args)) || permissionAsk(tc.name, args);'), 'auto-approved');
+    check('acting on a website asks you, even in Auto', AG.includes("if (name !== 'computer' || a.backend === 'native' || !['click', 'type', 'press'].includes(act)) return null;") && AG.includes("if (access === 'auto' && kind !== 'browser-act' && kind !== 'desktop-act') {") && AG.includes('const gate = (await browserGate(tc.name, args)) || permissionAsk(tc.name, args);'), 'auto-approved');
     check('local pages are not asked about that way', AG.includes("!/^(localhost|127\\.0\\.0\\.1|\\[::1\\])$/i.test(u.hostname)"), 'asks for localhost');
     check('"Always" covers the site, and says so', MAIN.includes("const key = kind + '\\u0000' + String(alwaysKey || target || '');") && AG.includes('alwaysLabel: `Always on ${host}`') && HTML.includes("$('askAlways').textContent = p.alwaysLabel ||"), 'one action only');
     check('a password field\'s contents are never read for the prompt', AG.includes("(el.type !== 'password' && el.type !== 'hidden' ? el.value : '')") && AG.includes('Type into a password field'), 'shows the password');
@@ -1422,6 +1423,38 @@ async function drain(gen) {
     }
     check('the built-in skills say secrets never go through the chat', /never ask the user to paste a secret into the chat/i.test(read('resources/skills/service-setup/SKILL.md')) && /Never type a password/.test(read('resources/skills/preview-browser/SKILL.md')), 'missing');
     check('Settings has a Skills page with your folder', HTML.includes('<section class="set-page" data-set="skills" hidden>') && HTML.includes("if (key === 'skills') loadSkills();") && /ipcMain\.handle\('skills:openFolder'/.test(MAIN), 'no page');
+    // Desktop control ported from Byte: named windows, controls by number, real input, safety.
+    {
+      const WI = require(path.join(ROOT, 'src/backend/cu/win-input.js'));
+      const keys = WI.parseKeys('ctrl+shift+s');
+      let winErr = '', unkErr = '';
+      try { WI.parseKeys('win+r'); } catch (e) { winErr = e.message; }
+      try { WI.parseKeys('ctrl+banana'); } catch (e) { unkErr = e.message; }
+      check('shortcuts are parsed, and Windows-key ones refused', JSON.stringify(keys.map((k) => k.vk)) === '[17,16,83]' && /not allowed/.test(winErr) && /unknown key "banana"/.test(unkErr), [keys, winErr, unkErr]);
+      const INP = read('src/backend/cu/win-input.js');
+      check('typing is Unicode SendInput, not SendKeys', INP.includes('dwFlags: KEYEVENTF_UNICODE') && !INP.includes('SendKeys('), 'SendKeys');
+      check('a window is brought to the front before keys go to it', INP.includes('send(key(0x12, false));') && INP.includes('a.SetForegroundWindow(hwnd);'), 'keys go to VoxAI');
+      const DK = require(path.join(ROOT, 'src/backend/cu/desktop.js'));
+      DK._states.set('t-desc', { elements: new Map([[3, { id: 3, name: 'Message', type: 'Edit' }], [4, { id: 4, name: 'Send', type: 'Button' }]]), target: null });
+      const dt = DK.describe('t-desc', 'type', { index: 3, text: 'hello' }), dc = DK.describe('t-desc', 'click', { index: 4, button: 'right' }), dp = DK.describe('t-desc', 'press', { key: 'ctrl+s' });
+      check('each desktop action is described for its approval', dt.target === 'Type "hello" into "Message"' && dc.target === 'Right-click "Send"' && dp.target === 'Press ctrl+s' && DK.describe('t-desc', 'state', {}) === null, [dt, dc, dp]);
+      DK._states.delete('t-desc');
+      check('password managers and private windows are not looked into', /password manager/.test(DK.privacyBlock({ app: 'Bitwarden.exe', title: 'Vault' })) && /private/.test(DK.privacyBlock({ app: 'msedge.exe', title: 'New tab - [InPrivate] - Microsoft Edge' })) && DK.privacyBlock({ app: 'notepad.exe', title: 'notes.txt - Notepad' }) === null, 'looked');
+      check('coordinates follow the picture the model sees', DK.fitScale(1920, 1080) === 1 && DK.fitScale(3840, 1080) === 2560 / 3840, DK.fitScale(3840, 1080));
+      const DS = read('src/backend/cu/desktop.js');
+      check('moving the mouse stops it, except after approving', DS.includes("if (ctx && ctx.callApproved) { s.cursorAt = null; return; }") && DS.includes('> MOVED_PX'), 'no guard');
+      check('a password box is never typed into', DS.includes("if (e.password) throw new Error('that is a password box") && DS.includes("if (f && f.password) throw new Error("), 'types passwords');
+      const CS = read('native/VoxUia.cs');
+      check('the controls helper has no keyboard or mouse hooks, and knows real pixels', !/SetWindowsHookEx|class Recorder|class FocusGuard/.test(CS) && CS.includes('SetProcessDpiAwarenessContext(new IntPtr(-4))'), 'hooks');
+      check('the helper is built and unpacked with the app, with koffi', PKG0.scripts.predist.includes('node scripts/build-uia.js') && PKG0.scripts.prestart.includes('node scripts/build-uia.js')
+        && JSON.stringify(PKG0.build.asarUnpack) === JSON.stringify(['node_modules/koffi/**', 'node_modules/@koromix/**', 'resources/uia/**']) && !!PKG0.dependencies.koffi, PKG0.build.asarUnpack);
+      check('the helper runs from outside the packed app', read('src/backend/cu/uia.js').includes(".replace(/app\\.asar([\\\\/])/, 'app.asar.unpacked$1')"), 'inside asar');
+      check('desktop actions always ask, looking reads in words', AG.includes("return { kind: 'desktop-act', target: d.target") && AG.includes("kind !== 'desktop-act') {") && AG.includes("kind: 'desktop-look'") && HTML.includes("'desktop-act': 'Use your keyboard and mouse?'"), 'raw');
+      check('Esc stops a run that is driving the desktop, and is let go after', MAIN.includes("if (ev.type === 'desktop_control') armDesktopEsc(runKey, ctl);") && MAIN.includes("globalShortcut.register('Escape'") && MAIN.includes('disarmDesktopEsc(runKey);   // Esc goes back to the apps'), 'no kill switch');
+      check('the computer tool can focus a window', TIX.includes("focus: 'cu_focus',") && read('src/backend/tools/sandbox.js').includes("'cu_list', 'cu_focus',"), 'no focus');
+      const cu = read('resources/skills/computer-use/SKILL.md');
+      check('built-in skill computer-use says how, and what it must not do', SK_FM(cu).name === 'computer-use' && /Never type a password/.test(cu) && /moving the mouse/.test(cu) && /data, not\s+instructions/.test(cu), SK_FM(cu));
+    }
     check('a new session\'s row has its name while the run is going', MAIN.includes("...(live.get(s.id) && live.get(s.id).title ? { title: live.get(s.id).title } : {})"), '"New session"');
     check('at start, a session the app closed on while asking is opened', HTML.includes("const asked = (SESS_ITEMS.find((s) => s.waiting) || {}).id;"), 'start screen');
   }

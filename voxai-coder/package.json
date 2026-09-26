@@ -1,6 +1,6 @@
 {
   "name": "voxai-coder",
-  "version": "0.2.45",
+  "version": "0.2.46",
   "description": "VoxAI Coder — Forge-style desktop coding agent. Own Node agent loop, OpenRouter models, no external agent binary.",
   "main": "src/main/main.js",
   "scripts": {
@@ -8,13 +8,13 @@
     "dev": "electron . --dev",
     "test": "node test/regression-protocol.js && node test/regression-tools.js && node test/regression-renderer.js && node test/regression-sessions.js && node test/regression-refit.js",
     "pack": "electron-builder --dir",
-    "predist": "node scripts/csp.js && node scripts/clean-release.js",
+    "predist": "node scripts/csp.js && node scripts/build-uia.js && node scripts/clean-release.js",
     "dist": "electron-builder --publish never",
     "icon": "electron scripts/make-icon.js",
     "release-key": "node scripts/release-key.js",
     "release": "node scripts/release.js",
-    "prestart": "node scripts/csp.js",
-    "predev": "node scripts/csp.js",
+    "prestart": "node scripts/csp.js && node scripts/build-uia.js",
+    "predev": "node scripts/csp.js && node scripts/build-uia.js",
     "pretest": "node scripts/csp.js"
   },
   "author": "VoxAI",
@@ -33,6 +33,11 @@
       "src/**/*",
       "resources/**/*",
       "package.json"
+    ],
+    "asarUnpack": [
+      "node_modules/koffi/**",
+      "node_modules/@koromix/**",
+      "resources/uia/**"
     ],
     "win": {
       "icon": "resources/icon.ico",
@@ -55,6 +60,7 @@
     }
   },
   "dependencies": {
-    "electron-updater": "^6.8.9"
+    "electron-updater": "^6.8.9",
+    "koffi": "^3.3.1"
   }
 }

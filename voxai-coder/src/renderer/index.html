@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-8A9GwtuD9/IFm4Nn3pOFa4vFngwlwg6SGEt69XmTn74='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-m6SBhr6ExzhWDtHKKVWODaNLKuPahon9G/n3FpIX00U='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -4397,6 +4397,9 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
     const rec = v.latestTool && v.latestTool.name === 'artifact_publish' ? v.latestTool : null;
     if (rec) { rec.artifact = a; if (rec.group) { paintRow(rec.group); if (rec.group.open) fillRowCard(rec.group); } }
     else { const r = noteRow({ icon: 'globe', verb: 'Published', chip: a.title || a.path || 'artifact', meta: a.kind || '' }); const rr = flowRoot(v); if (rr) { rr.appendChild(r); followThread(); } }
+  } else if (event.type === 'desktop_control') {
+    // Driving the real keyboard and mouse: say so, and how to stop it (main.js arms Esc).
+    setActivity(v, 'Using your keyboard and mouse · Esc stops');
   } else if (event.type === 'awaiting_agents') {
     setStatus('waiting for ' + event.count + ' background agent' + (event.count === 1 ? '' : 's') + '…');
   } else if (event.type === 'agent_finished') {
@@ -4652,7 +4655,7 @@ const ASK_TITLES = {
   shell: 'Run a command?', 'write-file': 'Change a file?', 'web-fetch': 'Open a web page?',
   'web-search': 'Search the web?', spawn_agent: 'Start a sub-agent?', spawn_parallel: 'Start sub-agents?',
   computer: 'Control the browser?', browser_open: 'Open the browser?', browser_act: 'Control the browser?',
-  'browser-act': 'Act on this website?',
+  'browser-act': 'Act on this website?', 'desktop-act': 'Use your keyboard and mouse?', 'desktop-look': 'Look at your desktop?',
   mcp: 'Call an MCP tool?', mcp_call: 'Call an MCP tool?',
 };
 function paintAsk(){
@@ -4666,7 +4669,7 @@ function paintAsk(){
   if (p) {
     $('askTitle').textContent = ASK_TITLES[p.kind] || ('Allow ' + String(p.kind || 'this').replace(/_/g, ' ') + '?');
     // A website in the preview may be one you are signed in to: say so, not the folder.
-    $('askSub').textContent = p.kind === 'browser-act' ? '\u00b7 in the preview, where you may be signed in' : '\u00b7 the agent wants to do this in ' + folderName(v.workdir || v._workdir || '');
+    $('askSub').textContent = p.kind === 'desktop-act' ? '· on your desktop · Esc, or moving the mouse, stops it' : p.kind === 'browser-act' ? '\u00b7 in the preview, where you may be signed in' : '\u00b7 the agent wants to do this in ' + folderName(v.workdir || v._workdir || '');
     $('askWhat').textContent = p.showDetail ? (p.kind + '\n' + p.target) : (p.target || p.kind);
     $('askAlways').hidden = !p.canAlways;
     // "Always" remembers this exact file or command; "in this session" read as everything.

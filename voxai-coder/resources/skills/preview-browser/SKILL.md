@@ -30,7 +30,8 @@ If a skill exists for the service (check the skills index), load it too.
 - `press` with `key` (`Enter`, `Tab`, `Escape`, `Control+A`...).
 - `scroll` with `dy` (positive is down).
 - `screenshot` -- the page. With `backend: "native"`: the Windows desktop, or one window
-  with `window` (part of its title or the app name), captured even when covered.
+  with `window` (part of its title or the app name), captured even when covered. To work
+  inside a desktop app rather than a web page, load the `computer-use` skill.
 
 ## Signing in: the user does it
 

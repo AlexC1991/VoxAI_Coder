@@ -470,8 +470,10 @@ const FACADES = [
     describe: 'Drive the in-app browser: open a page, read its state, click, type, press keys, scroll, '
       + 'and capture screenshots. Every action operates on the SAME attached surface, so `state` after '
       + '`open` shows the page you just opened. With backend "native" it works on the Windows desktop '
-      + 'instead: `list` shows the open windows, and `screenshot` with `window` (part of a title or an app '
-      + 'name) captures just that window, even when other windows cover it -- prefer that to the whole desktop.',
+      + 'instead: `list` shows the open windows; `state` with `window` (part of a title or an app name) gives that '
+      + 'window\'s controls, numbered, and a picture; then `click` / `type` with `index`, `press`, `scroll`, `focus`. '
+      + 'Prefer controls by number to x/y. `screenshot` with `window` captures one window even when covered. '
+      + 'Load the computer-use skill before working on the desktop.',
     members: {
       // `open` MUST be the CDP-attaching path. It used to route to browser_open,
       // which opens the Atlas view WITHOUT attaching the debugger — so the very next
@@ -486,6 +488,7 @@ const FACADES = [
       scroll: 'cu_scroll',
       screenshot: 'cu_screenshot',
       list: 'cu_list',
+      focus: 'cu_focus',
     },
     // Folded away but NOT exposed as actions: the non-CDP browser_* family is
     // strictly less capable than cu_* and mixing the two is the bug above.

@@ -514,6 +514,21 @@ async function* runAgent(opts) {
   const browserGate = async (name, a) => {
     a = a || {};
     const act = String(a.action || '');
+    // The desktop: your real keyboard and mouse, in any app. Always yours to approve, naming the app
+    // and the control; "Always for <app>" covers that app for the session (cu/desktop.js).
+    if (name === 'computer' && (a.backend === 'native' || act === 'focus') && ['click', 'type', 'press', 'scroll', 'focus'].includes(act)) {
+      let d = null;
+      try { d = require('./cu/desktop').describe(session.id, act, a); } catch { d = null; }
+      if (d) return { kind: 'desktop-act', target: d.target, alwaysKey: d.alwaysKey, alwaysLabel: d.alwaysLabel };
+    }
+    // Looking at the desktop, in words: the prompt read {"action":"state","backend":"native",...}.
+    if (name === 'computer' && a.backend === 'native' && ['list', 'state', 'screenshot'].includes(act)) {
+      const win = String(a.window || '').slice(0, 60);
+      const target = act === 'list' ? 'See which windows are open on your desktop'
+        : act === 'state' ? (win ? `Read the buttons and boxes in "${win}" and take a picture of it` : 'Read the buttons and boxes in the window it is working in')
+          : (win ? `Take a picture of the "${win}" window` : 'Take a picture of your whole screen');
+      return { kind: 'desktop-look', target, alwaysKey: 'look:' + (win.toLowerCase() || act), alwaysLabel: win ? `Always for "${win}"` : 'Always for this' };
+    }
     if (name !== 'computer' || a.backend === 'native' || !['click', 'type', 'press'].includes(act)) return null;
     let wc = null;
     let host = '';
@@ -619,7 +634,7 @@ async function* runAgent(opts) {
         (['web-fetch', 'web-search'].includes(kind) && access !== 'ask');
       if (auto) return true;
       let note = '';
-      if (access === 'auto' && kind !== 'browser-act') {
+      if (access === 'auto' && kind !== 'browser-act' && kind !== 'desktop-act') {
         // Auto never blocks on its own: what the check passes runs, and anything it
         // is not sure about comes to you with its reason, the way any other level asks.
         const d = await autoCheck(kind, target);

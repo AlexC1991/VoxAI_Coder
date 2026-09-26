@@ -64,7 +64,7 @@ const AUTO_LEVEL = {
 };
 // tools that are NEVER auto-allowed below 'full access' (always prompt at lower levels)
 const ALWAYS_PROMPT = ['browser_open', 'browser_act', 'browser_screenshot', 'spawn_agent', 'spawn_parallel', 'mcp_call',
-  'cu_launch', 'cu_state', 'cu_click', 'cu_type', 'cu_press', 'cu_scroll', 'cu_screenshot', 'cu_list',
+  'cu_launch', 'cu_state', 'cu_click', 'cu_type', 'cu_press', 'cu_scroll', 'cu_screenshot', 'cu_list', 'cu_focus',
   'computer', 'mcp:call'];
 
 /**

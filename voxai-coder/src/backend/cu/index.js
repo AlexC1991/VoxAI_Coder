@@ -18,6 +18,7 @@
 
 const cdp = require('./cdp');
 const native = require('./native');
+const desktop = require('./desktop');
 
 let lastSurface = 'browser';
 
@@ -53,10 +54,14 @@ function makeComputerUseTool(opts) {
         type: 'function',
         function: {
           name: 'cu_state',
-          description: 'Computer-use: return the current live state — text of the page (browser) or list of native windows (native), an indexed list of actionable elements, and a fresh screenshot streamed to the UI. Call after every action to see the result.',
+          description: 'Computer-use: the current state -- browser: the page text and its numbered elements; native: the numbered controls of one window (buttons, boxes, menus...) and a picture of it. Act on controls by their number (index).',
           parameters: {
             type: 'object',
-            properties: { backend: { type: 'string', enum: ['browser', 'native'] } },
+            properties: {
+              backend: { type: 'string', enum: ['browser', 'native'] },
+              window: { type: 'string', description: 'native: the window to work in -- part of its title or the app name (e.g. "Notepad"). Remembered, so later calls can leave it out.' },
+              find: { type: 'string', description: 'native: only controls whose name or type contains this (e.g. "save", "Edit").' },
+            },
             additionalProperties: false,
           },
         },
@@ -72,6 +77,8 @@ function makeComputerUseTool(opts) {
               index: { type: 'integer', description: 'Element index from cu_state elements.' },
               x: { type: 'integer' }, y: { type: 'integer' },
               backend: { type: 'string', enum: ['browser', 'native'] },
+              button: { type: 'string', enum: ['left', 'right'], description: 'native: right opens a control\'s menu (its items come back numbered).' },
+              double: { type: 'boolean', description: 'native: double-click.' },
             },
             additionalProperties: false,
           },
@@ -81,7 +88,7 @@ function makeComputerUseTool(opts) {
         type: 'function',
         function: {
           name: 'cu_type',
-          description: 'Computer-use: type text into the currently focused field (browser) or active native window.',
+          description: 'Computer-use: type text -- browser: into the focused field; native: into a control by its index (or the focused one), exactly as given. Does not press Enter.',
           parameters: {
             type: 'object',
             properties: { text: { type: 'string' }, backend: { type: 'string', enum: ['browser', 'native'] } },
@@ -105,7 +112,7 @@ function makeComputerUseTool(opts) {
         type: 'function',
         function: {
           name: 'cu_scroll',
-          description: 'Computer-use: scroll the page/window by a dx/dy delta (optionally from an element index or x/y point). Positive dy scrolls down.',
+          description: 'Computer-use: scroll the page/window by a dx/dy delta (optionally from an element index or x/y point). Positive dy scrolls down; native: dy is wheel notches (3 is one normal scroll).',
           parameters: {
             type: 'object',
             properties: {
@@ -138,11 +145,23 @@ function makeComputerUseTool(opts) {
         type: 'function',
         function: {
           name: 'cu_list',
-          description: 'Computer-use: list current surfaces — browser: the open tabs; native: the open app windows (pid + title).',
+          description: 'Computer-use: list current surfaces — browser: the open tabs; native: the open windows (title and app), front to back.',
           parameters: {
             type: 'object',
             properties: { backend: { type: 'string', enum: ['browser', 'native'] } },
             additionalProperties: false,
+          },
+        },
+      },
+      {
+        type: 'function',
+        function: {
+          name: 'cu_focus',
+          description: 'Computer-use (native): bring a window to the front.',
+          parameters: {
+            type: 'object',
+            properties: { backend: { type: 'string', enum: ['native'] }, window: { type: 'string' } },
+            required: ['window'], additionalProperties: false,
           },
         },
       },
@@ -183,6 +202,15 @@ function makeComputerUseTool(opts) {
       const implied = args.url ? 'browser' : (name === 'cu_launch' && args.nativePath ? 'native' : null);
       const backend = args.backend || implied || lastSurface || 'browser';
       lastSurface = backend;
+      // The Windows desktop: one named window, its controls by number (desktop.js, from Byte).
+      const DESKTOP = { cu_state: desktop.state, cu_click: desktop.click, cu_type: desktop.type, cu_press: desktop.press,
+        cu_scroll: desktop.scroll, cu_focus: desktop.focus, cu_list: desktop.list };
+      if (name === 'cu_focus' && backend !== 'native') lastSurface = 'native';
+      if ((backend === 'native' || name === 'cu_focus') && DESKTOP[name]) {
+        const r = await DESKTOP[name](args, ctx);
+        if (r && r.screenshot) emitImage(ctx, r.screenshot, (r.window && r.window.title) || 'desktop');
+        return r;
+      }
       // Every browser action works on the preview the user is looking at, not only
       // after an `open`. A page the USER put in the preview, read with `state`,
       // started a separate hidden Chrome on about:blank instead: the agent reported
@@ -284,7 +312,7 @@ function makeComputerUseTool(opts) {
         case 'cu_screenshot': {
           if (backend === 'native') {
             const one = !!(args.window || args.hwnd || args.pid);
-            const s = native.screenshot({ window: args.window, hwnd: args.hwnd, pid: args.pid });
+            const s = desktop.screenshot(args, ctx);
             if (!s.ok) return { backend, ok: false, screenshot: null, error: s.error };
             emitImage(ctx, s.dataUrl, one ? (s.title || s.app || 'window') : 'desktop');
             return {
