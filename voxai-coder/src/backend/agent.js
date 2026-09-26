@@ -309,6 +309,27 @@ function compactImage(url) {
   } catch { return url; }
 }
 
+/**
+ * What a browser action is aimed at, for its approval: the element `index` names in
+ * the page's element list (the same list and order as the computer tool's state), or
+ * the focused one. A password field's contents are never read.
+ */
+function browserTargetJs(act, index) {
+  const byIndex = act === 'click' && Number.isInteger(Number(index)) && index !== null && index !== undefined;
+  return `(() => {
+    const sel = 'a,button,input,textarea,select,[contenteditable="true"],[role="button"],[role="link"],[role="textbox"],[role="checkbox"],[role="radio"],[role="menuitem"],[tabindex]';
+    const name = (el) => !el ? '' : String(el.getAttribute('aria-label') || el.innerText || el.getAttribute('placeholder') || el.getAttribute('name') || el.getAttribute('title')
+      || (el.type !== 'password' && el.type !== 'hidden' ? el.value : '') || el.tagName || '').trim().replace(/\\s+/g, ' ').slice(0, 60);
+    let el = null;
+    if (${byIndex}) {
+      const els = [...document.querySelectorAll(sel)].filter((e) => { const r = e.getBoundingClientRect();
+        return r.width >= 2 && r.height >= 2 && !(r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth); });
+      el = els[${byIndex ? Number(index) : 0}] || null;
+    } else el = document.activeElement && document.activeElement !== document.body ? document.activeElement : null;
+    return JSON.stringify({ label: name(el), password: !!(el && el.type === 'password') });
+  })()`;
+}
+
 /** Today as YYYY-MM-DD in the user's own time zone. */
 function localDate(d = new Date()) {
   const p = (n) => String(n).padStart(2, '0');
@@ -474,6 +495,33 @@ async function* runAgent(opts) {
       return s.slice(0, 117) + '…';
     } catch { return ''; }
   };
+  // Clicking, typing or pressing keys on a real website -- one you may be signed in to
+  // -- is yours to approve, even in Auto: the safety check cannot know what a button
+  // does in your account. "Always" then covers that site for the session. Local pages
+  // (localhost, a project file) are not asked about this way. Null when it does not apply.
+  const browserGate = async (name, a) => {
+    a = a || {};
+    const act = String(a.action || '');
+    if (name !== 'computer' || a.backend === 'native' || !['click', 'type', 'press'].includes(act)) return null;
+    let wc = null;
+    let host = '';
+    try {
+      wc = typeof onAttachAtlas === 'function' ? onAttachAtlas() : null;
+      const u = new URL(wc ? wc.getURL() : '');
+      if (/^https?:$/.test(u.protocol) && !/^(localhost|127\.0\.0\.1|\[::1\])$/i.test(u.hostname)) host = u.hostname;
+    } catch { host = ''; }
+    if (!host) return null;
+    let el = { label: '', password: false };
+    try { el = JSON.parse(await wc.executeJavaScript(browserTargetJs(act, a.index))) || el; } catch {}
+    const on = ` on ${host}`;
+    const into = el.label ? ` into "${el.label}"` : '';
+    const target = act === 'click'
+      ? (el.label ? `Click "${el.label}"${on}` : (a.x != null ? `Click at (${a.x}, ${a.y})${on}` : `Click${on}`))
+      : act === 'type'
+        ? (el.password ? `Type into a password field${on}` : `Type "${String(a.text || '').slice(0, 80)}"${into}${on}`)
+        : `Press ${String(a.key || '')}${into}${on}`;
+    return { kind: 'browser-act', target, alwaysKey: host, alwaysLabel: `Always on ${host}` };
+  };
   // What the approval prompt shows: the command or the path, not the call's JSON.
   // The kinds match the ones the tools check themselves, so "always allow" learned
   // at the gate is the same rule the tool would have asked about.
@@ -542,7 +590,7 @@ async function* runAgent(opts) {
     // the tool's own check does not ask the same question a second time.
     callApproved: false,
     // Resolves true when the action may go ahead; throws when it is refused.
-    checkPermission: async (kind, target) => {
+    checkPermission: async (kind, target, opts) => {
       if (ctx.callApproved) return true;
       const auto =
         access === 'full' ||
@@ -559,7 +607,7 @@ async function* runAgent(opts) {
         (['web-fetch', 'web-search'].includes(kind) && access !== 'ask');
       if (auto) return true;
       let note = '';
-      if (access === 'auto') {
+      if (access === 'auto' && kind !== 'browser-act') {
         // Auto never blocks on its own: what the check passes runs, and anything it
         // is not sure about comes to you with its reason, the way any other level asks.
         const d = await autoCheck(kind, target);
@@ -567,7 +615,7 @@ async function* runAgent(opts) {
         note = d.decision === 'block' ? `Auto mode wants your say: ${d.reason}` : `Auto mode could not check this: ${d.reason}`;
       }
       // ask the UI via callback; must resolve true/false (timeout → false)
-      const allowed = await askPermission({ kind, target, note });
+      const allowed = await askPermission({ kind, target, note, ...(opts && opts.alwaysKey ? { alwaysKey: opts.alwaysKey, alwaysLabel: opts.alwaysLabel } : {}) });
       if (!allowed) throw new Error(`permission denied: ${kind} ${target}`);
       return true;
     },
@@ -996,10 +1044,10 @@ async function* runAgent(opts) {
             // Full access auto-allows; below that we ASK the user (goose-style).
             // checkPermission resolves on yes and THROWS on no. Reading its result as
             // a boolean made every approval a refusal: it used to resolve undefined.
-            const gate = permissionAsk(tc.name, args);
+            const gate = (await browserGate(tc.name, args)) || permissionAsk(tc.name, args);
             let allowed = false;
             let why = '';
-            try { allowed = (await ctx.checkPermission(gate.kind, gate.target)) !== false; }
+            try { allowed = (await ctx.checkPermission(gate.kind, gate.target, gate)) !== false; }
             catch (e) { allowed = false; why = String((e && e.message) || ''); }
             if (allowed) ctx.callApproved = true;
             if (!allowed) {
@@ -1263,4 +1311,4 @@ function answerPendingAsk(session, callId, res) {
 }
 
 module.exports = {
-  extractImages, TOOL_IMAGES_MARKER, runAgent, MAX_TURNS, boundToolResult, accumulateUsage, uniqueToolIds, pendingAsk, answerPendingAsk, compactImage };
+  extractImages, TOOL_IMAGES_MARKER, runAgent, MAX_TURNS, boundToolResult, accumulateUsage, uniqueToolIds, pendingAsk, answerPendingAsk, compactImage, browserTargetJs };

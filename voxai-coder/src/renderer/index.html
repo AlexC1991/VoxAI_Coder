@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-dBrqqGLv4V6N8v5c46ryuw6K19upNL/RnIPIP73kGaE='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-xIAX49FHz7DCl/0SMA5E+WlA/gZbC6RG9mWdOTADRuQ='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -385,7 +385,9 @@ tests"). Scroll the row instead of breaking words:
 .pp-btn{width:26px;height:24px;border:0;border-radius:5px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:14px}
 .pp-btn:hover{background:var(--sel);color:var(--ink)}
 .pp-nav{flex:none;display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--edge)}
-.pp-urlmono{flex:1;border:1px solid var(--edge2);border-radius:6px;padding:4px 9px;font-family:"Sometype Mono",monospace;font-size:13px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--panel2)}
+.pp-urlmono{flex:1;min-width:0;border:1px solid var(--edge2);border-radius:6px;padding:4px 9px;font-family:"Sometype Mono",monospace;font-size:13px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--panel2);outline:0}
+.pp-urlmono:hover{border-color:var(--edge3,var(--edge2))}
+.pp-urlmono:focus{color:var(--ink);border-color:var(--goldedge)}
 .pp-body{flex:1;min-height:0;overflow:auto;padding:14px 16px}
 /* ---- sub-agents panel ---- */
 .sub-panel{display:flex;flex-direction:column;gap:0;height:100%;overflow:auto;padding:14px 18px}
@@ -977,10 +979,10 @@ tests"). Scroll the row instead of breaking words:
     </span>
   </div>
   <div class="pp-nav">
-    <span class="pp-urlmono" id="ppUrl">http://localhost</span>
+    <input class="pp-urlmono" id="ppUrl" type="text" spellcheck="false" autocomplete="off" aria-label="Address" placeholder="Type an address or search" value="">
   </div>
   <div class="pp-body" id="ppBody">
-    <div class="pp-empty">The model hasn't shown anything yet.<br>When it fetches a website or a preview, it appears here.</div>
+    <div class="pp-empty">Nothing open yet.<br>Type an address above, or ask the agent to open a page.</div>
   </div>
 </div>
     <div class="work" id="screen-launcher" style="display:none">
@@ -1672,7 +1674,8 @@ function ppSetUrl(url){
   // back. It reopened blank and said "The model hasn't shown anything yet" after two
   // pages had been shown. Found in a live run.
   if (url && url !== 'about:blank') { const av = actView(); if (av) av.ppLastUrl = url; }
-  const u = $('ppUrl'); if (u) u.textContent = url || 'about:blank';
+  // Not while you are typing in it: a page finishing loading would wipe what you typed.
+  const u = $('ppUrl'); if (u && document.activeElement !== u) u.value = url && url !== 'about:blank' ? url : '';
   const hst = $('ppHost');
   if (!hst) return;
   let label = '';
@@ -1853,12 +1856,12 @@ function ppPaint(){
   const rec = ppHistory[ppIdx];
   const host = $('ppHost'), url = $('ppUrl'), body = $('ppBody');
   if (!rec || !rec.url) {
-    if (url) url.textContent = '';
+    if (url) url.value = '';
     if (host) host.textContent = '';
     if (body) body.innerHTML = '<div class="pp-empty">Nothing to preview yet.</div>';
     return;
   }
-  if (url) { url.textContent = rec.url; url.title = rec.url; }
+  if (url) { url.value = rec.url; url.title = rec.url; }
   if (host) { try { host.textContent = new URL(rec.url).host; } catch { host.textContent = rec.url; } }
   if (body) body.innerHTML = '<div class="pp-empty">Rendering <b>' + esc(rec.url) + '</b> in the browser view — drag the divider to resize.</div>';
   const back = $('ppBack'), fwd = $('ppFwd');
@@ -1941,6 +1944,47 @@ window.voxai && ($('ppToggle').onclick = async () => {
   const last = actView() && actView().ppLastUrl;
   open ? ppClose() : ppOpen(last || undefined);
 });
+/**
+ * What was typed in the address bar, as an address: a full URL as it is; a Windows path
+ * or a page in the project as a file; localhost as http; anything that looks like a
+ * domain as https; anything else is searched for (DuckDuckGo).
+ */
+function ppAddress(raw, workdir){
+  const s = String(raw || '').trim();
+  if (!s) return '';
+  if (/^(https?|file):\/\//i.test(s)) return s;
+  const fileUrl = (p) => 'file:///' + String(p).replace(/\\/g, '/').replace(/^\/+/, '');
+  if (/^[a-z]:[\\/]/i.test(s)) return fileUrl(s);
+  if (/^[^\s:]+\.html?$/i.test(s) && workdir) return fileUrl(String(workdir).replace(/[\\/]+$/, '') + '/' + s.replace(/^\.?[\\/]/, ''));
+  if (/^(localhost|127\.0\.0\.1|\[::1\])(:\d+)?([/?#]|$)/i.test(s)) return 'http://' + s;
+  if (!/\s/.test(s) && /^[^\s/?#]+\.[a-z]{2,}(:\d+)?([/?#]\S*)?$/i.test(s)) return 'https://' + s;
+  return 'https://duckduckgo.com/?q=' + encodeURIComponent(s);
+}
+// The address bar takes what you type: Enter goes, Esc puts the current address back.
+(function wireAddressBar(){
+  const u = $('ppUrl');
+  if (!u) return;
+  u.addEventListener('focus', () => setTimeout(() => { try { u.select(); } catch {} }, 0));
+  u.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const wd = viewDir(actView());
+      const url = ppAddress(u.value, wd);
+      if (!url) return;
+      u.value = url; u.blur();
+      ppSetUrl(url);
+      const b = ppBridge();
+      const p = $('previewPanel');
+      if (b && p && p.classList.contains('open')) { try { b.go(url, wd); } catch {} }
+      else ppOpen(url);
+      const body = $('ppBody'); if (body) body.classList.add('live');
+    } else if (e.key === 'Escape') {
+      e.preventDefault(); e.stopPropagation();
+      u.value = ppLiveUrl && ppLiveUrl !== 'about:blank' ? ppLiveUrl : '';
+      u.blur();
+    }
+  });
+})();
 (function wirePreviewBar(){
   const b = () => ppBridge();
   const on = (id, fn) => { const e = $(id); if (e) e.onclick = (ev) => { ev.preventDefault(); fn(); }; };
@@ -4589,6 +4633,7 @@ const ASK_TITLES = {
   shell: 'Run a command?', 'write-file': 'Change a file?', 'web-fetch': 'Open a web page?',
   'web-search': 'Search the web?', spawn_agent: 'Start a sub-agent?', spawn_parallel: 'Start sub-agents?',
   computer: 'Control the browser?', browser_open: 'Open the browser?', browser_act: 'Control the browser?',
+  'browser-act': 'Act on this website?',
   mcp: 'Call an MCP tool?', mcp_call: 'Call an MCP tool?',
 };
 function paintAsk(){
@@ -4601,11 +4646,12 @@ function paintAsk(){
   box.classList.toggle('asking', !!p);
   if (p) {
     $('askTitle').textContent = ASK_TITLES[p.kind] || ('Allow ' + String(p.kind || 'this').replace(/_/g, ' ') + '?');
-    $('askSub').textContent = '\u00b7 the agent wants to do this in ' + folderName(v.workdir || v._workdir || '');
+    // A website in the preview may be one you are signed in to: say so, not the folder.
+    $('askSub').textContent = p.kind === 'browser-act' ? '\u00b7 in the preview, where you may be signed in' : '\u00b7 the agent wants to do this in ' + folderName(v.workdir || v._workdir || '');
     $('askWhat').textContent = p.showDetail ? (p.kind + '\n' + p.target) : (p.target || p.kind);
     $('askAlways').hidden = !p.canAlways;
     // "Always" remembers this exact file or command; "in this session" read as everything.
-    $('askAlways').textContent = ({ 'write-file': 'Always for this file', shell: 'Always for this command', 'web-fetch': 'Always for this page', 'web-search': 'Always for this search' })[p.kind] || 'Always for this';
+    $('askAlways').textContent = p.alwaysLabel || ({ 'write-file': 'Always for this file', shell: 'Always for this command', 'web-fetch': 'Always for this page', 'web-search': 'Always for this search' })[p.kind] || 'Always for this';
     $('askNote').hidden = !p.note; $('askNote').textContent = p.note || '';
     $('askDetail').textContent = p.showDetail ? 'Less' : 'Details';
     // Focus the request, not the Allow button: Enter on a focused button clicks it, and
@@ -4671,11 +4717,11 @@ document.addEventListener('paste', (e) => {
   e.preventDefault(); $('prompt').value += t; p.typedAt = Date.now(); paintAskDraft();
 });
 window.voxai.onAgentPermission(onAgentPerm);
-function onAgentPerm({ permId, sessionId, kind, target, canAlways, note }){
+function onAgentPerm({ permId, sessionId, kind, target, canAlways, note, alwaysLabel }){
   const v = sessionId ? viewOf(sessionId) : actView();
   if (!v) return;
   // It stays until you answer or the run ends (it used to lapse to "no" after two minutes).
-  v.perm = { permId, kind, target: String(target || ''), canAlways: !!canAlways, timer: null, shownAt: Date.now(), before: v.activity, note: note || '' };
+  v.perm = { permId, kind, target: String(target || ''), canAlways: !!canAlways, timer: null, shownAt: Date.now(), before: v.activity, note: note || '', alwaysLabel: alwaysLabel || '' };
   setActivity(v, 'Waiting for you');
   if (v === actView()) paintAsk();
   refreshSessionList();

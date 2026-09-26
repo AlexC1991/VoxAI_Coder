@@ -46,7 +46,7 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
     back: () => ipcRenderer.send('preview:back'),
     forward: () => ipcRenderer.send('preview:forward'),
     reload: () => ipcRenderer.send('preview:reload'),
-    go: (url) => ipcRenderer.send('preview:go', url),
+    go: (url, workdir) => ipcRenderer.send('preview:go', workdir ? { url, workdir } : url),
     openFile: (url, workdir, always) => ipcRenderer.invoke('preview:openFile', { url, workdir, always }),
     autoPref: (workdir) => ipcRenderer.invoke('preview:autoPref', { workdir }),
     onState: (cb) => {

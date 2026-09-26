@@ -44,7 +44,7 @@ if (!app.requestSingleInstanceLock()) {
   return;
 }
 app.on('second-instance', () => {
-  const w = BrowserWindow.getAllWindows()[0];
+  const w = win();
   if (!w) return;
   if (w.isMinimized()) w.restore();
   w.show();
@@ -158,7 +158,10 @@ async function getLive(id) {
   live.set(id, s);
   return s;
 }
-function win() { return BrowserWindow.getAllWindows()[0]; }
+// The app's own window. Not "the first window": a sign-in pop-up from the preview is a
+// window too, and could be listed first.
+let mainWindow = null;
+function win() { return (mainWindow && !mainWindow.isDestroyed()) ? mainWindow : BrowserWindow.getAllWindows()[0]; }
 // With Atlas split the window content is a root View; the chat lives in
 // chatV.webContents. `win()` still returns the BrowserWindow (for geometry),
 // but message sends must target chatV.webContents.
@@ -173,7 +176,7 @@ function relay(ch) { const c = chatWebContents(); if (c) c.send('vox:menu', ch);
 
 // ------------------------------------------------------------------- window ---
 function createWindow() {
-  const w = new BrowserWindow({
+  const w = mainWindow = new BrowserWindow({
     width: 1440, height: 900,
     minWidth: 1100, minHeight: 700,
     backgroundColor: '#0e0e10',
@@ -383,6 +386,27 @@ function attachSplitViews(w) {
     browserV.webContents.on('dom-ready', () => {
       try { browserV.webContents.insertCSS(PREVIEW_SCROLLBAR_CSS); } catch {}
     });
+    // A link meant for a new tab opens here, in the preview. A sign-in window (a
+    // window.open with a size: "Sign in with GitHub" and the like) opens as a real
+    // window over the app, so the page that opened it gets its answer. Both used to
+    // come up as a bare, separate window the agent could not see.
+    browserV.webContents.setWindowOpenHandler(({ url, disposition }) => {
+      if (!/^https?:\/\//i.test(String(url || '')) && url !== 'about:blank') return { action: 'deny' };
+      if (disposition !== 'new-window') { try { browserV.webContents.loadURL(url); } catch {} return { action: 'deny' }; }
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          parent: win(), width: 520, height: 720, autoHideMenuBar: true, backgroundColor: '#ffffff',
+          icon: path.join(__dirname, '..', '..', 'resources', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
+          webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true },
+        },
+      };
+    });
+    browserV.webContents.on('did-create-window', (child) => {
+      try { child.setMenuBarVisibility(false); } catch {}
+      // The pop-up's own links stay in the pop-up; it does not spawn more windows.
+      try { child.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//i.test(String(url || ''))) { try { child.webContents.loadURL(url); } catch {} } return { action: 'deny' }; }); } catch {}
+    });
   } catch {}
   browserV.setVisible(false);
 
@@ -581,7 +605,18 @@ app.whenReady().then(() => {
   ipcMain.on('preview:back', () => { try { browserV && browserV.webContents.goBack(); } catch {} });
   ipcMain.on('preview:forward', () => { try { browserV && browserV.webContents.goForward(); } catch {} });
   ipcMain.on('preview:reload', () => { try { browserV && browserV.webContents.reload(); } catch {} });
-  ipcMain.on('preview:go', (_e, url) => { try { atlasOpen = true; setTimeout(broadcastPreviewState, 0); const ok = previewableUrl(url, getSettings(false).workingDir); if (ok) browserV.webContents.loadURL(ok); layoutAtlas(); } catch {} });
+  // The address bar. A file in the project is judged against the session's folder,
+  // like the preview's other ways in (see preview:open).
+  ipcMain.on('preview:go', (_e, arg) => {
+    try {
+      const url = arg && typeof arg === 'object' ? arg.url : arg;
+      const wd = (arg && typeof arg === 'object' && arg.workdir) || getSettings(false).workingDir;
+      atlasOpen = true; setTimeout(broadcastPreviewState, 0);
+      const ok = previewableUrl(url, wd);
+      if (ok) browserV.webContents.loadURL(ok);
+      layoutAtlas();
+    } catch {}
+  });
 
   // settings
   ipcMain.handle('settings:get', () => getSettings(true));
@@ -801,15 +836,16 @@ app.whenReady().then(() => {
     controllers.set(runKey, ctl);
     const w = win();
 
-    const askPermission = ({ kind, target, note }) => new Promise((resolve) => {
+    const askPermission = ({ kind, target, note, alwaysKey, alwaysLabel }) => new Promise((resolve) => {
       // whole-session allow (prototype "allow for the whole session"): remember
       // this exact target so future identical requests auto-allow without prompting.
-      const key = kind + '\u0000' + String(target || '');
+      // An action on a website is remembered by its site (alwaysKey), not word for word.
+      const key = kind + '\u0000' + String(alwaysKey || target || '');
       if (sessionAlwaysAllow.get(sessionId) && sessionAlwaysAllow.get(sessionId).has(key)) { resolve(true); return; }
       const permId = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
       // It waits until you answer or the run ends (see the finally below). It used to
       // count as "no" after two minutes, so stepping away turned approvals into refusals.
-      const msg = { permId, sessionId, kind, target, canAlways: true, note: note || '' };
+      const msg = { permId, sessionId, kind, target, canAlways: true, note: note || '', ...(alwaysLabel ? { alwaysLabel } : {}) };
       pendingPerms.set(permId, {
         msg, runKey,
         resolve: (v, always) => {

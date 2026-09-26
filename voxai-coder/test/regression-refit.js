@@ -1374,6 +1374,19 @@ async function drain(gen) {
     check('captures do not pile up in Temp', NAT.includes('try { fs.unlinkSync(p); } catch {}'), 'left in Temp');
     check('the computer tool takes a window, and says where it is on screen', CU.includes("window: { type: 'string', description: 'native: capture just this window") && CU.includes('Pixel (0,0) of this image is screen point') && TIX.includes('captures just that window, even when other windows cover it'), 'desktop only');
     check('a desktop or window capture is not called "Used the browser"', HTML.includes("pick('eye', 'Looked at a window', 'Looking at a window')") && HTML.includes("if (name === 'computer' && a.backend === 'native') return 'Using the desktop';"), 'browser');
+    // The preview is a browser you can use: an address bar, pop-ups, and your say on websites.
+    const addrSrc = (HTML.match(/function ppAddress\(raw, workdir\)\{[\s\S]*?\n\}\n/) || [''])[0];
+    const ppAddress = addrSrc ? new Function(addrSrc + '; return ppAddress;')() : null;
+    const B = String.fromCharCode(92);
+    const got = ppAddress && ['example.com', 'localhost:5173/x', 'index.html', 'set up wrangler', 'https://a.b/c', 'C:' + B + 'p' + B + 'a.html'].map((x) => ppAddress(x, 'C:' + B + 'proj'));
+    check('the address bar understands what is typed', !!got && JSON.stringify(got) === JSON.stringify(['https://example.com', 'http://localhost:5173/x', 'file:///C:/proj/index.html', 'https://duckduckgo.com/?q=set%20up%20wrangler', 'https://a.b/c', 'file:///C:/p/a.html']), got);
+    check('the address is a field you can type in', HTML.includes('<input class="pp-urlmono" id="ppUrl" type="text"') && HTML.includes("if (u && document.activeElement !== u) u.value ="), 'read-only');
+    check('a new-tab link opens in the preview; a sign-in pop-up is a window over the app', /browserV\.webContents\.setWindowOpenHandler\(\(\{ url, disposition \}\) => \{[\s\S]{0,300}if \(disposition !== 'new-window'\) \{ try \{ browserV\.webContents\.loadURL\(url\)[\s\S]{0,200}action: 'allow'[\s\S]{0,120}parent: win\(\)/.test(MAIN) && /sandbox: true, webSecurity: true/.test(MAIN), 'bare windows');
+    check('the app\'s window is never mistaken for a pop-up', MAIN.includes('const w = mainWindow = new BrowserWindow({') && MAIN.includes("function win() { return (mainWindow && !mainWindow.isDestroyed()) ? mainWindow"), 'first window');
+    check('acting on a website asks you, even in Auto', AG.includes("if (name !== 'computer' || a.backend === 'native' || !['click', 'type', 'press'].includes(act)) return null;") && AG.includes("if (access === 'auto' && kind !== 'browser-act') {") && AG.includes('const gate = (await browserGate(tc.name, args)) || permissionAsk(tc.name, args);'), 'auto-approved');
+    check('local pages are not asked about that way', AG.includes("!/^(localhost|127\\.0\\.0\\.1|\\[::1\\])$/i.test(u.hostname)"), 'asks for localhost');
+    check('"Always" covers the site, and says so', MAIN.includes("const key = kind + '\\u0000' + String(alwaysKey || target || '');") && AG.includes('alwaysLabel: `Always on ${host}`') && HTML.includes("$('askAlways').textContent = p.alwaysLabel ||"), 'one action only');
+    check('a password field\'s contents are never read for the prompt', AG.includes("(el.type !== 'password' && el.type !== 'hidden' ? el.value : '')") && AG.includes('Type into a password field'), 'shows the password');
     check('a new session\'s row has its name while the run is going', MAIN.includes("...(live.get(s.id) && live.get(s.id).title ? { title: live.get(s.id).title } : {})"), '"New session"');
     check('at start, a session the app closed on while asking is opened', HTML.includes("const asked = (SESS_ITEMS.find((s) => s.waiting) || {}).id;"), 'start screen');
   }
