@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SENpIun0rD9EDwb8RRTuumeITouBZaJipqPVLgvEyU8='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-NJ+zliRo6YENf5ep5GzYussVx0GQ+RdgvZQTbmTrdXI='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -3949,6 +3949,11 @@ async function openSession(id){
         // user "saying" a wall of recap text or "sending" screenshots they never took.
         const first = typeof m.content === 'string' ? m.content
           : ((m.content || []).find((p) => p && p.type === 'text') || {}).text || '';
+        if (/^\[VOX CUTOFF\]/.test(first)) {
+          finalizeRunCard();
+          v.root.appendChild(el('div', 'fold', 'reply cut off at the output limit — carried on in smaller steps'));
+          continue;
+        }
         if (/^\[VOX GOAL\]/.test(first)) {
           finalizeRunCard();
           const why = first.replace(/^\[VOX GOAL\]\s*/, '').split('\n')[0].replace(/^Not met yet:\s*/, '');

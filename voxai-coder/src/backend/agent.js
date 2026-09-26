@@ -357,6 +357,8 @@ const SYSTEM = (workdir, access, planMode = false, durable = '', webSearchOn = t
   (planMode ? `PLAN MODE is ON. You must NOT make any changes, write/edit files, or run mutating commands on the first pass. Instead, explore (read/search/glob) freely, then present a clear step-by-step plan of exactly what you will change and how. Then call ask_confirm to get the user's approval before executing any write/edit/shell action. After approval, you may proceed. `
     : ``) +
   `Patch small changes with patch (exact old→new) instead of full-file write. ` +
+  // A whole app in one reply ran past the output limit before a line was written.
+  `Build big things a file at a time: at most about 300 lines per write, then add to it with further edits. ` +
   `Store durable conventions/decisions with memory ("add" action) so future sessions remember them. ` +
   `For large files (>12k chars) use rag to retrieve relevant chunks before editing. ` +
   (webSearchOn
@@ -799,6 +801,10 @@ async function* runAgent(opts) {
   const budget = Number(budgetUsd) > 0 ? Number(budgetUsd) : DEFAULT_RUN_BUDGET_USD;
   let spent = 0;
   let costUnknown = false;
+  // Replies cut off at the output limit in a row, and a lower thinking level for the turn
+  // after one (see the finishReason === 'length' handling below).
+  let cutoffs = 0;
+  let effortNext = null;
   // Auto and Full access are the "let it work" modes: pausing every 60 turns there
   // only meant someone typing "continue" seven times through one build. The spend
   // limit is their runaway guard -- unless the provider reports no cost, when the
@@ -888,7 +894,7 @@ async function* runAgent(opts) {
           r = await chatCompletions({
             apiKey, host, model, messages,
             tools: toolList.map((t) => t.def),
-            reasoningEffort, reasoningSpec, maxTokens, signal,
+            reasoningEffort: effortNext || reasoningEffort, reasoningSpec, maxTokens, signal,
             sessionId: session.id,   // sticky routing — keeps the cache on one upstream
             onEvent: (e) => {
               if (e.token) {
@@ -928,6 +934,7 @@ async function* runAgent(opts) {
       content = r.content;
       toolCalls.push(...r.toolCalls);
       finishReason = r.finishReason || null;
+      effortNext = null;   // the lower level was for one turn
       // 'length' = the model was cut off at max_tokens mid-generation. Any tool call
       // in this turn may carry truncated arguments JSON, so say so rather than
       // reporting a truncated answer as a clean completion.
@@ -996,6 +1003,36 @@ async function* runAgent(opts) {
       return;
     }
     while (emitQueue.length) yield emitQueue.shift();
+
+    // Cut off at the output limit with nothing usable. Found in a one-shot build: the model
+    // thought through the whole app for 16k tokens (seven minutes), was cut off before it
+    // wrote a line, and the run ended as "an empty answer"; sent back, it did the same
+    // again. Say what happened, think less on the next turn, and carry on in smaller steps.
+    // A half-written tool call is never run.
+    if (finishReason === 'length') {
+      const broken = toolCalls.filter((c) => { try { JSON.parse(c.arguments || '{}'); return false; } catch { return true; } });
+      if (!toolCalls.length || broken.length) {
+        cutoffs += 1;
+        if (cutoffs >= 3) {
+          session.messages.push({ role: 'assistant', content: content || '(cut off at the output limit)' });
+          yield { type: 'error', message: `The model was cut off at its ${maxTokens.toLocaleString()}-token output limit three times in a row without finishing a step. Ask for a smaller piece of the work, or pick another model.` };
+          return;
+        }
+        const b = broken[0];
+        const file = b ? (/"(?:path|file|file_path)"\s*:\s*"([^"]{1,200})"/.exec(b.arguments || '') || [])[1] : '';
+        const what = b ? `while writing a ${b.name} call${file ? ` for ${file}` : ''}, so it was not run and nothing was written`
+          : 'before you wrote anything: the thinking used it all up';
+        session.messages.push({ role: 'assistant', content: content || '(cut off at the output limit)' });
+        session.messages.push({ role: 'user', content: `[VOX CUTOFF] Your last reply hit the ${maxTokens.toLocaleString()}-token output limit ${what}. `
+          + 'Work in smaller steps: one file at a time, at most about 300 lines per write (add the rest with further edits), '
+          + 'and do not plan out the whole project in one reply.' });
+        effortNext = 'low';
+        yield { type: 'warning', code: 'output-cutoff-retry', message: `The reply was cut off at the output limit ${b ? 'mid-write' : 'while still thinking'}. Asked it to carry on in smaller steps.` };
+        continue;
+      }
+    } else if (toolCalls.length) {
+      cutoffs = 0;
+    }
 
     if (!toolCalls.length) {
       if (!String(content || '').trim()) {

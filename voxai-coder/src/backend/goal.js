@@ -47,6 +47,7 @@ function goalTranscript(messages, fromIndex = 0, maxChars = 40000) {
     if (m.role === 'user') {
       const t = textOf(m.content);
       if (/^\[VOX (TOOL SCREENSHOTS|COMPACTED)/.test(t)) continue;
+      if (/^\[VOX CUTOFF\]/.test(t)) { out.push('NOTE: a reply was cut off at the output limit; nothing from it was run'); continue; }
       out.push((/^\[VOX GOAL\]/.test(t) ? 'GOAL CHECK: ' : 'USER: ') + clip(t.replace(/^\[VOX GOAL\]\s*/, ''), 1500));
     } else if (m.role === 'assistant') {
       const t = textOf(m.content);

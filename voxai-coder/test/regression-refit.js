@@ -1771,6 +1771,36 @@ async function drain(gen) {
     check('the fake model answers by the turn a request carries, not by counting requests', /const n = \(body\.messages \|\| \[\]\)\.filter\(\(m\) => m && m\.role === 'assistant'\)\.length \+ 1;/.test(read('test/regression-refit.js')), 'fake');
   }
 
+  // ------------------------------------------------------------------ [CO]
+  console.log('\n[CO] a reply cut off at the output limit is said, and work carries on in smaller steps');
+  {
+    const cutNothing = [{ choices: [{ delta: { reasoning: 'thinking about the whole app...' } }] }, { choices: [{ delta: {}, finish_reason: 'length' }] }];
+    const cutWrite = [{ choices: [{ delta: { tool_calls: [{ index: 0, id: 'w1', function: { name: 'write', arguments: '{"path":"monitor.py","content":"import psutil\\nclass Mon' } }] } }] },
+      { choices: [{ delta: {}, finish_reason: 'length' }] }];
+    const bodies = [];
+    fakeOpenRouter((n, b) => { bodies.push(b); return n === 1 ? cutNothing : say('done'); });
+    const ev1 = await drain(runAgent({ session: { id: 'co1', workdir: WD, messages: [] }, userText: 'build it', apiKey: 'k', model: 'm', access: 'full', askPermission: async () => true, maxTurns: 5 }));
+    const note1 = bodies[1] && bodies[1].messages.find((m) => m.role === 'user' && /^\[VOX CUTOFF\]/.test(String(m.content)));
+    check('cut off while still thinking: the next turn is told so, and the run goes on', ev1[ev1.length - 1].type === 'done' && note1 && /the thinking used it all up/.test(note1.content) && /at most about 300 lines per write/.test(note1.content), note1 && note1.content);
+    check('and it is shown as carrying on, not as "an empty answer twice"', ev1.some((e) => e.code === 'output-cutoff-retry') && !ev1.some((e) => e.code === 'empty-answer'), ev1.map((e) => e.code).filter(Boolean));
+    fs.rmSync(path.join(WD, 'monitor.py'), { force: true });
+    const bodies2 = [];
+    fakeOpenRouter((n, b) => { bodies2.push(b); return n === 1 ? cutWrite : say('done'); });
+    const ev2 = await drain(runAgent({ session: { id: 'co2', workdir: WD, messages: [] }, userText: 'build it', apiKey: 'k', model: 'm', access: 'full', askPermission: async () => true, maxTurns: 5 }));
+    const note2 = bodies2[1] && bodies2[1].messages.find((m) => m.role === 'user' && /^\[VOX CUTOFF\]/.test(String(m.content)));
+    check('cut off mid-write: the half-written call is not run, and the note names the file', !fs.existsSync(path.join(WD, 'monitor.py')) && !ev2.some((e) => e.type === 'tool_start')
+      && note2 && /while writing a write call for monitor\.py, so it was not run/.test(note2.content), note2 && note2.content);
+    fakeOpenRouter(() => cutNothing);
+    const ev3 = await drain(runAgent({ session: { id: 'co3', workdir: WD, messages: [] }, userText: 'build it', apiKey: 'k', model: 'm', access: 'full', askPermission: async () => true, maxTurns: 10 }));
+    const last3 = ev3[ev3.length - 1];
+    check('three cut-offs in a row end the run with a plain reason', last3.type === 'error' && /cut off at its 16,384-token output limit three times in a row/.test(last3.message), last3);
+    const AGC = read('src/backend/agent.js');
+    check('the turn after a cut-off thinks less, and only that turn', AGC.includes("effortNext = 'low';") && AGC.includes('reasoningEffort: effortNext || reasoningEffort,') && AGC.includes('effortNext = null;   // the lower level was for one turn'), 'effort');
+    check('the prompt says to build a file at a time', AGC.includes('Build big things a file at a time: at most about 300 lines per write'), 'prompt');
+    const HTMLc = read('src/renderer/index.html');
+    check('reopened, the note is a line, not your message', HTMLc.includes("if (/^\\[VOX CUTOFF\\]/.test(first)) {"), 'page');
+  }
+
   try { fs.rmSync(WD, { recursive: true, force: true }); } catch {}
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
