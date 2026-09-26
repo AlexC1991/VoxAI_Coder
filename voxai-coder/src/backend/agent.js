@@ -287,6 +287,25 @@ function fileUrl(absPath) {
   return 'file:///' + encodeURI(norm.replace(/^\/+/, ''));
 }
 
+/**
+ * A screenshot small enough to keep in the session: JPEG, at most 1280 px wide. Kept as
+ * full PNGs, 13 screenshots made one session 1.3 MB -- sent to the model again every turn
+ * and stored for good. In Electron only; anywhere else it stays as it is.
+ */
+function compactImage(url) {
+  try {
+    if (!/^data:image\/png;base64,/.test(String(url || ''))) return url;
+    const { nativeImage } = require('electron');
+    if (!nativeImage || typeof nativeImage.createFromDataURL !== 'function') return url;
+    let img = nativeImage.createFromDataURL(url);
+    const { width } = img.getSize();
+    if (!width) return url;
+    if (width > 1280) img = img.resize({ width: 1280, quality: 'good' });
+    const out = 'data:image/jpeg;base64,' + img.toJPEG(75).toString('base64');
+    return out.length < url.length ? out : url;
+  } catch { return url; }
+}
+
 /** Today as YYYY-MM-DD in the user's own time zone. */
 function localDate(d = new Date()) {
   const p = (n) => String(n).padStart(2, '0');
@@ -396,6 +415,9 @@ async function* runAgent(opts) {
     isSubAgent = false,
     subagentModel = '', subagentMaxTurns = null, subagentTimeoutMs = null, mcpServers = null,
     maxTurns = null,
+    // Carry on from the session as it stands, with no new message: a question the app
+    // closed on has just been answered (see answerPendingAsk).
+    resume = false,
     userInput = null,
     onOpenUrl = null,
     onAttachAtlas = null,
@@ -473,7 +495,7 @@ async function* runAgent(opts) {
   // ---- Auto mode ----
   const autoCheck = async (kind, target) => {
     pushEvent({ type: 'auto_check', phase: 'start', kind });
-    const asked = String(userText || '').slice(0, 1500);
+    const asked = String(userText || lastUserText(session) || '').slice(0, 1500);
     const messages = [
       { role: 'system', content: AUTO_POLICY },
       { role: 'user', content: `The user asked:\n${asked}\n\nProject folder: ${session.workdir}\n\n`
@@ -635,7 +657,7 @@ async function* runAgent(opts) {
     if (typeof url === 'string' && url) userParts.push({ type: 'image_url', image_url: { url } });
     else if (att) droppedImages++;
   }
-  session.messages.push({
+  if (!resume) session.messages.push({
     role: 'user',
     content: userParts.length ? userParts : userText || '',
   });
@@ -1153,7 +1175,7 @@ async function* runAgent(opts) {
           { type: 'text', text: `${TOOL_IMAGES_MARKER} ${keep.length} screenshot${keep.length === 1 ? '' : 's'} from `
             + `${[...new Set(keep.map((k) => k.tool))].join(', ')} above`
             + (turnImages.length > keep.length ? ` (newest ${keep.length} of ${turnImages.length})` : '') + '.' },
-          ...keep.map((k) => ({ type: 'image_url', image_url: { url: k.url } })),
+          ...keep.map((k) => ({ type: 'image_url', image_url: { url: compactImage(k.url) } })),
         ],
       });
     }
@@ -1171,5 +1193,71 @@ async function* runAgent(opts) {
   };
 }
 
+/** The last thing the user themselves said (not the app's recap or screenshots). */
+function lastUserText(session) {
+  const ms = (session && session.messages) || [];
+  for (let i = ms.length - 1; i >= 0; i--) {
+    const m = ms[i];
+    if (!m || m.role !== 'user') continue;
+    const t = typeof m.content === 'string' ? m.content
+      : Array.isArray(m.content) ? m.content.filter((p) => p && p.type === 'text').map((p) => p.text).join(' ') : '';
+    if (t && !/^\[VOX /.test(t)) return t;
+  }
+  return '';
+}
+
+const ASK_TOOLS = new Set(['ask_user', 'ask_confirm']);
+/** The tool calls of the session's last turn, and the ones that have a result. */
+function lastTurnCalls(session) {
+  const ms = (session && session.messages) || [];
+  let i = ms.length - 1;
+  while (i >= 0 && ms[i] && ms[i].role === 'tool') i--;
+  const m = ms[i];
+  if (!m || m.role !== 'assistant' || !Array.isArray(m.tool_calls) || !m.tool_calls.length) return null;
+  return { calls: m.tool_calls, answered: new Set(ms.slice(i + 1).map((t) => t && t.tool_call_id)) };
+}
+/**
+ * A question left waiting when the app closed or crashed: the session ends on an
+ * ask_user / ask_confirm call with no answer after it. The run that asked is gone, so
+ * the question used to be too -- the thread said "this run ended before it finished"
+ * and the answer had to be typed as a new message. Returns { callId, request } for the
+ * card, or null.
+ */
+function pendingAsk(session) {
+  const t = lastTurnCalls(session);
+  if (!t) return null;
+  const call = t.calls.find((c) => c && c.function && ASK_TOOLS.has(c.function.name) && !t.answered.has(c.id));
+  if (!call) return null;
+  let args;
+  try { args = JSON.parse(call.function.arguments || '{}'); } catch { return null; }
+  const request = tools.askRequest(call.function.name === 'ask_confirm' ? 'confirm' : 'ask', args);
+  return request ? { callId: call.id, request } : null;
+}
+/**
+ * Answer that question into the session, so a run can carry on from it (resume: true).
+ * Every call of that turn needs a result before the next request, so any that never
+ * ran get one saying so. `res` is what the card sends: { answer, cancelled }.
+ */
+function answerPendingAsk(session, callId, res) {
+  const t = lastTurnCalls(session);
+  const call = t && t.calls.find((c) => c && c.id === callId && !t.answered.has(c.id));
+  if (!call) return false;
+  for (const c of t.calls) {
+    if (!c || t.answered.has(c.id)) continue;
+    let content;
+    if (c.id === callId) {
+      let args = {};
+      try { args = JSON.parse(c.function.arguments || '{}'); } catch {}
+      const out = c.function.name === 'ask_confirm' ? tools.confirmResult(res)
+        : tools.askResult((tools.askRequest('ask', args) || { questions: [] }).questions, res, args.default);
+      content = JSON.stringify(out);
+    } else {
+      content = `DENIED_OR_ERROR: not run -- the app closed before this step ran. Run it again if it is still needed.`;
+    }
+    session.messages.push({ role: 'tool', tool_call_id: c.id, content });
+  }
+  return true;
+}
+
 module.exports = {
-  extractImages, TOOL_IMAGES_MARKER, runAgent, MAX_TURNS, boundToolResult, accumulateUsage, uniqueToolIds };
+  extractImages, TOOL_IMAGES_MARKER, runAgent, MAX_TURNS, boundToolResult, accumulateUsage, uniqueToolIds, pendingAsk, answerPendingAsk, compactImage };

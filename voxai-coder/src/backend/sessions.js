@@ -153,6 +153,49 @@ async function listSessions(userData, limit = 50, { subs = false } = {}) {
   return metas.slice(0, limit);
 }
 
+/**
+ * Sessions whose conversation mentions `query`: what you asked and what the agent
+ * answered, not tool output and not the app's own notes. The sidebar search matched
+ * titles only, so a session was findable only by its first message.
+ * Returns [{ id, snippet, hits }], most hits first.
+ */
+async function searchSessions(userData, query, limit = 40) {
+  const q = String(query || '').trim().toLowerCase();
+  if (q.length < 2) return [];
+  const dir = sessionsDir(userData);
+  let files = [];
+  try { files = (await fsp.readdir(dir)).filter((f) => f.endsWith('.jsonl')); } catch { return []; }
+  const out = [];
+  for (const f of files) {
+    let raw;
+    try { raw = await fsp.readFile(path.join(dir, f), 'utf8'); } catch { continue; }
+    if (!raw.toLowerCase().includes(q)) continue;            // cheap reject first
+    let meta = null, hits = 0, snippet = '';
+    for (const line of raw.split('\n')) {
+      if (!line) continue;
+      let o; try { o = JSON.parse(line); } catch { continue; }
+      if (o.kind === 'meta') { meta = o; continue; }
+      if (o.kind !== 'message' || !o.message) continue;
+      const m = o.message;
+      if (m.role !== 'user' && m.role !== 'assistant') continue;
+      const text = typeof m.content === 'string' ? m.content
+        : Array.isArray(m.content) ? m.content.filter((p) => p && p.type === 'text').map((p) => p.text).join(' ') : '';
+      if (!text || /^\[VOX /.test(text)) continue;
+      const at = text.toLowerCase().indexOf(q);
+      if (at === -1) continue;
+      hits++;
+      if (!snippet) {
+        const a = Math.max(0, at - 40), b = Math.min(text.length, at + q.length + 60);
+        // Read as text: no markdown marks ("**", backticks, heading hashes) in the line.
+        snippet = (a ? '…' : '') + text.slice(a, b).replace(/\*\*|__|`+|^#+\s*/gm, '').replace(/\s+/g, ' ').trim() + (b < text.length ? '…' : '');
+      }
+    }
+    if (hits && meta && !isSubSession(meta)) out.push({ id: meta.id, snippet, hits });
+  }
+  out.sort((a, b) => b.hits - a.hits);
+  return out.slice(0, limit);
+}
+
 async function deleteSession(userData, id) {
   await fsp.unlink(path.join(sessionsDir(userData), `${id}.jsonl`));
 }
@@ -169,4 +212,4 @@ function exportSession(session) {
   return lines.join('\n');
 }
 
-module.exports = { createSession, saveSession, loadSession, listSessions, deleteSession, sessionsDir, recordUsage, exportSession, isSubSession };
+module.exports = { createSession, saveSession, loadSession, listSessions, searchSessions, deleteSession, sessionsDir, recordUsage, exportSession, isSubSession };

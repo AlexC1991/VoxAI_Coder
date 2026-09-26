@@ -178,7 +178,7 @@ async function drain(gen) {
     }
 
     check('the approval lives in the box', /<div class="box" id="cmpBox">[\s\S]*id="askBox"[\s\S]*id="cmpEdit"/.test(HTML) && !HTML.includes('id="permBar"'), 'strip above the box');
-    check('the approval belongs to the session that asked', /onAgentPermission\(\(\{ permId, sessionId,/.test(HTML), 'shown on any session');
+    check('the approval belongs to the session that asked', /function onAgentPerm\(\{ permId, sessionId,/.test(HTML), 'shown on any session');
     check('the queue is in the box, one set of rows', HTML.includes('id="qrows"') && !HTML.includes("insertBefore(qb, box)"), 'per-view trays');
     check('the meter reads the context event', HTML.includes("event.type === 'context'") && HTML.includes('function paintMeter()'), 'no meter');
     check('Plan is a switch', /id="chipPlan"[^>]*role="switch"/.test(HTML), 'dropdown');
@@ -210,7 +210,7 @@ async function drain(gen) {
 
     const HTML = read('src/renderer/index.html');
     check('project groups open in place, eased', /\.proj\.open \.proj-b\{grid-template-rows:1fr\}/.test(HTML) && /g\.classList\.toggle\('open', now\)/.test(HTML), 'rebuilds on toggle');
-    check('the session search is wired', HTML.includes("$('q').addEventListener('input', renderSessionList)"), 'search does nothing');
+    check('the session search is wired', HTML.includes("$('q').addEventListener('input', () => {") && HTML.includes('window.voxai.sessionsSearch('), 'search does nothing');
     check('menus fit the room above their chip', HTML.includes("m.style.maxHeight = Math.max(160, r.top - 16) + 'px'"), 'can run off the top');
   }
 
@@ -377,7 +377,7 @@ async function drain(gen) {
     check('the reminder comes after four actions', toolMsgs[4] && toolMsgs[4].includes('[plan check]'), toolMsgs.map((t) => t.includes('[plan check]')));
 
     const MAIN = read('src/main/main.js');
-    check('questions go out on the channel the thread listens to', /c1\.send\('agent:event', \{ sessionId, runKey, event: \{ type: 'user_input'/.test(MAIN) && !MAIN.includes("c1.send('agent:user_input'"), 'unheard channel');
+    check('questions go out on the channel the thread listens to', MAIN.includes("const event = { type: 'user_input', inputId,") && MAIN.includes("c1 && c1.send('agent:event', { sessionId, runKey, event });") && !MAIN.includes("c1.send('agent:user_input'"), 'unheard channel');
     const HTML = read('src/renderer/index.html');
     check('an answered question stays as one line with the answer', HTML.includes("line.lastChild.textContent = label ? 'You chose: ' + label : 'No answer';"), 'vanishes');
   }
@@ -1291,6 +1291,57 @@ async function drain(gen) {
       check('only the build\'s own files go', left.length === 1 && left[0] === 'my-notes.txt', left);
     }
     check('the window can see and act on updates', /updates: \{[\s\S]{0,200}update:install/.test(read('src/preload/preload.js')) && read('src/renderer/index.html').includes("id=\"updPill\""), 'no UI');
+  }
+
+  // ------------------------------------------------------------------ [CY]
+  console.log('\n[CY] questions outlive a reload or restart, sessions stay small, search reads what was said');
+  {
+    const A = require(path.join(ROOT, 'src/backend/agent.js'));
+    const call = (id, name, args) => ({ id, type: 'function', function: { name, arguments: JSON.stringify(args) } });
+    const ask = { questions: [{ question: 'Which style?', header: 'Style', options: [{ label: 'Pixel (Recommended)', description: 'Retro' }, { label: 'Vector' }] }] };
+    const sess = { messages: [
+      { role: 'user', content: 'make a game' },
+      { role: 'assistant', content: null, tool_calls: [call('c1', 'read', { path: 'a' }), call('c2', 'ask_user', ask), call('c3', 'write', { path: 'b', content: '' })] },
+      { role: 'tool', tool_call_id: 'c1', content: '{}' },
+    ] };
+    const pa = A.pendingAsk(sess);
+    check('a question the app closed on is found', pa && pa.callId === 'c2' && pa.request.kind === 'ask' && pa.request.questions[0].options.length === 2, pa);
+    check('answering it gives every call of that turn a result', A.answerPendingAsk(sess, 'c2', { answer: { answers: { 'Which style?': 'Pixel (Recommended)' } }, cancelled: false }) === true
+      && sess.messages.length === 5 && JSON.parse(sess.messages[3].content).answers['Which style?'] === 'Pixel'
+      && /not run/.test(sess.messages[4].content) && sess.messages[4].tool_call_id === 'c3', sess.messages.slice(3));
+    check('an answered question is not asked again', A.pendingAsk(sess) === null && A.answerPendingAsk(sess, 'c2', { answer: 'x' }) === false, 'asked twice');
+    const conf = { messages: [{ role: 'assistant', content: null, tool_calls: [call('k1', 'ask_confirm', { message: 'Delete build/?' })] }] };
+    const pc = A.pendingAsk(conf);
+    A.answerPendingAsk(conf, 'k1', { answer: 'no, keep it', cancelled: false });
+    const cr = JSON.parse(conf.messages[1].content);
+    check('a confirmation survives too, with the words it was declined in', pc && pc.request.kind === 'confirm' && cr.confirmed === false && cr.note === 'no, keep it', cr);
+    check('a finished turn has nothing waiting', A.pendingAsk({ messages: [{ role: 'user', content: 'hi' }, { role: 'assistant', content: 'hello' }] }) === null, 'phantom question');
+    const MAIN = read('src/main/main.js'), HTML = read('src/renderer/index.html'), AG = read('src/backend/agent.js');
+    check('a resumed run adds no message of its own', AG.includes('if (!resume) session.messages.push({'), 'pushes an empty message');
+    check('the window asks what is waiting when a session opens', HTML.includes('  syncLive(v, full);') && /ipcMain\.handle\('agent:live'/.test(MAIN) && MAIN.includes('pendingAsk: ask'), 'lost on reload');
+    check('an answer to a closed-on question carries the run on', HTML.includes('window.voxai.agentResumeAsk(') && /ipcMain\.handle\('agent:resume-ask'[\s\S]{0,600}launchRun\(\{ sessionId, text: '', attachments: \[\], resume: true \}\)/.test(MAIN), 'answer goes nowhere');
+    check('a question is not drawn twice', HTML.includes('!(v.shownInputs && v.shownInputs.has(it.event.inputId))'), 'drawn twice');
+
+    // Sessions stay small: sub-agents go with their conversation; screenshots saved as JPEG.
+    check('deleting a conversation takes its sub-agents with it', /sessions:delete'[\s\S]{0,900}filter\(\(s\) => s\.parentId === id\)[\s\S]{0,300}trashItem/.test(MAIN), 'left behind');
+    check('orphaned sub-agent sessions are swept to the Recycle Bin', /if \(!s\.parentId \|\| live\.has\(s\.parentId\) \|\| fs\.existsSync\([\s\S]{0,200}trashItem/.test(MAIN), 'kept forever');
+    check('screenshots are stored compacted', AG.includes('image_url: { url: compactImage(k.url) }') && /function compactImage\(/.test(AG), 'full PNGs');
+
+    // Search reads the conversation, not just the titles.
+    const store = require(path.join(ROOT, 'src/backend/sessions.js'));
+    const UD = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-search-'));
+    const a = store.createSession({ workdir: UD, model: 'm', title: 'Game' });
+    a.messages.push({ role: 'user', content: 'use a Tilemap for the dungeon' }, { role: 'assistant', content: 'The tilemap is in place.' }, { role: 'tool', tool_call_id: 'x', content: 'zebra' });
+    const b = store.createSession({ workdir: UD, model: 'm', title: 'subagent:explore', parentId: a.id });
+    b.messages.push({ role: 'user', content: 'tilemap' });
+    const c = store.createSession({ workdir: UD, model: 'm', title: 'Other' });
+    c.messages.push({ role: 'user', content: [{ type: 'text', text: '[VOX COMPACTED CONTEXT] tilemap' }] });
+    for (const s of [a, b, c]) await store.saveSession(UD, s);
+    const hits = await store.searchSessions(UD, 'TILEMAP');
+    check('search finds what was said, in any case, with a snippet', hits.length === 1 && hits[0].id === a.id && hits[0].hits === 2 && /Tilemap/.test(hits[0].snippet), hits);
+    check('tool output is not searched', (await store.searchSessions(UD, 'zebra')).length === 0, 'matched tool output');
+    fs.rmSync(UD, { recursive: true, force: true });
+    check('the Copy button sits outside the scrolling code', HTML.includes("const wrap = el('div', 'code-wrap');") && HTML.includes('.code-wrap{position:relative}'), 'scrolls away');
   }
 
   try { fs.rmSync(WD, { recursive: true, force: true }); } catch {}

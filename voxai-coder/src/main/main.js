@@ -17,7 +17,7 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 
-const { runAgent } = require('../backend/agent');
+const { runAgent, pendingAsk, answerPendingAsk } = require('../backend/agent');
 const { chatOnce, normalizeReasoning } = require('../backend/providers/openrouter');
 const store = require('../backend/sessions');
 const { compactSession, estimateSessionTokens } = require('../backend/compact');
@@ -585,6 +585,7 @@ app.whenReady().then(() => {
 
   // sessions
   ipcMain.handle('sessions:list', () => store.listSessions(userData()));
+  ipcMain.handle('sessions:search', (_e, query) => store.searchSessions(userData(), query));
   ipcMain.handle('sessions:create', async (_e, { title, workdir, model }) => {
     const s = getSettings(false);
     // Only a folder that is there. A typo made a session in C:\does\not\exist without a
@@ -609,7 +610,11 @@ app.whenReady().then(() => {
       limit: Number(s.contextLimit) > 0 ? Number(s.contextLimit) : 200000,
       threshold: Number(s.compactThreshold) > 0 ? Number(s.compactThreshold) : 0.8,
     };
-    return { id: sess.id, title: sess.title, workdir: sess.workdir, model: sess.model, messages: sess.messages, todos: sess.todos, usage: sess.usage, stats: sess.stats, stops: sess.stops || [], context };
+    // A question the app closed on, still waiting for its answer (a live run's own
+    // questions come from agent:live instead).
+    const running = [...controllers.keys()].some((k) => k.startsWith(id + ':'));
+    const ask = running ? null : pendingAsk(sess);
+    return { id: sess.id, title: sess.title, workdir: sess.workdir, model: sess.model, messages: sess.messages, todos: sess.todos, usage: sess.usage, stats: sess.stats, stops: sess.stops || [], context, pendingAsk: ask };
   });
   // To the Recycle Bin, not erased: one misclick on Delete lost a whole conversation
   // for good. If the bin refuses, nothing is deleted and the user is told why.
@@ -621,8 +626,26 @@ app.whenReady().then(() => {
       return { ok: false, error: 'Could not move it to the Recycle Bin: ' + String((e && e.message) || e) };
     }
     live.delete(id);
+    // Its sub-agents' sessions go with it: they stayed behind, unlisted, for good.
+    try {
+      const subs = (await store.listSessions(userData(), 10000, { subs: true })).filter((s) => s.parentId === id);
+      for (const s of subs) {
+        try { await require('electron').shell.trashItem(path.join(store.sessionsDir(userData()), `${path.basename(s.id)}.jsonl`)); } catch {}
+      }
+    } catch {}
     return { ok: true };
   });
+  // Sub-agent sessions left behind by a conversation deleted before they went with it:
+  // to the Recycle Bin, once, a little after start. Only ones that name their parent.
+  setTimeout(async () => {
+    try {
+      const dir = store.sessionsDir(userData());
+      for (const s of await store.listSessions(userData(), 100000, { subs: true })) {
+        if (!s.parentId || live.has(s.parentId) || fs.existsSync(path.join(dir, `${path.basename(s.parentId)}.jsonl`))) continue;
+        try { await require('electron').shell.trashItem(path.join(dir, `${path.basename(s.id)}.jsonl`)); } catch {}
+      }
+    } catch {}
+  }, 20000);
   ipcMain.handle('sessions:rename', async (_e, { id, title }) => {
     const t = String(title || '').trim();
     if (!id || !t) return false;
@@ -722,16 +745,42 @@ app.whenReady().then(() => {
   }
 
   // agent run — streams events via 'agent:event' webContents messages
-  ipcMain.handle('agent:send', async (_e, { sessionId, text, attachments }) => {
+  ipcMain.handle('agent:send', (_e, { sessionId, text, attachments }) => launchRun({ sessionId, text, attachments }));
+  // A question the app closed on, answered now: its answer goes into the session and
+  // the run carries on from there, as if it had never stopped.
+  ipcMain.handle('agent:resume-ask', async (_e, { sessionId, callId, answer, cancelled }) => {
+    if ([...controllers.keys()].some((k) => k.startsWith(sessionId + ':'))) throw new Error('This session is already running.');
+    const sess = await getLive(sessionId);
+    const res = cancelled ? { answer: null, cancelled: true } : { answer: answer == null ? '' : answer, cancelled: false };
+    if (!answerPendingAsk(sess, callId, res)) throw new Error('That question has already been answered.');
+    await store.saveSession(userData(), sess);
+    return launchRun({ sessionId, text: '', attachments: [], resume: true });
+  });
+  // What a session is waiting on right now, for a window that was reloaded (or a view
+  // opened again): its live runs, its open questions and its approval. Each was sent
+  // once, as an event, and a reload lost it while the run sat waiting for an answer.
+  ipcMain.handle('agent:live', (_e, sessionId) => ({
+    runKeys: [...controllers.keys()].filter((k) => k.startsWith(sessionId + ':')),
+    inputs: [...pendingInputs.values()].filter((p) => p.sessionId === sessionId).map((p) => ({ runKey: p.runKey, event: p.event })),
+    perms: [...pendingPerms.values()].filter((p) => p.msg && p.msg.sessionId === sessionId).map((p) => p.msg),
+  }));
+  // Sessions with a run going, the ones waiting on the user first.
+  ipcMain.handle('agent:live-sessions', () => {
+    const waiting = new Set([...pendingInputs.values()].map((p) => p.sessionId).concat([...pendingPerms.values()].map((p) => p.msg && p.msg.sessionId)));
+    const ids = [...new Set([...controllers.keys()].map((k) => k.split(':')[0]))];
+    return ids.sort((a, b) => (waiting.has(b) ? 1 : 0) - (waiting.has(a) ? 1 : 0));
+  });
+
+  async function launchRun({ sessionId, text, attachments, resume = false }) {
     const s = getSettings(false);
     if (!s.openrouterKey) throw new Error('No OpenRouter API key — open Settings and paste one.');
     const sess = await getLive(sessionId);
-    if (!text || !text.trim()) throw new Error('empty prompt');
+    if (!resume && (!text || !text.trim())) throw new Error('empty prompt');
     // Refuse up front rather than letting a tool-less model answer in prose forever.
     await assertModelUsable(sess.model || s.openrouterModel, fetchModels, {
       images: (attachments || []).filter((a) => a && (a.type === 'image_url' || a.dataUrl)).length,
     });
-    if (sess.title === 'New session') sess.title = text.slice(0, 60);
+    if (!resume && sess.title === 'New session') sess.title = text.slice(0, 60);
 
     const runKey = `${sessionId}:${Date.now()}`;
     const ctl = new AbortController();
@@ -745,7 +794,9 @@ app.whenReady().then(() => {
       if (sessionAlwaysAllow.get(sessionId) && sessionAlwaysAllow.get(sessionId).has(key)) { resolve(true); return; }
       const permId = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
       const timer = setTimeout(() => { pendingPerms.delete(permId); resolve(false); }, 120000);
+      const msg = { permId, sessionId, kind, target, canAlways: true, note: note || '' };
       pendingPerms.set(permId, {
+        msg,
         resolve: (v, always) => {
           clearTimeout(timer);
           if (v && always) {
@@ -755,24 +806,25 @@ app.whenReady().then(() => {
           resolve(v);
         },
       });
-      const c0 = chatWebContents(); c0 && c0.send('agent:permission', { permId, sessionId, kind, target, canAlways: true, note: note || '' });
+      const c0 = chatWebContents(); c0 && c0.send('agent:permission', msg);
     });
 
     const askUserInput = ({ question, options, kind, questions }) => new Promise((resolve) => {
       const inputId = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
       const timer = setTimeout(() => { pendingInputs.delete(inputId); resolve({ answer: null, cancelled: true }); }, 600000);
-      pendingInputs.set(inputId, { resolve: (v) => { clearTimeout(timer); resolve(v); } });
+      const event = { type: 'user_input', inputId, question, options: options || [], kind: kind || 'ask', ...(Array.isArray(questions) ? { questions } : {}) };
+      pendingInputs.set(inputId, { sessionId, runKey, event, resolve: (v) => { clearTimeout(timer); resolve(v); } });
       // Through the agent-event channel the thread already draws. It was sent on its own
       // 'agent:user_input' channel that nothing listened to, so the agent's questions
       // never appeared and the run sat waiting ten minutes for an answer. Found in a live run.
       const c1 = chatWebContents();
-      c1 && c1.send('agent:event', { sessionId, runKey, event: { type: 'user_input', inputId, question, options: options || [], kind: kind || 'ask', ...(Array.isArray(questions) ? { questions } : {}) } });
+      c1 && c1.send('agent:event', { sessionId, runKey, event });
     });
 
     (async () => {
       try {
         for await (const ev of runAgent({
-          session: sess, userText: text,
+          session: sess, userText: text, resume,
           attachments: attachments || [],
           apiKey: s.openrouterKey, host: s.openrouterHost, model: sess.model || s.openrouterModel,
           reasoningEffort: s.reasoningEffort, access: s.access, planMode: s.planMode,
@@ -830,7 +882,7 @@ app.whenReady().then(() => {
       }
     })();
     return { runKey };
-  });
+  }
 
   ipcMain.handle('agent:cancel', (_e, runKey) => {
     const ctl = controllers.get(runKey);

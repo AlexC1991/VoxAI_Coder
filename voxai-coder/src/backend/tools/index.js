@@ -65,6 +65,18 @@ function askResult(qs, res, dflt) {
   if (qs.length === 1) { const v = answers[qs[0].question]; out.answer = Array.isArray(v) ? v.join(', ') : (v != null ? v : note || null); }
   return out;
 }
+/** What the question card is sent: ask_user's questions, or ask_confirm's one line. */
+function askRequest(kind, args) {
+  if (kind === 'confirm') return { question: String((args && args.message) || ''), options: [{ label: 'Confirm', value: 'yes' }, { label: 'Deny', value: 'no' }], kind: 'confirm' };
+  const qs = normalizeQuestions(args);
+  if (!qs.length) return null;
+  return { kind: 'ask', questions: qs, question: qs[0].question, options: qs[0].options.map((o) => ({ label: o.label, value: o.value != null ? o.value : o.label })) };
+}
+/** ask_confirm's result. Declined in the user's own words ("no, call it open-hours.txt"): pass them on. */
+function confirmResult(res) {
+  const ans = res && typeof res.answer === 'string' ? res.answer : '';
+  return { confirmed: ans === 'yes', cancelled: res ? !!res.cancelled : true, ...(ans && ans !== 'yes' && ans !== 'no' ? { note: ans } : {}) };
+}
 function tool(name, description, parameters, run) {
   return { def: { type: 'function', function: { name, description, parameters } }, run: (args, ctx) => run(withPathAlias(args), ctx) };
 }
@@ -641,10 +653,10 @@ function buildTools(opts) {
         default: { type: 'string' },
       },
     }, async (args, c) => {
-      const qs = normalizeQuestions(args);
-      if (!qs.length) throw new Error('ask_user needs `questions`: 1-4 items, each with a `question` and 2-4 `options` ({label, description}).');
-      const res = await c.userInput({ kind: 'ask', questions: qs, question: qs[0].question, options: qs[0].options.map((o) => ({ label: o.label, value: o.value != null ? o.value : o.label })) });
-      return askResult(qs, res, args.default);
+      const req = askRequest('ask', args);
+      if (!req) throw new Error('ask_user needs `questions`: 1-4 items, each with a `question` and 2-4 `options` ({label, description}).');
+      const res = await c.userInput(req);
+      return askResult(req.questions, res, args.default);
     });
 
   const askConfirm = tool('ask_confirm', 'Pause and ask the user to confirm / deny a single action. Returns {confirmed: true|false}. Use for risky or destructive operations.', {
@@ -654,10 +666,7 @@ function buildTools(opts) {
     },
     required: ['message'], additionalProperties: false,
   }, async (args, c) => {
-    const res = await c.userInput({ question: String(args.message || ''), options: [{ label: 'Confirm', value: 'yes' }, { label: 'Deny', value: 'no' }], kind: 'confirm' });
-    // Declined in the user's own words ("no, call it open-hours.txt"): pass them on.
-    const ans = res && typeof res.answer === 'string' ? res.answer : '';
-    return { confirmed: ans === 'yes', cancelled: res ? !!res.cancelled : true, ...(ans && ans !== 'yes' && ans !== 'no' ? { note: ans } : {}) };
+    return confirmResult(await c.userInput(askRequest('confirm', args)));
   });
 
   const ALL = [
@@ -692,7 +701,7 @@ function buildTools(opts) {
 }
 
 module.exports = {
-  buildTools,
+  buildTools, askRequest, askResult, confirmResult,
   definitions: (opts = {}) => {
     const stubCtx = {
       workdir: opts.workdir || process.cwd(),

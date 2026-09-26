@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-KpvLYcCgIOaRtnXprENaBfadI+Q724mDAO90naT7ko4='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-mNQEEAyT/x9v1L6qcOtwgBWssh7i0tOsxSaWKDsiMvE='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -72,6 +72,9 @@ button{font-family:inherit} ::selection{background:rgba(200,169,97,.26)}
 .sess:hover{background:var(--panel2);color:var(--mut)} .sess.active{background:var(--sel);color:var(--ink)}
 .sess .s-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sess-rename{flex:1;min-width:0;background:var(--bg);border:1px solid var(--goldedge);border-radius:5px;color:var(--ink);font-family:inherit;font-size:13px;padding:2px 6px;outline:0}
+.sess.has-snip{flex-wrap:wrap}
+.sess .s-snip{flex-basis:100%;font-size:11.5px;color:var(--faint);line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;white-space:normal}
+.sess .s-snip mark{background:rgba(200,169,97,.18);color:var(--mut);border-radius:2px}
 .sess time{flex:none;font-family:"Sometype Mono",monospace;font-size:11px;color:var(--faint)}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--faint);flex:none}
 .dot.run{background:var(--add);animation:pulse 1.6s infinite} .dot.block{background:var(--gold)}
@@ -275,9 +278,12 @@ tests"). Scroll the row instead of breaking words:
 .md h1{font-size:19px}.md h2{font-size:17px}.md h3{font-size:15.5px}.md h4{font-size:14px}
 .md code{font-family:"Sometype Mono",monospace;font-size:13px;background:var(--deep);border:1px solid var(--edge);border-radius:4px;padding:1px 5px;color:var(--gold)}
 .md pre{font-family:"Sometype Mono",monospace;font-size:13px;background:var(--deep);border:1px solid var(--edge);border-radius:8px;padding:10px 12px;overflow:auto;color:var(--mut);white-space:pre;line-height:1.6;margin:.5em 0}
-.md pre{position:relative}
+/* The Copy button sits on a frame around the block, which does not scroll: inside the
+   pre it slid away with the code on a long line. */
+.code-wrap{position:relative}
+.code-wrap > pre{margin:.5em 0}
 .code-copy{position:absolute;top:6px;right:6px;border:1px solid var(--edge2);background:var(--panel2);color:var(--mut);font:12px Chivo,sans-serif;padding:2px 9px;border-radius:6px;cursor:pointer;opacity:0;transition:opacity .12s}
-.md pre:hover .code-copy,.code-copy:focus-visible{opacity:1}
+.code-wrap:hover .code-copy,.code-copy:focus-visible{opacity:1}
 .code-copy:hover{color:var(--ink);border-color:var(--sub)}
 .md pre code{background:none;border:0;padding:0;color:inherit;font-size:inherit}
 .md hr{border:0;border-top:1px solid var(--edge2);margin:1em 0}
@@ -3766,9 +3772,10 @@ async function newSession(dir){
 async function openSession(id){
   setTimeout(function(){ try { refreshCtx(); paintCtxBar(); } catch {} }, 30);
   let v = viewStore.get(id);
+  let full = null;
   if (!v) {
     v = viewOf(id);
-    const full = await window.voxai.sessionsOpen(id);
+    full = await window.voxai.sessionsOpen(id);
     v.root.innerHTML = '';
     v._title = full.title; v._workdir = full.workdir;
     v.workdir = full.workdir;   // the context bar needs the real path, not just the label
@@ -3805,7 +3812,7 @@ async function openSession(id){
     const endOfRun = (i, before) => {
       const st = stopAt(i);
       if (st) { finalizeRunCard(); v.root.appendChild(stopNotice(st, i === full.messages.length)); }
-      else if (unfinished(before)) v.root.appendChild(el('div', 'fold', 'this run ended before it finished'));
+      else if (unfinished(before)) v.root.appendChild(el('div', 'fold run-cut', 'this run ended before it finished'));
     };
     for (let mi = 0; mi < full.messages.length; mi++) {
       const m = full.messages[mi];
@@ -3909,6 +3916,7 @@ async function openSession(id){
   paintCtxBar();
   refreshCtx();
   if (typeof DIFF_OPEN !== 'undefined' && DIFF_OPEN) refreshDiff();
+  syncLive(v, full);
 
   // Per-session state that was living at module scope and therefore following you
   // from one session to the next: the preview's back/forward history, and anything
@@ -3995,6 +4003,7 @@ async function refreshSessionList(){
  * height (no rebuild, so the motion is not lost), the project you are working in is
  * marked, and each has its own "new session here".
  */
+let CONTENT_HITS = new Map(), CONTENT_Q = '', contentTimer = null;
 function renderSessionList(){
   const items = SESS_ITEMS;
   const box = $('sessions'); box.innerHTML = '';
@@ -4003,7 +4012,8 @@ function renderSessionList(){
   const groups = {};
   items.forEach((s) => {
     const k = s.workdir || 'Default';
-    if (q && !((s.title || '') + ' ' + folderName(k)).toLowerCase().includes(q)) return;
+    // Title, folder -- or anything said in it (the search runs after typing pauses).
+    if (q && !((s.title || '') + ' ' + folderName(k)).toLowerCase().includes(q) && !(CONTENT_Q === q && CONTENT_HITS.has(s.id))) return;
     (groups[k] = groups[k] || []).push(s);
   });
   const newest = (k) => Math.max(...groups[k].map((s) => new Date(s.updatedAt || 0).getTime()));
@@ -4060,6 +4070,13 @@ function renderSessionList(){
       b.innerHTML = (busy ? '<span class="dot busy"></span>' : '') + '<span class="s-t"></span><time></time>';
       b.querySelector('.s-t').textContent = s.title || 'Session';
       b.querySelector('time').textContent = relTime(s.updatedAt);
+      // Found by what was said in it: show where.
+      if (q && CONTENT_Q === q && CONTENT_HITS.has(s.id)) {
+        const snip = el('span', 's-snip');
+        const t = CONTENT_HITS.get(s.id); const at = t.toLowerCase().indexOf(q);
+        if (at >= 0) { snip.appendChild(document.createTextNode(t.slice(0, at))); const mk = document.createElement('mark'); mk.textContent = t.slice(at, at + q.length); snip.appendChild(mk); snip.appendChild(document.createTextNode(t.slice(at + q.length))); } else snip.textContent = t;
+        b.classList.add('has-snip'); b.appendChild(snip);
+      }
       b.title = (s.title || '') + '\n' + (s.updatedAt ? new Date(s.updatedAt).toLocaleString() : '');
       b.onclick = () => openSession(s.id);
       b.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); showSessMenu(e, s); };
@@ -4077,13 +4094,27 @@ function renderSessionList(){
   });
 }
 // The search box above the list: titles and project names, as you type.
-$('q').addEventListener('input', renderSessionList);
+// Titles filter as you type; the conversations are searched once typing pauses.
+$('q').addEventListener('input', () => {
+  renderSessionList();
+  clearTimeout(contentTimer);
+  const qq = $('q').value.trim().toLowerCase();
+  if (qq.length < 2) { CONTENT_HITS = new Map(); CONTENT_Q = ''; return; }
+  contentTimer = setTimeout(async () => {
+    let r = [];
+    try { r = await window.voxai.sessionsSearch(qq); } catch { r = []; }
+    if ($('q').value.trim().toLowerCase() !== qq) return;   // typing moved on
+    CONTENT_HITS = new Map(r.map((x) => [x.id, x.snippet])); CONTENT_Q = qq;
+    renderSessionList();
+  }, 250);
+});
 $('q').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.target.value = ''; renderSessionList(); } });
 
 // ---- agent events: route to the owning session view (any may be active) ----
-window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
+function onAgentEvt({ sessionId: sid, runKey, event }){
   const v = viewOf(sid);        // register session even if we haven't opened it yet
   T = v;
+  if (event.type === 'user_input' && event.inputId) (v.shownInputs || (v.shownInputs = new Set())).add(event.inputId);
   // A finished run takes its approval, if one was still showing, with it.
   if (['done', 'error', 'cancelled', 'limit_reached', 'budget_reached'].includes(event.type) && v.perm) {
     clearTimeout(v.perm.timer); v.perm = null; if (sid === activeId) paintAsk();
@@ -4361,7 +4392,7 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
       for (const o of event.options) {
         const b = el('button', 'uq-opt' + (o.value === 'yes' ? ' uq-ok' : o.value === 'no' ? ' uq-no' : ''), esc(o.label));
         b.dataset.v = String(o.value || o.label || '');
-        b.onclick = () => { try { window.voxai.agentAnswer(event.inputId, b.dataset.v); } catch {} box.style.display = 'none'; };
+        b.onclick = () => { try { answerInput(event, b.dataset.v); } catch {} box.style.display = 'none'; };
         opts.appendChild(b); n++;
       }
       box.appendChild(opts);
@@ -4369,14 +4400,14 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
       const inp = document.createElement('input');
       inp.style.cssText = 'flex:1;border:1px solid var(--edge2);border-radius:7px;background:var(--deep);color:var(--ink);padding:7px 10px;font-family:Chivo,sans-serif;font-size:13.5px';
       inp.id = 'uqText';
-      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { try { window.voxai.agentAnswer(event.inputId, inp.value); } catch {} box.style.display = 'none'; } });
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { try { answerInput(event, inp.value); } catch {} box.style.display = 'none'; } });
       const send = el('button', 'uq-opt', 'Send');
-      send.onclick = () => { try { window.voxai.agentAnswer(event.inputId, inp.value); } catch {} box.style.display = 'none'; };
+      send.onclick = () => { try { answerInput(event, inp.value); } catch {} box.style.display = 'none'; };
       const row = el('div', 'uq-options'); row.appendChild(inp); row.appendChild(send);
       box.appendChild(row);
     }
     const cancel = el('button', 'uq-cancel', 'Dismiss (no answer)');
-    cancel.onclick = () => { try { window.voxai.agentAnswer(event.inputId, ''); } catch {} box.style.display = 'none'; };
+    cancel.onclick = () => { try { answerInput(event, ''); } catch {} box.style.display = 'none'; };
     box.appendChild(cancel);
     // Once answered, the question stays in the thread as one line with the answer,
     // instead of vanishing and leaving no trace of what was decided.
@@ -4412,7 +4443,7 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
         const yes = /^(y|yes|yeah|yep|ok|okay|confirm|go( ahead)?|do it|proceed|sure)\b/i.test(t);
         const no = /^(n|no|nope|deny|stop|cancel)\b/i.test(t) && t.split(/\s+/).length <= 2;
         const val = event.kind === 'confirm' ? (yes ? 'yes' : no ? 'no' : t) : t;
-        try { window.voxai.agentAnswer(event.inputId, val); } catch {}
+        try { answerInput(event, val); } catch {}
         settle(t); endWait();
       },
       expire: () => {
@@ -4484,7 +4515,47 @@ window.voxai.onAgentEvent(({ sessionId: sid, runKey, event }) => {
     if (r) { r.appendChild(box); followThread(); }
   }
   T = null;
-});
+}
+window.voxai.onAgentEvent(onAgentEvt);
+
+// Where an answer goes: to the run that asked, or -- for a question the app closed on --
+// into the session, which then carries on from it.
+function answerInput(event, answer, cancelled){
+  if (!event.resume) { try { window.voxai.agentAnswer(event.inputId, answer, cancelled); } catch {} return; }
+  const v = viewOf(event.resume.sessionId);
+  const paint = () => { if (v === actView()) { $('runDot').style.display = v.busy ? 'block' : 'none'; updateSendState(); paintShelf(); } };
+  v.busy = true; v.runT0 = Date.now(); v.activity = 'Thinking'; paint();
+  window.voxai.agentResumeAsk(event.resume.sessionId, event.resume.callId, answer, cancelled)
+    .then((r) => { v.runKeys.add(r.runKey); refreshSessionList(); paint(); })
+    .catch((err) => {
+      v.busy = false; v.activity = '';
+      T = v; const r = RR(); if (r) { r.appendChild(noticeRow({ tone: 'bad', icon: 'alert', title: 'Couldn’t carry on', text: tidyPaths(ipcMessage(err)) })); followThread(); } T = null;
+      paint();
+    });
+}
+// What a session is waiting on right now. Questions and approvals were each sent once,
+// as an event: a reload lost them while the run sat waiting for an answer, and its Stop
+// button with them. A question the app closed on (full.pendingAsk) is asked again.
+async function syncLive(v, full){
+  let live = null;
+  try { live = await window.voxai.agentLive(v.id); } catch {}
+  const running = !!(live && live.runKeys && live.runKeys.length);
+  if (running) {
+    v.busy = true; v.activity = v.activity || 'Working';
+    for (const k of live.runKeys) v.runKeys.add(k);
+    const cut = v.root.lastElementChild; if (cut && cut.classList.contains('run-cut')) cut.remove();
+  }
+  for (const it of (live && live.inputs) || []) {
+    if (it && it.event && !(v.shownInputs && v.shownInputs.has(it.event.inputId))) onAgentEvt({ sessionId: v.id, runKey: it.runKey, event: it.event });
+  }
+  for (const p of (live && live.perms) || []) if (!v.perm || v.perm.permId !== p.permId) onAgentPerm(p);
+  const pa = full && full.pendingAsk;
+  if (pa && !running) {
+    const cut = v.root.lastElementChild; if (cut && cut.classList.contains('run-cut')) cut.remove();
+    onAgentEvt({ sessionId: v.id, runKey: 'resume', event: { type: 'user_input', ...pa.request, inputId: 'resume:' + pa.callId, resume: { sessionId: v.id, callId: pa.callId } } });
+  }
+  if (v === actView()) { $('runDot').style.display = v.busy ? 'block' : 'none'; updateSendState(); paintShelf(); }
+}
 
 /**
  * An approval takes the place of the text box -- where you are already looking -- and
@@ -4576,7 +4647,8 @@ document.addEventListener('paste', (e) => {
   if (!t) return;
   e.preventDefault(); $('prompt').value += t; p.typedAt = Date.now(); paintAskDraft();
 });
-window.voxai.onAgentPermission(({ permId, sessionId, kind, target, canAlways, note }) => {
+window.voxai.onAgentPermission(onAgentPerm);
+function onAgentPerm({ permId, sessionId, kind, target, canAlways, note }){
   const v = sessionId ? viewOf(sessionId) : actView();
   if (!v) return;
   // The main process gives up after two minutes and treats it as a no; so does this.
@@ -4585,7 +4657,7 @@ window.voxai.onAgentPermission(({ permId, sessionId, kind, target, canAlways, no
   setActivity(v, 'Waiting for you');
   if (v === actView()) paintAsk();
   refreshSessionList();
-});
+}
 
 $('btnSend').onclick = () => {
   const v = actView();
@@ -5832,7 +5904,7 @@ function askCard(v, event){
   const finish = (payload, cancelled) => {
     if (done) return; done = true;
     v.pendingAsk = null;
-    try { window.voxai.agentAnswer(event.inputId, cancelled ? null : payload, cancelled); } catch {}
+    try { answerInput(event, cancelled ? null : payload, cancelled); } catch {}
     const rec = el('div', 'uq-done ask2-done');
     if (cancelled) { rec.appendChild(el('span', 'uq-q', esc(qs.length === 1 ? qs[0].question : qs.length + ' questions'))); rec.appendChild(el('span', 'uq-a', 'Skipped')); }
     // Typed in the message box: with several questions it answers all of them, so
@@ -5982,7 +6054,9 @@ function renderKeys(){
 function addCodeCopy(root){
   if (!root || !root.querySelectorAll) return;
   for (const pre of root.querySelectorAll('pre')) {
-    if (pre.querySelector(':scope > .code-copy')) continue;
+    if (pre.parentElement && pre.parentElement.classList.contains('code-wrap')) continue;
+    const wrap = el('div', 'code-wrap');
+    pre.replaceWith(wrap); wrap.appendChild(pre);
     const b = el('button', 'code-copy', 'Copy');
     b.type = 'button';
     b.title = 'Copy this code';
@@ -5993,7 +6067,7 @@ function addCodeCopy(root){
       b.textContent = ok ? 'Copied' : 'Could not copy';
       setTimeout(() => { b.textContent = 'Copy'; }, 1600);
     };
-    pre.appendChild(b);
+    wrap.appendChild(b);
   }
 }
 
@@ -6014,6 +6088,9 @@ function addCodeCopy(root){
   };
   refreshChips(); refreshUsage();
   await refreshSessionList();
+  // A reloaded window: a session still running -- one waiting on you first -- opens
+  // again, instead of the start screen with the run and its question out of sight.
+  try { const ids = await window.voxai.agentLiveSessions(); if (ids && ids.length && !activeId) await openSession(ids[0]); } catch {}
   if(!S.hasOpenRouterKey){ openModal(); $('keyState').textContent='Set your OpenRouter API key to use agent turns — then hit Test, then Save.'; }
   $('backendState').className = 'sf-dot ok';
   $('backendDetail').textContent = 'Ready';
