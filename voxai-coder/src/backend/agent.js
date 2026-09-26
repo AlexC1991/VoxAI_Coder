@@ -850,7 +850,8 @@ async function* runAgent(opts) {
       workdir: session.workdir, session, emit: pushEvent, checkPermission: ctx.checkPermission,
       resolveIn, userData, live, userInput: userInput || (async () => ({ answer: null, cancelled: true })),
       runner: (o) => runAgent(o),
-      agentOpts: { apiKey, host, model, reasoningEffort, reasoningSpec, access, sessionId: session.id, signal, isSubAgent, workdir: session.workdir, visionHelper,
+      // askPermission: a worker's prompts come to the same place as this run's (spawn.js).
+      agentOpts: { apiKey, host, model, reasoningEffort, reasoningSpec, access, sessionId: session.id, signal, isSubAgent, workdir: session.workdir, visionHelper, askPermission,
         defaultSubModel: subagentModel, defaultSubMaxTurns: subagentMaxTurns, defaultSubTimeoutMs: subagentTimeoutMs,
         // Sub-agents spend the PARENT's remaining allowance, never a fresh one.
         // Rebuilt each turn so a fan-out later in the run sees the depleted figure.

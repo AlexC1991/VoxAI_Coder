@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-9NmabWN7YXjk97yFNwgXiaXe2+IsBM2U8GhmmVlnqNw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-SENpIun0rD9EDwb8RRTuumeITouBZaJipqPVLgvEyU8='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -4283,7 +4283,7 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
   if (event.type === 'goal') { onGoalEvent(v, event); T = null; return; }
   // A finished run takes its approval, if one was still showing, with it.
   if (['done', 'error', 'cancelled', 'limit_reached', 'budget_reached'].includes(event.type) && v.perm) {
-    clearTimeout(v.perm.timer); v.perm = null; if (sid === activeId) paintAsk();
+    clearTimeout(v.perm.timer); v.perm = null; v.permQueue = []; if (sid === activeId) paintAsk();
   }
   if (event.type === 'token') {
     clearTimeout(v.statusTimer);
@@ -4779,6 +4779,8 @@ async function answerAsk(allowed, always){
   clearTimeout(p.timer);
   // Back to what it was doing, or "Thinking" if the answer was no.
   setActivity(v, allowed ? (p.kind === 'spawn_agent' || p.kind === 'spawn_parallel' ? 'Working with sub-agents' : (p.before && p.before !== 'Waiting for you' ? p.before : 'Working')) : 'Thinking');
+  // The next request waiting behind this one, if any.
+  if (v.permQueue && v.permQueue.length) { v.perm = v.permQueue.shift(); v.perm.shownAt = Date.now(); setActivity(v, 'Waiting for you'); }
   paintAsk();
   try { await window.voxai.agentPermission(p.permId, !!allowed, !!always); } catch {}
   const pr = $('prompt'); if (pr) pr.focus();
@@ -4824,7 +4826,16 @@ function onAgentPerm({ permId, sessionId, kind, target, canAlways, note, alwaysL
   const v = sessionId ? viewOf(sessionId) : actView();
   if (!v) return;
   // It stays until you answer or the run ends (it used to lapse to "no" after two minutes).
-  v.perm = { permId, kind, target: String(target || ''), canAlways: !!canAlways, timer: null, shownAt: Date.now(), before: v.activity, note: note || '', alwaysLabel: alwaysLabel || '' };
+  const p = { permId, kind, target: String(target || ''), canAlways: !!canAlways, timer: null, shownAt: Date.now(), before: v.activity, note: note || '', alwaysLabel: alwaysLabel || '' };
+  // Workers ask too, several at once: the next waits its turn. A second request used to
+  // replace the first, whose worker then waited for an answer that could never come.
+  if (v.perm && v.perm.permId !== permId) {
+    v.permQueue = v.permQueue || [];
+    if (!v.permQueue.some((q) => q.permId === permId)) v.permQueue.push(p);
+    refreshSessionList();
+    return;
+  }
+  v.perm = p;
   setActivity(v, 'Waiting for you');
   if (v === actView()) paintAsk();
   refreshSessionList();

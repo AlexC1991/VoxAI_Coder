@@ -1621,8 +1621,29 @@ async function drain(gen) {
     P.claim(987654, 'ks-auto-own');
     const mine = await ask('auto', 'taskkill /pid 987654 /T /F', false, 'ks-auto-own');
     check('Auto ends a process it started, by pid, without asking', mine.asked.length === 0, mine.asked);
-    const SP = read('src/backend/tools/spawn.js');
-    check('a worker refuses kills it would have to ask about (nobody is there to answer)', SP.includes('askPermission: async (q) => !(q && q.noAlways),'), 'spawn.js');
+    // A worker asks the user through the run that started it (it used to answer itself yes).
+    const { makeSpawnTool } = require(path.join(ROOT, 'src/backend/tools/spawn.js'));
+    const workerAsk = async (parentAsk) => {
+      let got = null;
+      const runner = (opts) => { got = opts; return (async function* () { yield { type: 'done', content: 'ok' }; })(); };
+      const UD2 = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-wk-'));
+      const tool = makeSpawnTool({ runner, agentOpts: { workdir: WD, sessionId: 'wk', model: 'm', access: 'ask', ...(parentAsk ? { askPermission: parentAsk } : {}) }, userData: UD2, emit: () => {} });
+      await tool.run('spawn_agent', { task: 'Add a clear command to todo.js' }, { workdir: WD, session: { id: 'wk' } });
+      const r = await got.askPermission({ kind: 'shell', target: 'npm install left-pad', note: '' });
+      try { fs.rmSync(UD2, { recursive: true, force: true }); } catch {}
+      return r;
+    };
+    const heard = [];
+    const yes = await workerAsk(async (q) => { heard.push(q); return true; });
+    check('a worker\'s prompt reaches the user, marked as from a sub-agent with its task', yes === true && heard.length === 1 && heard[0].target === 'npm install left-pad'
+      && /^From a sub-agent \(build\): Add a clear command to todo\.js\./.test(heard[0].note), heard);
+    const no = await workerAsk(async () => false);
+    check('and the user\'s no is the worker\'s no', no === false, no);
+    check('with nobody to ask, a worker is refused, not waved through', (await workerAsk(null)) === false, 'no parent');
+    check('the Sub-agents panel\'s workers ask in the session\'s box too', MAIN.includes('signal: ctl.signal, askPermission: panelAsk,') && !MAIN.includes('askPermission: async () => true')
+      && MAIN.includes('function askPermissionFor(sessionId, runKey) {') && MAIN.includes('for (const [k, pp] of pendingPerms) if (pp.runKey === panelKey)'), 'main');
+    check('several requests queue in the box instead of replacing each other', HTML.includes('if (!v.permQueue.some((q) => q.permId === permId)) v.permQueue.push(p);')
+      && HTML.includes('if (v.permQueue && v.permQueue.length) { v.perm = v.permQueue.shift();'), 'page');
     check('programs opened on the desktop and every shell command are claimed as the session\'s own',
       read('src/backend/cu/index.js').includes("if (r.pid) require('../tools/procs').claim(r.pid, ctx && ctx.session && ctx.session.id);")
       && read('src/backend/cu/native.js').includes('-PassThru') && read('src/backend/tools/index.js').includes('procs.claim(child.pid, ctx.session && ctx.session.id);'), 'claims');

@@ -826,6 +826,9 @@ app.whenReady().then(() => {
       parentId: (sess && sess.id) || null,
     });
     const ctl = new AbortController();
+    const panelKey = `${sub.id}:panel`;
+    const ask = sess ? askPermissionFor(sess.id, panelKey) : null;
+    const panelAsk = async (q) => (ask ? ask({ ...q, note: 'From a sub-agent you started: ' + String(task).replace(/\s+/g, ' ').slice(0, 80) + '.' + (q && q.note ? ' ' + q.note : '') }) : false);
     (async () => {
       try {
         for await (const ev of runAgent({
@@ -835,7 +838,8 @@ app.whenReady().then(() => {
           apiKey: s.openrouterKey, host: s.openrouterHost, model: sub.model,
           reasoningEffort: s.reasoningEffort, access: s.access,
           maxTurns: Number(maxTurns) > 0 ? Number(maxTurns) : (Number(s.subagentMaxTurns) > 0 ? Number(s.subagentMaxTurns) : 25),
-          signal: ctl.signal, askPermission: async () => true,
+          // It asks in the session's approval box like any run (it used to answer itself yes).
+          signal: ctl.signal, askPermission: panelAsk,
           userData: userData(), live: live,
           contextLimit: s.contextLimit, compactThreshold: s.compactThreshold,
           toolResultMaxChars: s.toolResultMaxChars, hardFraction: s.hardFraction,
@@ -848,6 +852,8 @@ app.whenReady().then(() => {
       } catch (err) {
         try { store.recordUsage(sub, { prompt_tokens: 0, completion_tokens: 0, total_cost: 0, cost: 0 }); } catch {}
       } finally {
+        // Its questions go with it: nothing is left waiting for an answer that can go nowhere.
+        for (const [k, pp] of pendingPerms) if (pp.runKey === panelKey) { pendingPerms.delete(k); try { pp.resolve(false, false); } catch {} }
         try { const ru = sub._runUsage; if (ru) { store.recordUsage(sub, ru); delete sub._runUsage; } } catch {}
         try { await store.saveSession(userData(), sub); } catch {}
         const c = chatWebContents(); c && c.send('subagents:changed', { id: sub.id });
@@ -900,6 +906,38 @@ app.whenReady().then(() => {
     return ids.sort((a, b) => (waiting.has(b) ? 1 : 0) - (waiting.has(a) ? 1 : 0));
   });
 
+  /**
+   * Ask the user about an action, in the session's approval box: for a run, and for a
+   * worker started from the Sub-agents panel. It waits until answered, or until the run
+   * with this runKey ends (its finally answers no).
+   */
+  function askPermissionFor(sessionId, runKey) {
+    return ({ kind, target, note, alwaysKey, alwaysLabel, noAlways }) => new Promise((resolve) => {
+      // whole-session allow (prototype "allow for the whole session"): remember
+      // this exact target so future identical requests auto-allow without prompting.
+      // An action on a website is remembered by its site (alwaysKey), not word for word.
+      const key = kind + '\u0000' + String(alwaysKey || target || '');
+      // 'always': allowed without a prompt (truthy, like yes). The desktop's mouse check needs to know
+      // nobody just moved the mouse to answer one.
+      if (!noAlways && sessionAlwaysAllow.get(sessionId) && sessionAlwaysAllow.get(sessionId).has(key)) { resolve('always'); return; }
+      const permId = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
+      // It waits until you answer or the run ends (see launchRun's finally). It used to
+      // count as "no" after two minutes, so stepping away turned approvals into refusals.
+      const msg = { permId, sessionId, kind, target, canAlways: !noAlways, note: note || '', ...(alwaysLabel ? { alwaysLabel } : {}) };
+      pendingPerms.set(permId, {
+        msg, runKey,
+        resolve: (v, always) => {
+          if (v && always && !noAlways) {
+            if (!sessionAlwaysAllow.has(sessionId)) sessionAlwaysAllow.set(sessionId, new Set());
+            sessionAlwaysAllow.get(sessionId).add(key);
+          }
+          resolve(v);
+        },
+      });
+      const c0 = chatWebContents(); c0 && c0.send('agent:permission', msg);
+    });
+  }
+
   async function launchRun({ sessionId, text, attachments, resume = false, goalContinue = false }) {
     const s = getSettings(false);
     if (!s.openrouterKey) throw new Error('No OpenRouter API key — open Settings and paste one.');
@@ -919,30 +957,7 @@ app.whenReady().then(() => {
     controllers.set(runKey, ctl);
     const w = win();
 
-    const askPermission = ({ kind, target, note, alwaysKey, alwaysLabel, noAlways }) => new Promise((resolve) => {
-      // whole-session allow (prototype "allow for the whole session"): remember
-      // this exact target so future identical requests auto-allow without prompting.
-      // An action on a website is remembered by its site (alwaysKey), not word for word.
-      const key = kind + '\u0000' + String(alwaysKey || target || '');
-      // 'always': allowed without a prompt (truthy, like yes). The desktop's mouse check needs to know
-      // nobody just moved the mouse to answer one.
-      if (!noAlways && sessionAlwaysAllow.get(sessionId) && sessionAlwaysAllow.get(sessionId).has(key)) { resolve('always'); return; }
-      const permId = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;
-      // It waits until you answer or the run ends (see the finally below). It used to
-      // count as "no" after two minutes, so stepping away turned approvals into refusals.
-      const msg = { permId, sessionId, kind, target, canAlways: !noAlways, note: note || '', ...(alwaysLabel ? { alwaysLabel } : {}) };
-      pendingPerms.set(permId, {
-        msg, runKey,
-        resolve: (v, always) => {
-          if (v && always && !noAlways) {
-            if (!sessionAlwaysAllow.has(sessionId)) sessionAlwaysAllow.set(sessionId, new Set());
-            sessionAlwaysAllow.get(sessionId).add(key);
-          }
-          resolve(v);
-        },
-      });
-      const c0 = chatWebContents(); c0 && c0.send('agent:permission', msg);
-    });
+    const askPermission = askPermissionFor(sessionId, runKey);
 
     const askUserInput = ({ question, options, kind, questions }) => new Promise((resolve) => {
       const inputId = `${Date.now()}_${Math.floor(Math.random() * 1e6)}`;

@@ -170,10 +170,12 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
         maxTurns: Number(task.maxTurns) > 0 ? Number(task.maxTurns)
           : (Number(agentOpts.defaultSubMaxTurns) > 0 ? Number(agentOpts.defaultSubMaxTurns) : 25),
         signal: subCtl.signal,
-        // Nobody is there to answer a worker's prompts, so they pass -- except ending
-        // processes it did not start (noAlways, see tools/kills.js): that is refused,
-        // and the refusal tells it to end its own by pid.
-        askPermission: async (q) => !(q && q.noAlways),
+        // A worker asks YOU, through the run that started it, whatever the mode says to ask.
+        // It used to answer itself yes, so from "Ask first" a worker could run any command or
+        // edit nobody approved. With no one to ask (no parent prompt), the answer is no.
+        askPermission: async (q) => (typeof agentOpts.askPermission === 'function'
+          ? agentOpts.askPermission({ ...q, note: `From a sub-agent (${roleName}): ${String(task.task || '').replace(/\s+/g, ' ').slice(0, 80)}.` + (q && q.note ? ' ' + q.note : '') })
+          : false),
         userData,
         live,
         budgetUsd: budgetShare,
