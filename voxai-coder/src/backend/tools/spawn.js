@@ -57,6 +57,23 @@ const ROLES = {
   },
 };
 const DEFAULT_ROLE = 'build';
+
+/**
+ * A worker's task, short, for its label and for approvals. Models open a task with setup
+ * for the worker ("You are in a Windows environment using cmd.exe...", "Your working
+ * directory is ..."), and an approval that led with that said nothing about the task.
+ * Leading setup sentences are skipped; the rest is cut to `max`.
+ */
+function taskSummary(task, max = 90) {
+  const t = String(task || '').replace(/\s+/g, ' ').trim();
+  const parts = t.split(/(?<=[.!?])\s+(?=[A-Z(`"'])/);
+  const setup = /^(you are|you're|you have|you will be|your (current )?(working )?(directory|folder|cwd|shell|environment|workdir)|the (current )?(working )?(directory|folder|shell|workdir)|working (directory|folder)|this is (a )?windows|on windows|use cmd|context:|note:|background:|environment:)/i;
+  let i = 0;
+  while (i < parts.length - 1 && setup.test(parts[i])) i++;
+  const s = parts.slice(i).join(' ');
+  return s.length > max ? s.slice(0, max - 1).trimEnd() + '…' : s;
+}
+const endSentence = (s) => (/[.!?…]$/.test(s) ? s : s + '.');
 const SUB_TIMEOUT_FLOOR_MS = 10000;
 
 function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
@@ -174,7 +191,7 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
         // It used to answer itself yes, so from "Ask first" a worker could run any command or
         // edit nobody approved. With no one to ask (no parent prompt), the answer is no.
         askPermission: async (q) => (typeof agentOpts.askPermission === 'function'
-          ? agentOpts.askPermission({ ...q, note: `From a sub-agent (${roleName}): ${String(task.task || '').replace(/\s+/g, ' ').slice(0, 80)}.` + (q && q.note ? ' ' + q.note : '') })
+          ? agentOpts.askPermission({ ...q, note: `From a sub-agent (${roleName}): ${endSentence(taskSummary(task.task, 90))}` + (q && q.note ? ' ' + q.note : '') })
           : false),
         userData,
         live,
@@ -202,7 +219,7 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
       // Announce WHAT this worker is, once. Without it the UI had nothing to label
       // the card with but the names of the tools it happened to call, so five
       // concurrent workers were five identical anonymous boxes.
-      broadcast(sub.id, 'start', { role: roleName, label: String(task.task || '').replace(/\s+/g, ' ').slice(0, 90) });
+      broadcast(sub.id, 'start', { role: roleName, label: taskSummary(task.task, 90) });
       const TERMINAL = ['done', 'error', 'cancelled', 'limit_reached', 'budget_reached'];
       for await (const ev of gen) {
         events.push(ev);
@@ -426,4 +443,4 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
   };
 }
 
-module.exports = { makeSpawnTool, ROLES, READ_TOOLS, WRITE_TOOLS, SUB_TIMEOUT_FLOOR_MS };
+module.exports = { makeSpawnTool, taskSummary, ROLES, READ_TOOLS, WRITE_TOOLS, SUB_TIMEOUT_FLOOR_MS };

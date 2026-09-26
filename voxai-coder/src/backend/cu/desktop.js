@@ -59,10 +59,12 @@ function stateFor(ctx) {
 const visibleWindows = () => input.listWindows().filter((w) => !w.own);
 
 /** A window by title or app name: exact title, then part of a title, then the app ("notepad"). */
-function findWindow(query) {
+// includeOwn: VoxAI Coder's own windows too -- for a picture only. Acting on them stays out:
+// the agent clicking its own interface could approve its own requests.
+function findWindow(query, { includeOwn = false } = {}) {
   const q = String(query || '').trim().toLowerCase();
   if (!q) return null;
-  const ws = visibleWindows();
+  const ws = includeOwn ? input.listWindows() : visibleWindows();
   const app = (w) => String(w.app || '').toLowerCase().replace(/\.exe$/, '');
   return ws.find((w) => w.title.toLowerCase() === q) || ws.find((w) => w.title.toLowerCase().includes(q))
     || ws.find((w) => app(w) === q.replace(/\.exe$/, '')) || ws.find((w) => app(w).includes(q)) || null;
@@ -158,13 +160,33 @@ function elementFor(s, index) {
   return e;
 }
 
+// VoxAI Coder's own window cannot draw itself for PrintWindow (its thread is the one
+// waiting), so native.js fell back to the screen: whatever covered it was in the picture
+// -- a game on top was described as "the app". main.js hands in Electron's own capture.
+let ownCapture = null;
+function setOwnCapture(fn) { ownCapture = typeof fn === 'function' ? fn : null; }
+
+/** A picture of window `w`: this app's own window from Electron, any other from Windows. */
+async function shotOf(w, nativeArgs) {
+  if (w && ownCapture && Number(w.pid) === process.pid) {
+    try {
+      const r = await ownCapture(w.hwnd);
+      if (r && r.dataUrl) {
+        return { ok: true, dataUrl: r.dataUrl, x: r.x, y: r.y, w: r.w, h: r.h, hwnd: w.hwnd, pid: w.pid, title: w.title, app: w.app,
+          method: 'app', note: 'VoxAI Coder\'s own window, drawn by the app itself (its title bar is not included).' };
+      }
+    } catch { /* fall back to Windows */ }
+  }
+  return native.screenshot(nativeArgs || { hwnd: w.hwnd });
+}
+
 /** A fresh picture of the window, and which control has the keyboard now: what the agent checks after acting. */
 async function after(s, ctx, w, did) {
   busy(ctx, 'end');
   await sleep(SETTLE_MS);
   let focused = '';
   try { const f = await uia.focused(); if (f && f.type) focused = `${f.type} "${f.name || ''}"`; } catch { /* no helper */ }
-  const shot = native.screenshot({ hwnd: w.hwnd });
+  const shot = await shotOf(w);
   recordCapture(s, shot);
   // What the window says now: the result of the step, for a model that cannot see the picture.
   let text = [];
@@ -205,7 +227,9 @@ async function focusOn(w) {
 
 function list() {
   const ws = visibleWindows();
-  return { backend: 'native', surface: 'native', windows: ws.slice(0, 40).map((w) => ({ title: w.title, app: appName(w), ...(w.minimised ? { minimised: true } : {}), ...(privacyBlock(w) ? { private: true } : {}) })),
+  const own = input.listWindows().filter((w) => w.own && !w.minimised);
+  return { backend: 'native', surface: 'native', windows: ws.slice(0, 40).map((w) => ({ title: w.title, app: appName(w), ...(w.minimised ? { minimised: true } : {}), ...(privacyBlock(w) ? { private: true } : {}) }))
+    .concat(own.slice(0, 3).map((w) => ({ title: w.title, app: 'VoxAI Coder', thisApp: 'this app -- screenshot only, not state or clicks' }))),
     how: 'Name one with `window` (part of its title or the app name) in state, click, type, press, scroll or focus.' };
 }
 
@@ -222,7 +246,7 @@ async function state(args, ctx) {
   const s = stateFor(ctx);
   const w = resolveTarget(s, args);
   if (w.minimised) { input.restoreQuietly(w.hwnd); await sleep(400); }
-  const shot = native.screenshot({ hwnd: w.hwnd });
+  const shot = await shotOf(w);
   recordCapture(s, shot);
   let controls = '', count = 0, complete = true, note = '', text = [];
   if (uia.available) {
@@ -340,16 +364,20 @@ async function scroll(args, ctx) {
 }
 
 /** A native screenshot: remembered as the picture x/y refer to. */
-function screenshot(args, ctx) {
+async function screenshot(args, ctx) {
   const s = stateFor(ctx);
   const one = !!(args && (args.window || args.hwnd || args.pid));
-  if (one && args.window) {
-    const w = findWindow(args.window);
-    const why = privacyBlock(w);
+  // Its own window can be looked at (never acted on, so it is not remembered as the target).
+  // Found live: with it left out, "VoxAI Coder" fell to a browser tab titled "VoxAI · ...".
+  const target = one ? (args.window ? findWindow(args.window, { includeOwn: true })
+    : input.listWindows().find((x) => (args.hwnd && x.hwnd === Number(args.hwnd)) || (args.pid && x.pid === Number(args.pid)))) : null;
+  if (target) {
+    const why = privacyBlock(target);
     if (why) return { ok: false, error: `I don't look into that window: ${why}.` };
-    if (w) s.target = w.hwnd;
+    if (!target.own) s.target = target.hwnd;
   }
-  const shot = native.screenshot(one ? { window: args.window, hwnd: args.hwnd, pid: args.pid } : 0);
+  const shot = target ? await shotOf(target, { window: args.window, hwnd: args.hwnd, pid: args.pid })
+    : native.screenshot(one ? { window: args.window, hwnd: args.hwnd, pid: args.pid } : 0);
   if (shot.ok) recordCapture(s, shot);
   return shot;
 }
@@ -393,4 +421,4 @@ function userAnswered(sessionId) {
   if (s && s.stopped) { s.stopped = false; s.cursorAt = null; }
 }
 
-module.exports = { list, focus, state, click, type, press, scroll, screenshot, describe, userAnswered, forget, privacyBlock, findWindow, fitScale, appName, setEscHooks, uia, _states: states };
+module.exports = { list, focus, state, click, type, press, scroll, screenshot, setOwnCapture, _shotOf: shotOf, describe, userAnswered, forget, privacyBlock, findWindow, fitScale, appName, setEscHooks, uia, _states: states };

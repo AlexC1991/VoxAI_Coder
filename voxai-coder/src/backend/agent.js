@@ -592,7 +592,7 @@ async function* runAgent(opts) {
     // characters of JSON cut off in the middle of a path.
     if (name === 'spawn_agent' || name === 'spawn_parallel') {
       const tasks = Array.isArray(a.tasks) && a.tasks.length ? a.tasks : [a];
-      const line = (t) => (t.role || a.role || 'build') + ': ' + String(t.task || '').replace(/\s+/g, ' ').trim().slice(0, 400);
+      const line = (t) => (t.role || a.role || 'build') + ': ' + require('./tools/spawn').taskSummary(t.task, 400);
       return { kind: name, target: tasks.map(line).join('\n') };
     }
     return { kind: name, target: summarizeArgs(a) };

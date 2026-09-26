@@ -26,12 +26,20 @@ const check = (name, cond, got) => {
 
 const NATIVE_FETCH = global.fetch;   // the fakes below replace it
 
-/** A fake OpenRouter that replies with `script(n)` for the n-th request. */
+/**
+ * A fake OpenRouter that replies with `script(n)` for turn n of the conversation a request
+ * carries (its assistant messages + 1). It used to count requests: a call still in flight
+ * from an earlier test then took turn 1's reply (the tool call), and the test under way
+ * got "done" and failed now and then. Counted from the request itself, a stray call only
+ * gets an answer for its own conversation. One-shot calls (stream: false -- the Auto
+ * check, screenshot descriptions, goal checks) get an empty reply and move nothing.
+ */
 function fakeOpenRouter(script) {
-  let n = 0;
   global.fetch = async (_url, opts) => {
-    n++;
-    const chunks = script(n, JSON.parse(opts.body));
+    const body = JSON.parse(opts.body);
+    if (body.stream === false) return { ok: true, text: async () => '' };
+    const n = (body.messages || []).filter((m) => m && m.role === 'assistant').length + 1;
+    const chunks = script(n, body);
     const enc = new TextEncoder();
     return {
       ok: true, text: async () => '',
@@ -1728,6 +1736,39 @@ async function drain(gen) {
     check('the page: /goal in the box, a goal bar, Stop pauses it, its messages are not your bubbles',
       HTML.includes("if (/^\\/goal(\\s|$)/i.test(text) && !v.pendingAsk) { await goalCommand(v, text); return; }") && HTML.includes('id="shGoal"')
       && HTML.includes("try { window.voxai.goalPause(v.id); } catch {}") && HTML.includes("if (/^\\[VOX GOAL\\]/.test(first)) {"), 'page');
+  }
+
+  // ------------------------------------------------------------------ [OW]
+  console.log('\n[OW] its own window is drawn by the app; workers are named by their task');
+  {
+    const MAIN = read('src/main/main.js');
+    const { taskSummary } = require(path.join(ROOT, 'src/backend/tools/spawn.js'));
+    const noisy = 'You are in a Windows environment using cmd.exe as your shell (no bash: use dir/type, chain with &&). Your working directory is C:/w/p. Create hello.txt containing hi.';
+    check('setup the model put in front of a task is skipped', taskSummary(noisy, 90) === 'Create hello.txt containing hi.', taskSummary(noisy, 90));
+    check('a plain task is kept as it is, and a long one is cut with an ellipsis', taskSummary('Look at todo.js for bugs in the done command.') === 'Look at todo.js for bugs in the done command.'
+      && /\u2026$/.test(taskSummary('Refactor '.repeat(30), 40)) && taskSummary('Refactor '.repeat(30), 40).length === 40, taskSummary('Refactor '.repeat(30), 40));
+    check('a task that is only setup still says something', taskSummary('You are a reviewer.') === 'You are a reviewer.', taskSummary('You are a reviewer.'));
+    const SPW = read('src/backend/tools/spawn.js');
+    check('approvals, worker cards and the spawn prompt all use it', SPW.includes('${endSentence(taskSummary(task.task, 90))}') && SPW.includes('label: taskSummary(task.task, 90)')
+      && read('src/backend/agent.js').includes("require('./tools/spawn').taskSummary(t.task, 400)") && MAIN.includes("require('../backend/tools/spawn').taskSummary(task, 90)"), 'labels');
+
+    const D = require(path.join(ROOT, 'src/backend/cu/desktop.js'));
+    let askedFor = null;
+    D.setOwnCapture(async (hwnd) => { askedFor = hwnd; return { dataUrl: 'data:image/png;base64,AAAA', x: 10, y: 20, w: 300, h: 200 }; });
+    const shot = await D._shotOf({ hwnd: 4242, pid: process.pid, title: 'VoxAI Coder', app: 'electron' });
+    check('a picture of its own window comes from the app, with where it is on screen', askedFor === 4242 && shot.ok && shot.method === 'app' && shot.x === 10 && shot.w === 300
+      && /drawn by the app itself/.test(shot.note), shot);
+    D.setOwnCapture(null);
+    check('main draws the chat and pastes the preview into its slot, in screen pixels', MAIN.includes('const base = await chatV.webContents.capturePage();')
+      && MAIN.includes('const img = await browserV.webContents.capturePage();') && MAIN.includes('const r = screen.dipToScreenRect(w, cb);')
+      && MAIN.includes("require('../backend/cu/desktop').setOwnCapture(captureOwnWindow);"), 'main');
+    const DS = read('src/backend/cu/desktop.js');
+    check('state, after-action pictures and screenshot all go through it', (DS.match(/const shot = await shotOf\(w\);/g) || []).length === 2 && DS.includes('const shot = target ? await shotOf(target,')
+      && read('src/backend/cu/index.js').includes('const s = await desktop.screenshot(args, ctx);'), 'callers');
+    check('its own window can be found for a picture, but is never remembered as the one to act on', DS.includes('findWindow(args.window, { includeOwn: true })')
+      && DS.includes('if (!target.own) s.target = target.hwnd;') && DS.includes("const ws = includeOwn ? input.listWindows() : visibleWindows();")
+      && DS.includes("thisApp: 'this app -- screenshot only, not state or clicks'"), 'lookup');
+    check('the fake model answers by the turn a request carries, not by counting requests', /const n = \(body\.messages \|\| \[\]\)\.filter\(\(m\) => m && m\.role === 'assistant'\)\.length \+ 1;/.test(read('test/regression-refit.js')), 'fake');
   }
 
   try { fs.rmSync(WD, { recursive: true, force: true }); } catch {}

@@ -336,7 +336,7 @@ function makeComputerUseTool(opts) {
         case 'cu_screenshot': {
           if (backend === 'native') {
             const one = !!(args.window || args.hwnd || args.pid);
-            const s = desktop.screenshot(args, ctx);
+            const s = await desktop.screenshot(args, ctx);
             if (!s.ok) return { backend, ok: false, screenshot: null, error: s.error };
             emitImage(ctx, s.dataUrl, one ? (s.title || s.app || 'window') : 'desktop');
             return {

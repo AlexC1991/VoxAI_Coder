@@ -184,6 +184,48 @@ try {
     },
   });
 } catch { /* no desktop control on this platform */ }
+/**
+ * A picture of this app's own window for desktop control, drawn by Electron: the chat
+ * view, with the preview pasted into its slot when it is open. Windows could only copy
+ * the screen here (PrintWindow waits on this very thread), so whatever covered the window
+ * was in the picture. x/y/w/h are the content area on screen, in physical pixels, so a
+ * point in the picture still maps to a click. Null when it is not our window or cannot be drawn.
+ */
+async function captureOwnWindow(hwnd) {
+  const w = win();
+  if (!w || w.isDestroyed() || w.isMinimized() || !chatV) return null;
+  const h = w.getNativeWindowHandle();
+  const mine = h.length >= 8 ? Number(h.readBigUInt64LE(0)) : h.readUInt32LE(0);
+  if (Number(hwnd) !== mine) return null;
+  const { screen, nativeImage } = require('electron');
+  const cb = w.getContentBounds();
+  const sf = screen.getDisplayMatching(cb).scaleFactor || 1;
+  const base = await chatV.webContents.capturePage();
+  if (!base || base.isEmpty()) return null;
+  const size = base.getSize(sf);
+  const W = size.width, H = size.height;
+  let bmp = Buffer.from(base.toBitmap({ scaleFactor: sf }));
+  if (bmp.length !== W * H * 4) return null;
+  if (atlasOpen && browserV && browserV.getVisible && browserV.getVisible()) {
+    try {
+      const b = browserV.getBounds();
+      const img = await browserV.webContents.capturePage();
+      if (img && !img.isEmpty()) {
+        const os2 = img.getSize(sf), ob = img.toBitmap({ scaleFactor: sf });
+        const k = W / Math.max(1, cb.width);
+        const ox = Math.round(b.x * k), oy = Math.round(b.y * k);
+        for (let y = 0; y < os2.height && oy + y < H; y++) {
+          const n = Math.min(os2.width, W - ox);
+          if (n > 0 && oy + y >= 0) ob.copy(bmp, ((oy + y) * W + ox) * 4, y * os2.width * 4, (y * os2.width + n) * 4);
+        }
+      }
+    } catch { /* the chat alone still shows the app */ }
+  }
+  const out = nativeImage.createFromBitmap(bmp, { width: W, height: H, scaleFactor: 1 });
+  const r = screen.dipToScreenRect(w, cb);
+  return { dataUrl: 'data:image/png;base64,' + out.toPNG().toString('base64'), x: r.x, y: r.y, w: r.width, h: r.height };
+}
+try { require('../backend/cu/desktop').setOwnCapture(captureOwnWindow); } catch { /* no desktop control on this platform */ }
 /** Sessions with a question or an approval open right now. */
 function waitingIds() {
   return new Set([...pendingInputs.values()].map((p) => p.sessionId)
@@ -828,7 +870,8 @@ app.whenReady().then(() => {
     const ctl = new AbortController();
     const panelKey = `${sub.id}:panel`;
     const ask = sess ? askPermissionFor(sess.id, panelKey) : null;
-    const panelAsk = async (q) => (ask ? ask({ ...q, note: 'From a sub-agent you started: ' + String(task).replace(/\s+/g, ' ').slice(0, 80) + '.' + (q && q.note ? ' ' + q.note : '') }) : false);
+    const panelLabel = require('../backend/tools/spawn').taskSummary(task, 90).replace(/([^.!?…])$/, '$1.');
+    const panelAsk = async (q) => (ask ? ask({ ...q, note: 'From a sub-agent you started: ' + panelLabel + (q && q.note ? ' ' + q.note : '') }) : false);
     (async () => {
       try {
         for await (const ev of runAgent({
