@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-GImvsXr7jRfiddMwe1ifgb5FaUEXGAAYx9GqHdRgj0M='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-dBrqqGLv4V6N8v5c46ryuw6K19upNL/RnIPIP73kGaE='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1574,6 +1574,7 @@ function toolActivity(name, args){
   if (name === 'web_search') return 'Searching the web';
   if (name === 'web_fetch') return 'Reading a web page';
   if (name === 'spawn_agent' || name === 'spawn_parallel') return 'Working with sub-agents';
+  if (name === 'computer' && a.backend === 'native') return 'Using the desktop';
   if (name === 'computer' || name.indexOf('browser_') === 0 || name.indexOf('cu_') === 0) return 'Using the browser';
   if (name === 'todo') return 'Updating the plan';
   if (name === 'lsp') return 'Checking types';
@@ -2516,7 +2517,10 @@ function rowLook(name, args, done){
     }
     case 'ask_user': case 'ask_confirm': return pick('ask', 'Asked', 'Asking');
     case 'spawn_agent': case 'spawn_parallel': return pick('people', 'Delegated', 'Delegating');
-    case 'computer': return pick('eye', 'Used the browser', 'Using the browser');
+    // backend "native" is the Windows desktop, not the browser.
+    case 'computer':
+      if (args && args.backend === 'native') return args.action === 'screenshot' && (args.window || args.hwnd || args.pid) ? pick('eye', 'Looked at a window', 'Looking at a window') : pick('eye', 'Used the desktop', 'Using the desktop');
+      return pick('eye', 'Used the browser', 'Using the browser');
     case 'worktree': {
       const act = String((args && args.action) || '');
       const W = { create: ['Created worktree', 'Creating worktree'], status: ['Checked worktree', 'Checking worktree'], merge: ['Merged worktree', 'Merging worktree'], discard: ['Discarded worktree', 'Discarding worktree'] }[act] || ['Worktree', 'Worktree'];
@@ -2553,7 +2557,7 @@ const BASE_VERB = {
   'Read': 'Read', 'Wrote': 'Write', 'Edited': 'Edit', 'Ran': 'Run', 'Ran JavaScript': 'Run JavaScript',
   'Searched': 'Search', 'Listed': 'List', 'Checked types': 'Check types', 'Searched the web': 'Search the web',
   'Fetched': 'Fetch', 'Updated the plan': 'Update the plan', 'Asked': 'Ask', 'Delegated': 'Delegate',
-  'Used the browser': 'Use the browser', 'Deleted': 'Delete', 'Moved': 'Move', 'Created folder': 'Create folder',
+  'Used the browser': 'Use the browser', 'Used the desktop': 'Use the desktop', 'Looked at a window': 'Look at a window', 'Deleted': 'Delete', 'Moved': 'Move', 'Created folder': 'Create folder',
   'Checked': 'Check', 'Saved progress notes': 'Save progress notes', 'Published': 'Publish', 'Used a skill': 'Use a skill',
   'Called': 'Call', 'Checked sub-agents': 'Check sub-agents', 'Checked access': 'Check access',
 };

@@ -121,10 +121,15 @@ function makeComputerUseTool(opts) {
         type: 'function',
         function: {
           name: 'cu_screenshot',
-          description: 'Computer-use: capture and stream a fresh screenshot of the current browser page or native window to the UI. Returns the data URL.',
+          description: 'Computer-use: capture and stream a fresh screenshot of the current browser page, or with backend "native" the Windows desktop or ONE window. Returns the data URL.',
           parameters: {
             type: 'object',
-            properties: { backend: { type: 'string', enum: ['browser', 'native'] }, pid: { type: 'integer', description: 'native: window/process id to capture (blank = whole screen).' } },
+            properties: {
+              backend: { type: 'string', enum: ['browser', 'native'] },
+              window: { type: 'string', description: 'native: capture just this window -- part of its title or its app name (e.g. "Notepad", "chrome"), the frontmost match. It is captured even when other windows cover it. Leave out window, hwnd and pid for the whole desktop.' },
+              hwnd: { type: 'integer', description: 'native: a window handle from list, for one exact window.' },
+              pid: { type: 'integer', description: 'native: a process id; captures its frontmost window.' },
+            },
             additionalProperties: false,
           },
         },
@@ -185,7 +190,9 @@ function makeComputerUseTool(opts) {
       if (backend === 'browser' && name !== 'cu_launch' && typeof attachAtlas === 'function') {
         let wc = null;
         try { wc = attachAtlas(); } catch { wc = null; }
-        if (wc && !cdp.attachedTo(wc)) {
+        if (!wc) throw new Error('Nothing is open in the preview, so there is no page to ' + ({ cu_screenshot: 'capture', cu_state: 'read', cu_list: 'list' }[name] || 'act on')
+          + '. Open one first with action "open" (a url, or a file path), or use backend "native" for the desktop.');
+        if (!cdp.attachedTo(wc)) {
           const ar = await cdp.attach(wc);
           if (!ar.ok) throw new Error('could not attach computer-use to the preview: ' + (ar.error || 'unknown'));
         }
@@ -224,8 +231,9 @@ function makeComputerUseTool(opts) {
             const win = (w.windows || []).find((x) => x.pid && x.w > 200 && x.h > 100);
             const a = win ? native.buildA11y(win.pid) : null;
             const elements = (a && a.elements) || [];
-            // capture + stream screenshot
-            emitImage(ctx, native.screenshot(win ? win.pid : 0).dataUrl, (a && a.title) || 'desktop');
+            // capture + stream screenshot (once: it was taken twice, for the thread and the model)
+            const shot = native.screenshot(win ? { hwnd: win.hwnd } : 0).dataUrl || null;
+            emitImage(ctx, shot, (a && a.title) || 'desktop');
             return {
               backend, surface: 'native',
               windows: w.windows,
@@ -233,7 +241,7 @@ function makeComputerUseTool(opts) {
               title: (a && a.title) || (win && (win.title || win.app)) || 'desktop',
               elements,
               elementCount: elements.length,
-              screenshot: native.screenshot(win ? win.pid : 0).dataUrl || null,
+              screenshot: shot,
             };
           }
           const st = await cdp.getState(true);
@@ -274,7 +282,20 @@ function makeComputerUseTool(opts) {
           return { backend, ok: r.ok };
         }
         case 'cu_screenshot': {
-          if (backend === 'native') { const s = native.screenshot(args.pid || 0); emitImage(ctx, s.dataUrl, 'desktop'); return { backend, ok: s.ok, screenshot: s.dataUrl || null, error: s.error }; }
+          if (backend === 'native') {
+            const one = !!(args.window || args.hwnd || args.pid);
+            const s = native.screenshot({ window: args.window, hwnd: args.hwnd, pid: args.pid });
+            if (!s.ok) return { backend, ok: false, screenshot: null, error: s.error };
+            emitImage(ctx, s.dataUrl, one ? (s.title || s.app || 'window') : 'desktop');
+            return {
+              backend, ok: true, screenshot: s.dataUrl,
+              ...(one ? { window: { title: s.title, app: s.app, hwnd: s.hwnd, pid: s.pid } } : {}),
+              // Where the picture is on screen, so a point in it can be clicked.
+              at: { x: s.x, y: s.y, w: s.w, h: s.h },
+              coordinates: `Pixel (0,0) of this image is screen point (${s.x}, ${s.y}); add that to a point in the image to click it.`,
+              ...(s.note ? { note: s.note } : {}),
+            };
+          }
           const d = await cdp.screenshot();
           emitImage(ctx, d, 'screen');
           // An empty capture is not a screenshot. Say so rather than returning

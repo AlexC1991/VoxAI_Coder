@@ -1361,6 +1361,19 @@ async function drain(gen) {
     check('the app says which sessions need you', /ipcMain\.handle\('sessions:list'[\s\S]{0,900}waiting: open\.has\(s\.id\) \|\| \(!!s\.asking && !running\.has\(s\.id\)\)/.test(MAIN), 'not reported');
     check('the sidebar marks them "needs you"', HTML.includes('function sessWaiting(s){') && HTML.includes("waiting ? 'needs you' : relTime(s.updatedAt)") && HTML.includes('.dot.wait{'), 'unmarked');
     check('the mark follows the question as it opens and closes', HTML.includes("if (waitWas !== waitNow) { clearTimeout(setActivity._t); setActivity._t = setTimeout(renderSessionList, 0); }"), 'stale mark');
+    check('two monitors side by side stay readable (fit 2560 x 1600, not 1280 wide)', AG.includes('const scale = Math.min(1, 2560 / width, 1600 / height);') && !AG.includes('img.resize({ width: 1280'), 'squeezed to 1280 x 360');
+    const CU = read('src/backend/cu/index.js');
+    check('a closed preview is said at once, not waited on for ten seconds', MAIN.includes('onAttachAtlas: () => { try { return atlasOpen && browserV') && CU.includes("if (!wc) throw new Error('Nothing is open in the preview"), 'waits 10 s');
+    // One window, drawn by itself, whatever covers it.
+    const NAT = read('src/backend/cu/native.js'), TIX = read('src/backend/tools/index.js');
+    check('a window is captured by itself (PrintWindow), not copied off the screen', NAT.includes('$printed = [CU32]::PrintWindow($h, $hdc, 2)') && NAT.includes('$bmp = $full.Clone('), 'covered parts show');
+    check('every visible window is listed, front to back, with its handle', NAT.includes('EnumWindows((h, l) => {') && NAT.includes('hwnd = [int64]$h') && !NAT.includes('Where-Object { $_.MainWindowHandle -ne 0 }'), 'one per process');
+    check('a window is found by title, app name, handle or pid', NAT.includes('function Find-Window($Prm)') && NAT.includes('$_.title.ToLower().Contains($w) -or $_.app.ToLower().Contains($w)'), 'pid only');
+    check('its own window and a hung one are not asked to draw (that hung for 90 s)', NAT.includes('if (-not $own -and -not $hung) { $printed = [CU32]::PrintWindow') && NAT.includes('self: process.pid'), 'hangs');
+    check('minimised, no match and a blank capture are each said', NAT.includes('is minimised, and Windows does not draw a minimised window') && NAT.includes('No open window matches that. Windows open now:') && NAT.includes('(Test-Blank $bmp)'), 'silent');
+    check('captures do not pile up in Temp', NAT.includes('try { fs.unlinkSync(p); } catch {}'), 'left in Temp');
+    check('the computer tool takes a window, and says where it is on screen', CU.includes("window: { type: 'string', description: 'native: capture just this window") && CU.includes('Pixel (0,0) of this image is screen point') && TIX.includes('captures just that window, even when other windows cover it'), 'desktop only');
+    check('a desktop or window capture is not called "Used the browser"', HTML.includes("pick('eye', 'Looked at a window', 'Looking at a window')") && HTML.includes("if (name === 'computer' && a.backend === 'native') return 'Using the desktop';"), 'browser');
     check('a new session\'s row has its name while the run is going', MAIN.includes("...(live.get(s.id) && live.get(s.id).title ? { title: live.get(s.id).title } : {})"), '"New session"');
     check('at start, a session the app closed on while asking is opened', HTML.includes("const asked = (SESS_ITEMS.find((s) => s.waiting) || {}).id;"), 'start screen');
   }

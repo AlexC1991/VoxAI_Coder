@@ -859,7 +859,9 @@ app.whenReady().then(() => {
           onLiveEvent: (le) => { const c = chatWebContents(); c && c.send('agent:event', { sessionId, runKey, event: le }); },
           userData: userData(), live,
           onOpenUrl: (url) => { try { atlasOpenUrl(url); } catch {} },
-          onAttachAtlas: () => { try { return browserV && browserV.webContents ? browserV.webContents : null; } catch { return null; } },
+          // Only while the preview is open: closed, it is hidden and blank, and a
+          // screenshot of it waited ten seconds for a frame that never came.
+          onAttachAtlas: () => { try { return atlasOpen && browserV && browserV.webContents ? browserV.webContents : null; } catch { return null; } },
         })) {
           const c = chatWebContents(); c && c.send('agent:event', { sessionId, runKey, event: ev });
           // Persist in-flight messages incrementally (debounced) so nothing is

@@ -288,7 +288,7 @@ function fileUrl(absPath) {
 }
 
 /**
- * A screenshot small enough to keep in the session: JPEG, at most 1280 px wide. Kept as
+ * A screenshot small enough to keep in the session: JPEG, fitted inside 2560 x 1600. Kept as
  * full PNGs, 13 screenshots made one session 1.3 MB -- sent to the model again every turn
  * and stored for good. In Electron only; anywhere else it stays as it is.
  */
@@ -298,9 +298,12 @@ function compactImage(url) {
     const { nativeImage } = require('electron');
     if (!nativeImage || typeof nativeImage.createFromDataURL !== 'function') return url;
     let img = nativeImage.createFromDataURL(url);
-    const { width } = img.getSize();
-    if (!width) return url;
-    if (width > 1280) img = img.resize({ width: 1280, quality: 'good' });
+    const { width, height } = img.getSize();
+    if (!width || !height) return url;
+    // Fit inside 2560 x 1600. A 1280-wide cap squeezed two side-by-side monitors
+    // (3840 x 1080) to 1280 x 360, where the model could no longer read the text.
+    const scale = Math.min(1, 2560 / width, 1600 / height);
+    if (scale < 1) img = img.resize({ width: Math.round(width * scale), height: Math.round(height * scale), quality: 'good' });
     const out = 'data:image/jpeg;base64,' + img.toJPEG(75).toString('base64');
     return out.length < url.length ? out : url;
   } catch { return url; }

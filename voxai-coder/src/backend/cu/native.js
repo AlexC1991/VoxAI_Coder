@@ -34,22 +34,77 @@ public class CU32 {
   [DllImport("user32.dll")] public static extern IntPtr GetForegroundWindow();
   [DllImport("user32.dll")] public static extern bool GetWindowText(IntPtr h, System.Text.StringBuilder sb, int max);
   [StructLayout(LayoutKind.Sequential)] public struct RECT { public int L, T, R, B; }
+  public delegate bool EnumProc(IntPtr h, IntPtr l);
+  [DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, IntPtr l);
+  [DllImport("user32.dll")] public static extern bool IsIconic(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool IsWindowVisible(IntPtr h);
+  [DllImport("user32.dll")] public static extern int GetWindowTextLength(IntPtr h);
+  [DllImport("user32.dll")] public static extern IntPtr GetWindow(IntPtr h, uint cmd);
+  [DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+  [DllImport("user32.dll")] public static extern bool PrintWindow(IntPtr h, IntPtr hdc, uint flags);
+  [DllImport("user32.dll")] public static extern bool IsHungAppWindow(IntPtr h);
+  [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr v);
+  [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int attr, out RECT r, int size);
+  [DllImport("dwmapi.dll")] public static extern int DwmGetWindowAttribute(IntPtr h, int attr, out int v, int size);
+  // Top-level windows a person can see, front to back: visible, titled, not owned
+  // (dialogs and tool windows ride with their owner), and not cloaked (the hidden
+  // Store-app windows Windows keeps "visible" in the background).
+  public static System.Collections.Generic.List<IntPtr> TopWindows() {
+    var list = new System.Collections.Generic.List<IntPtr>();
+    EnumWindows((h, l) => {
+      int cloaked = 0;
+      if (IsWindowVisible(h) && GetWindowTextLength(h) > 0 && GetWindow(h, 4) == IntPtr.Zero
+          && !(DwmGetWindowAttribute(h, 14, out cloaked, 4) == 0 && cloaked != 0)) list.Add(h);
+      return true;
+    }, IntPtr.Zero);
+    return list;
+  }
+  // The window as it is drawn, without the invisible resize border GetWindowRect includes.
+  public static RECT Frame(IntPtr h) {
+    RECT r;
+    if (DwmGetWindowAttribute(h, 9, out r, 16) != 0) GetWindowRect(h, out r);
+    return r;
+  }
 }
 "@
+# Real pixels on a scaled display, so screenshots, window positions and clicks all agree.
+try { [CU32]::SetProcessDpiAwarenessContext([IntPtr](-4)) | Out-Null } catch { }
 $acc = [System.Windows.Automation.AutomationElement]
 
 function Emit($obj) { Write-Output ($obj | ConvertTo-Json -Compress -Depth 8) }
 
-function Ps-List {
-  $items = Get-Process | Where-Object { $_.MainWindowHandle -ne 0 } | ForEach-Object {
-    $h = $_.MainWindowHandle; $rect = New-Object CU32+RECT
-    [CU32]::GetWindowRect($h, [ref]$rect) | Out-Null
+# Every window a person can see, front to back, with its handle. It used to be one
+# window per process (MainWindowHandle), so a second Chrome or Explorer window could
+# not be found at all.
+function Get-Windows {
+  $apps = @{}
+  foreach ($h in [CU32]::TopWindows()) {
     $sb = New-Object System.Text.StringBuilder 512
     [CU32]::GetWindowText($h, $sb, 512) | Out-Null
-    [pscustomobject]@{ pid = $_.Id; title = $sb.ToString(); app = $_.ProcessName;
-      x = $rect.L; y = $rect.T; w = ($rect.R - $rect.L); h = ($rect.B - $rect.T) }
+    [uint32]$wpid = 0; [CU32]::GetWindowThreadProcessId($h, [ref]$wpid) | Out-Null
+    if (-not $apps.ContainsKey($wpid)) { $apps[$wpid] = try { [System.Diagnostics.Process]::GetProcessById([int]$wpid).ProcessName } catch { '' } }
+    if ($apps[$wpid] -eq 'explorer' -and $sb.ToString() -eq 'Program Manager') { continue }   # the desktop itself
+    $r = [CU32]::Frame($h)
+    [pscustomobject]@{ hwnd = [int64]$h; pid = [int]$wpid; title = $sb.ToString(); app = [string]$apps[$wpid];
+      x = $r.L; y = $r.T; w = ($r.R - $r.L); h = ($r.B - $r.T); minimised = [CU32]::IsIconic($h) }
   }
-  Emit @{ ok = $true; windows = @($items) }
+}
+function Ps-List { Emit @{ ok = $true; windows = @(Get-Windows) } }
+
+# The window a screenshot asks for: by handle, by part of its title or its app name
+# (the frontmost match), or by process id.
+function Find-Window($Prm) {
+  $all = @(Get-Windows)
+  if ([int64]$Prm.hwnd -ne 0) { return $all | Where-Object { $_.hwnd -eq [int64]$Prm.hwnd } | Select-Object -First 1 }
+  $want = [string]$Prm.window
+  if ($want) {
+    $w = $want.ToLower()
+    $hit = $all | Where-Object { $_.title.ToLower() -eq $w -or $_.app.ToLower() -eq $w } | Select-Object -First 1
+    if (-not $hit) { $hit = $all | Where-Object { $_.title.ToLower().Contains($w) -or $_.app.ToLower().Contains($w) } | Select-Object -First 1 }
+    return $hit
+  }
+  if ([int]$Prm.pid -gt 0) { return $all | Where-Object { $_.pid -eq [int]$Prm.pid } | Select-Object -First 1 }
+  return $null
 }
 
 # Walk the UIA tree for a window (by pid) and produce an indexed actionable list.
@@ -133,24 +188,66 @@ function Ps-ClickElem {
   Emit @{ ok = $true; method = 'focus-click'; x = $cx; y = $cy; index = $Index }
 }
 
+# Is a capture blank (all one colour)? PrintWindow gives black for the few windows
+# that draw outside its reach.
+function Test-Blank($Bmp) {
+  $first = $Bmp.GetPixel(0, 0).ToArgb()
+  for ($i = 1; $i -le 12; $i++) { for ($j = 1; $j -le 12; $j++) {
+    if ($Bmp.GetPixel([int]($Bmp.Width * $i / 13), [int]($Bmp.Height * $j / 13)).ToArgb() -ne $first) { return $false } } }
+  return $true
+}
+
+# One window, or the whole desktop. A window is drawn by itself (PrintWindow), so
+# windows in front of it are not in the picture -- the old capture copied that part
+# of the screen, and got whatever covered it.
 function Ps-Shot {
-  param([int]$WinPid, [string]$ShotPath)
-  $x = 0; $y = 0; $w = 0; $h = 0
-  if ($WinPid -gt 0) {
-    $p = Get-Process -Id $WinPid -ErrorAction SilentlyContinue
-    if ($p -and $p.MainWindowHandle -ne 0) {
-      $rect = New-Object CU32+RECT
-      [CU32]::GetWindowRect($p.MainWindowHandle, [ref]$rect) | Out-Null
-      $x = $rect.L; $y = $rect.T; $w = ($rect.R - $rect.L); $h = ($rect.B - $rect.T)
+  param($Prm, [string]$ShotPath)
+  $asked = ([int64]$Prm.hwnd -ne 0) -or [string]$Prm.window -or ([int]$Prm.pid -gt 0)
+  if ($asked) {
+    $win = Find-Window $Prm
+    if (-not $win) {
+      $names = @(Get-Windows | Where-Object { -not $_.minimised } | Select-Object -First 15 | ForEach-Object { '"' + $_.title + '" (' + $_.app + ')' }) -join ', '
+      Emit @{ ok = $false; error = "No open window matches that. Windows open now: $names" }; return
     }
+    $h = [IntPtr]$win.hwnd
+    if ([CU32]::IsIconic($h)) { Emit @{ ok = $false; error = ('"' + $win.title + '" is minimised, and Windows does not draw a minimised window. Ask the user to restore it, then try again.') }; return }
+    $wr = New-Object CU32+RECT; [CU32]::GetWindowRect($h, [ref]$wr) | Out-Null
+    $fw = $wr.R - $wr.L; $fh = $wr.B - $wr.T
+    $full = New-Object System.Drawing.Bitmap $fw, $fh
+    $g = [System.Drawing.Graphics]::FromImage($full)
+    $hdc = $g.GetHdc()
+    # PrintWindow asks the window's own thread to draw. Not for a window of the process
+    # waiting on this script (VoxAI Coder itself: that thread is blocked here, and it
+    # hung for the full time limit), nor for one that is not responding.
+    $own = ([int]$Prm.self -gt 0 -and $win.pid -eq [int]$Prm.self)
+    $hung = [CU32]::IsHungAppWindow($h)
+    $printed = $false
+    if (-not $own -and -not $hung) { $printed = [CU32]::PrintWindow($h, $hdc, 2) }   # PW_RENDERFULLCONTENT: GPU-drawn apps too
+    $g.ReleaseHdc($hdc); $g.Dispose()
+    # Crop to the window as drawn (the frame inside the invisible border).
+    $cx = [Math]::Max(0, $win.x - $wr.L); $cy = [Math]::Max(0, $win.y - $wr.T)
+    $cw = [Math]::Min($win.w, $fw - $cx); $ch = [Math]::Min($win.h, $fh - $cy)
+    $bmp = $full.Clone((New-Object System.Drawing.Rectangle $cx, $cy, $cw, $ch), $full.PixelFormat)
+    $full.Dispose()
+    $method = 'window'; $note = ''
+    if (-not $printed -or (Test-Blank $bmp)) {
+      # Fall back to the screen, and say what that means.
+      $g2 = [System.Drawing.Graphics]::FromImage($bmp)
+      $g2.CopyFromScreen($win.x, $win.y, 0, 0, $bmp.Size); $g2.Dispose()
+      $why = if ($own) { 'This is VoxAI Coder''s own window' } elseif ($hung) { 'This window is not responding' } else { 'This window could not draw itself' }
+      $method = 'screen'; $note = $why + ', so this is the screen where it is: anything covering it is in the picture.'
+    }
+    $bmp.Save($ShotPath, [System.Drawing.Imaging.ImageFormat]::Png); $bmp.Dispose()
+    Emit @{ ok = $true; path = $ShotPath; x = $win.x; y = $win.y; w = $cw; h = $ch; hwnd = $win.hwnd; pid = $win.pid; title = $win.title; app = $win.app; method = $method; note = $note }
+    return
   }
-  if ($w -le 0) { $x = 0; $y = 0; $w = [System.Windows.Forms.SystemInformation]::VirtualScreen.Width; $h = [System.Windows.Forms.SystemInformation]::VirtualScreen.Height }
-  $bmp = New-Object System.Drawing.Bitmap $w, $h
+  $vs = [System.Windows.Forms.SystemInformation]::VirtualScreen
+  $bmp = New-Object System.Drawing.Bitmap $vs.Width, $vs.Height
   $g = [System.Drawing.Graphics]::FromImage($bmp)
-  $g.CopyFromScreen($x, $y, 0, 0, $bmp.Size)
+  $g.CopyFromScreen($vs.X, $vs.Y, 0, 0, $bmp.Size)
   $bmp.Save($ShotPath, [System.Drawing.Imaging.ImageFormat]::Png)
   $g.Dispose(); $bmp.Dispose()
-  Emit @{ ok = $true; path = $ShotPath; x = $x; y = $y; w = $w; h = $h }
+  Emit @{ ok = $true; path = $ShotPath; x = $vs.X; y = $vs.Y; w = $vs.Width; h = $vs.Height; method = 'desktop' }
 }
 
 function Ps-Click { param([int]$X, [int]$Y)
@@ -187,7 +284,7 @@ switch ($op) {
   'list'   { Ps-List }
   'a11y'   { Ps-A11y -TargetPid ([int]$prm.pid) }
   'cele'   { Ps-ClickElem -TargetPid ([int]$prm.pid) -Index ([int]$prm.index) }
-  'shot'   { Ps-Shot -WinPid ([int]$prm.pid) -ShotPath ([string]$prm.path) }
+  'shot'   { Ps-Shot -Prm $prm -ShotPath ([string]$prm.path) }
   'click'  { Ps-Click -X ([int]$prm.x) -Y ([int]$prm.y) }
   'move'   { Ps-Move -X ([int]$prm.x) -Y ([int]$prm.y) }
   'type'   { Ps-Type -InText ([string]$prm.text) }
@@ -226,11 +323,26 @@ function runScript([op, arg]) {
 function listWindows() { return runScript(['list', {}]); }
 function buildA11y(pid) { return runScript(['a11y', { pid: pid || 0 }]); }
 function clickElement(pid, index) { return runScript(['cele', { pid: pid || 0, index: index || 0 }]); }
-function screenshot(pid, outPath) {
-  const p = outPath || path.join(os.tmpdir(), `voxai-cu-shot-${Date.now()}.png`);
-  const r = runScript(['shot', { pid: pid || 0, path: p }]);
-  if (r && r.ok && fs.existsSync(p)) return { ok: true, dataUrl: 'data:image/png;base64,' + fs.readFileSync(p).toString('base64'), path: p };
-  return { ok: false, error: (r && r.error) || 'screenshot failed', raw: r };
+/**
+ * A screenshot of the desktop, or of one window: `target` is a pid, or
+ * { window: "part of a title or an app name", hwnd, pid }. A window is captured on its
+ * own, even with other windows in front of it. `x`, `y` say where the image's top-left
+ * corner is on screen, for clicking inside it.
+ */
+function screenshot(target) {
+  const t = typeof target === 'object' && target ? target : { pid: Number(target) || 0 };
+  const p = path.join(os.tmpdir(), `voxai-cu-shot-${Date.now()}-${process.pid}.png`);
+  const r = runScript(['shot', { pid: Number(t.pid) || 0, hwnd: Number(t.hwnd) || 0, window: String(t.window || ''), self: process.pid, path: p }]);
+  try {
+    if (r && r.ok && fs.existsSync(p)) {
+      const { ok, path: _p, ...info } = r;
+      return { ok: true, dataUrl: 'data:image/png;base64,' + fs.readFileSync(p).toString('base64'), ...info };
+    }
+    return { ok: false, error: (r && r.error) || 'screenshot failed' };
+  } finally {
+    // Only the hand-off from PowerShell: every capture used to stay in Temp for good.
+    try { fs.unlinkSync(p); } catch {}
+  }
 }
 function click(x, y) { return runScript(['click', { x, y }]); }
 function move(x, y) { return runScript(['move', { x, y }]); }
