@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-mIw9e/9+szWdJEfFLDHhyy/gIlk8BmTMRMSE09ipL7Q='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-KpvLYcCgIOaRtnXprENaBfadI+Q724mDAO90naT7ko4='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -147,6 +147,7 @@ button{font-family:inherit} ::selection{background:rgba(200,169,97,.26)}
    shows focus with its border instead of every piece carrying its own outline. */
 .box{border:1px solid var(--edge2);border-radius:14px;background:var(--panel);display:flex;flex-direction:column;transition:border-color .15s,box-shadow .15s}
 .box:focus-within{border-color:var(--goldedge);box-shadow:0 0 0 3px rgba(200,169,97,.05)}
+.send:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .box #prompt{display:block;width:100%;box-sizing:border-box;background:transparent;border:0;outline:0;resize:none;color:var(--ink);font-family:Chivo,sans-serif;font-size:15px;line-height:1.55;padding:13px 16px 4px;field-sizing:content;min-height:46px;max-height:40vh;overflow-y:auto}
 /* With the preview open the chat column gets narrow, and the chips were wrapping
    mid-word ("Auto-
@@ -4818,7 +4819,7 @@ $('btnTestMgmt').onclick = async () => {
     if (lk.ok) msg += (msg ? ' · ' : '') + 'can list keys ✓';
     else if (lk.status === 403) msg += (msg ? ' · ' : '') + 'list keys 403 (not a management key!)';
     $('mgmtKeyState').textContent = msg || 'done — see result';
-  } catch (e) { $('mgmtKeyState').textContent = 'FAILED: ' + (e && e.message || e); }
+  } catch (e) { $('mgmtKeyState').textContent = 'Failed: ' + ipcMessage(e); }
 };
 
 $('btnTest').onclick = async () => {
@@ -4828,7 +4829,7 @@ $('btnTest').onclick = async () => {
     const r = await window.voxai.llmTestKey(k, undefined);
     const t = r && r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content;
     $('keyState').textContent = 'key OK · ' + (t || 'ok');
-  } catch (e) { $('keyState').textContent = 'FAILED: ' + (e && e.message || e); }
+  } catch (e) { $('keyState').textContent = 'Failed: ' + ipcMessage(e); }
 };
 /**
  * Save the settings. Everything but the keys saves as it changes; keys only when
@@ -5691,6 +5692,9 @@ async function exportSession(id){
 
 // ---- keyboard, paste and copy ------------------------------------------------------
 /** Somewhere text is typed: shortcuts that would steal its keys leave it alone. */
+/** An error from the main process, without Electron's wrapper: it showed as
+ * "Error invoking remote method 'llm:testKey': Error: Paste an OpenRouter key first." */
+function ipcMessage(e){ return String((e && e.message) || e || 'unknown').replace(/^Error invoking remote method '[^']*': (?:\w*Error: )?/, ''); }
 function isField(t){ return !!(t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))); }
 /** Something on top that owns Esc and the keys: a dialog, a menu, a question. */
 function overlayOpen(){

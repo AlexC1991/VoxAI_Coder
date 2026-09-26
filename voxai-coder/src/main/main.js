@@ -27,7 +27,9 @@ const isDev = process.argv.includes('--dev');
 // One data folder for `npm start` and the installed app. Electron names it after the
 // app: "voxai-coder" from source, "VoxAI Coder" once packaged -- so the installed app
 // opened with no sessions and no key. Must run before anything reads userData.
-app.setPath('userData', path.join(app.getPath('appData'), 'voxai-coder'));
+// An explicit --user-data-dir (Chromium's own switch) wins: a separate, empty profile
+// for trying the first run, or a second setup, without touching the real one.
+if (!app.commandLine.hasSwitch('user-data-dir')) app.setPath('userData', path.join(app.getPath('appData'), 'voxai-coder'));
 // The same identity as the installed build (build.appId), so Windows groups the
 // taskbar button under the VoxAI icon rather than Electron's.
 if (process.platform === 'win32') app.setAppUserModelId('ai.vox.coder');
@@ -685,7 +687,7 @@ app.whenReady().then(() => {
           userData: userData(), live: live,
           contextLimit: s.contextLimit, compactThreshold: s.compactThreshold,
           toolResultMaxChars: s.toolResultMaxChars, hardFraction: s.hardFraction,
-          subagentModel: s.subagentModel, subagentMaxTurns: s.subagentMaxTurns, subagentTimeoutMs: s.subagentTimeoutMs,
+          subagentModel: s.subagentModel, subagentMaxTurns: s.subagentMaxTurns, subagentTimeoutMs: s.subagentTimeoutMs, mcpServers: readSettingsFile().mcpServers || {},
           webSearch: { enabled: s.webSearchEnabled, engine: s.webSearchEngine, maxResults: s.webSearchMaxResults },
           isSubAgent: false,
         })) {
@@ -785,7 +787,7 @@ app.whenReady().then(() => {
           modelVision: modelVision(sess.model || s.openrouterModel),
           // Which thinking levels this model takes, so the chip's choice means something.
           reasoningSpec: modelReasoning(sess.model || s.openrouterModel),
-          subagentModel: s.subagentModel, subagentMaxTurns: s.subagentMaxTurns, subagentTimeoutMs: s.subagentTimeoutMs,
+          subagentModel: s.subagentModel, subagentMaxTurns: s.subagentMaxTurns, subagentTimeoutMs: s.subagentTimeoutMs, mcpServers: readSettingsFile().mcpServers || {},
           webSearch: { enabled: s.webSearchEnabled, engine: s.webSearchEngine, maxResults: s.webSearchMaxResults },
           onLiveEvent: (le) => { const c = chatWebContents(); c && c.send('agent:event', { sessionId, runKey, event: le }); },
           userData: userData(), live,

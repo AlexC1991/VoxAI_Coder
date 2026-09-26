@@ -287,6 +287,11 @@ function fileUrl(absPath) {
   return 'file:///' + encodeURI(norm.replace(/^\/+/, ''));
 }
 
+/** Today as YYYY-MM-DD in the user's own time zone. */
+function localDate(d = new Date()) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
 const PLATFORM_LINE = process.platform === 'win32'
   ? 'Windows — the shell tool runs cmd.exe, not bash (see its description)'
   : (process.platform === 'darwin' ? 'macOS, /bin/sh' : 'Linux, /bin/sh');
@@ -295,6 +300,9 @@ const SYSTEM = (workdir, access, planMode = false, durable = '', webSearchOn = t
   `Workdir: ${workdir}. All file paths are relative to it; never escape it. ` +
   // Static per machine, so it does not disturb the cached prefix.
   `Platform: ${PLATFORM_LINE}. ` +
+  // Without it a model assumes its training year: a web search for "the current Node.js
+  // LTS" asked for 2025 in 2026. Changes once a day, so the cached prefix does too.
+  `Today's date: ${localDate()}. ` +
   `Permission mode: "${labelFor(access)}". Use tools to read, write, edit, patch, search, run commands, and track todos. ` +
   (planMode ? `PLAN MODE is ON. You must NOT make any changes, write/edit files, or run mutating commands on the first pass. Instead, explore (read/search/glob) freely, then present a clear step-by-step plan of exactly what you will change and how. Then call ask_confirm to get the user's approval before executing any write/edit/shell action. After approval, you may proceed. `
     : ``) +
@@ -386,7 +394,7 @@ async function* runAgent(opts) {
     // on every send; bounding at write time does the same job cache-safely.
     toolResultMaxChars = null,
     isSubAgent = false,
-    subagentModel = '', subagentMaxTurns = null, subagentTimeoutMs = null,
+    subagentModel = '', subagentMaxTurns = null, subagentTimeoutMs = null, mcpServers = null,
     maxTurns = null,
     userInput = null,
     onOpenUrl = null,
@@ -694,7 +702,8 @@ async function* runAgent(opts) {
         // Sub-agents spend the PARENT's remaining allowance, never a fresh one.
         // Rebuilt each turn so a fan-out later in the run sees the depleted figure.
         budgetRemaining: Math.max(0, budget - spent), priceIn, priceOut, modelVision, webSearch },
-      getSettings: () => ({ access }),
+      // mcpServers were never passed, so no configured MCP server could be seen.
+      getSettings: () => ({ access, mcpServers: mcpServers || {} }),
       getAccess: () => access,
       showInApp: onOpenUrl,
       attachAtlas: onAttachAtlas,

@@ -6,7 +6,8 @@
  */
 const { execFile } = require('child_process');
 const path = require('path');
-const fsp = require('fs').promises;
+const fs = require('fs');
+const fsp = fs.promises;
 
 function git(args, cwd) {
   return new Promise((resolve, reject) => {
@@ -71,6 +72,17 @@ function makeWorktreeTool() {
         }
         const wtPath = path.join(wtRoot, name);
         await fsp.mkdir(wtRoot, { recursive: true });
+        // Keep the worktrees out of the user's `git status` ("?? .voxai/" for as long as
+        // one was open). .git/info/exclude is local to this clone and never committed.
+        try {
+          const gitDir = await git(['rev-parse', '--git-common-dir'], root);
+          const ex = path.join(path.resolve(root, gitDir), 'info', 'exclude');
+          const cur = fs.existsSync(ex) ? fs.readFileSync(ex, 'utf8') : '';
+          if (!/^\/?\.voxai\/wt\/?\s*$/m.test(cur)) {
+            fs.mkdirSync(path.dirname(ex), { recursive: true });
+            fs.appendFileSync(ex, (cur && !cur.endsWith('\n') ? '\n' : '') + '/.voxai/wt/\n');
+          }
+        } catch {}
         try {
           await git(['worktree', 'add', '-b', name, wtPath, base], root);
         } catch (e) {
@@ -94,7 +106,21 @@ function makeWorktreeTool() {
           await git(['-C', wtPath, 'commit', '-m', String(args.message || `agent: ${name}`).slice(0, 200)], wtPath);
         }
         await git(['checkout', mainBranch], root);
-        await git(['merge', name, '--no-edit'], root);
+        // A merge that conflicts is undone, not left half-done: it stopped mid-merge with
+        // conflict markers written into the user's own files and said only "Command
+        // failed". Found in a live run. Main stays exactly as it was; the worktree stays.
+        try {
+          await git(['merge', name, '--no-edit'], root);
+        } catch (e) {
+          let conflicted = '';
+          try { conflicted = await git(['diff', '--name-only', '--diff-filter=U'], root); } catch {}
+          try { await git(['merge', '--abort'], root); } catch {}
+          const files = String(conflicted || '').split(/\r?\n/).filter(Boolean);
+          throw new Error(files.length
+            ? `The changes in ${name} conflict with ${mainBranch} in ${files.join(', ')}, so nothing was merged and ${mainBranch} is as it was. `
+              + `Bring those files in the worktree (${path.relative(root, wtPath)}) in line with ${mainBranch}'s current version, then merge again -- or discard it.`
+            : `Could not merge ${name} into ${mainBranch}, so nothing was merged: ${String(e.message || e).trim().slice(0, 300)}`);
+        }
         // clean up worktree
         try { await git(['worktree', 'remove', wtPath, '--force'], root); } catch {}
         try { await git(['branch', '-d', name], root); } catch {}

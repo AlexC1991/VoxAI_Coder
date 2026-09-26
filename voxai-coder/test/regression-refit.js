@@ -801,6 +801,48 @@ async function drain(gen) {
       check('no key: said first, no session made, not as the model', /let v = actView\(\);\s*\/\/[^\n]*\n[^\n]*\n\s*if \(\$\('prompt'\)\.value\.trim\(\) && !S\.hasOpenRouterKey\) \{\s*openModal\('account'\);\s*toast\(/.test(H) && !H.includes("addMsg('Set your OpenRouter API key"), 'as a reply');
       check('narrow, the Plan label really hides so Send stays in the box', H.includes('.composer-row .plan-sw{font-size:0;gap:0}') && H.includes('.composer-row .chip .cv{display:none}'), 'overridden');
     }
+    // Confirmation round: worktree merges that conflicted were left half-done; MCP had
+    // never worked (wrong framing, servers never passed, npx unstartable, a new server
+    // every turn); --user-data-dir was ignored; the model did not know the date.
+    {
+      const { buildTools } = require(path.join(ROOT, 'src/backend/tools/index.js'));
+      const { execFileSync } = require('child_process');
+      const R = fs.mkdtempSync(path.join(os.tmpdir(), 'vox-wtt-'));
+      const g = (...a) => { try { return execFileSync('git', a, { cwd: R, stdio: 'pipe' }).toString().trim(); } catch (e) { return 'ERR'; } };
+      fs.writeFileSync(path.join(R, 'app.txt'), 'one\n');
+      g('init', '-q'); g('add', '.'); g('-c', 'user.name=t', '-c', 'user.email=t@t.invalid', 'commit', '-qm', 'init');
+      const wctx = { workdir: R, session: { id: 'wtt', workdir: R, messages: [], todos: [] }, emit: () => {}, resolveIn: (w, p) => path.resolve(w, p), checkPermission: async () => {} };
+      const wt = buildTools(wctx).ALL.find((t) => t.def.function.name === 'worktree');
+      const c1 = await wt.run({ action: 'create', name: 'wt-b' }, wctx);
+      check('an open worktree stays out of git status', g('status', '--porcelain') === '', g('status', '--porcelain'));
+      fs.writeFileSync(path.join(c1.path, 'app.txt'), 'WORKTREE\n');
+      fs.writeFileSync(path.join(R, 'app.txt'), 'MAIN\n');
+      g('-c', 'user.name=t', '-c', 'user.email=t@t.invalid', 'commit', '-qam', 'main');
+      let me = null;
+      try { await wt.run({ action: 'merge', name: 'wt-b', message: 'b' }, { ...wctx }); } catch (e) { me = e.message; }
+      check('a conflicting merge is undone and explained', /conflict with .* in app\.txt, so nothing was merged/.test(me || '') && !fs.existsSync(path.join(R, '.git', 'MERGE_HEAD')) && fs.readFileSync(path.join(R, 'app.txt'), 'utf8').replace(/\r/g, '') === 'MAIN\n', me);
+      fs.rmSync(R, { recursive: true, force: true });
+      // MCP against a server that follows the spec (one JSON message per line).
+      const SRV = path.join(WD, 'mcp-srv.js');
+      fs.writeFileSync(SRV, "const rl=require('readline').createInterface({input:process.stdin});const s=(m)=>process.stdout.write(JSON.stringify(m)+'\\n');rl.on('line',(l)=>{let m;try{m=JSON.parse(l)}catch{return}if(m.method==='initialize')s({jsonrpc:'2.0',id:m.id,result:{protocolVersion:'2024-11-05',capabilities:{tools:{}},serverInfo:{name:'t',version:'1'}}});else if(m.method==='tools/list')s({jsonrpc:'2.0',id:m.id,result:{tools:[{name:'add',description:'add',inputSchema:{type:'object',properties:{a:{type:'number'},b:{type:'number'}}}},{name:'env',description:'env',inputSchema:{type:'object',properties:{}}}]}});else if(m.method==='tools/call'){const a=m.params.arguments||{};s({jsonrpc:'2.0',id:m.id,result:{content:[{type:'text',text:m.params.name==='add'?String(a.a+a.b):String(process.env.T_NAME)}]}})}});");
+      const mctx = { ...wctx, workdir: WD, getSettings: () => ({ mcpServers: { t: { command: process.execPath, args: [SRV], env: { T_NAME: 'from-env' } } } }) };
+      const mcp = buildTools(mctx).ALL.find((t) => t.def.function.name === 'mcp');
+      const lt = await mcp.run({ action: 'list_tools' }, mctx);
+      check('MCP lists a spec server\'s tools, with their inputs', lt.tools && lt.tools.length === 2 && lt.tools[0].inputSchema && lt.tools[0].inputSchema.properties.a, lt);
+      const add = await mcp.run({ action: 'call', server: 't', name: 'add', arguments: { a: 19, b: 23 } }, mctx);
+      const env = await mcp.run({ action: 'call', server: 't', name: 'env', arguments: {} }, mctx);
+      check('and calls them, with the configured env', add.ok && add.text === '42' && env.text === 'from-env', [add, env]);
+      const mcp2 = buildTools(mctx).ALL.find((t) => t.def.function.name === 'mcp');
+      await mcp2.run({ action: 'call', server: 't', name: 'add', arguments: { a: 1, b: 1 } }, mctx);
+      check('one server process across turns, not one per turn', require(path.join(ROOT, 'src/backend/tools/mcp.js'))._clients.size === 1, require(path.join(ROOT, 'src/backend/tools/mcp.js'))._clients.size);
+      require(path.join(ROOT, 'src/backend/tools/procs.js')).stopAll();
+      check('the app passes the configured servers to the agent', read('src/backend/agent.js').includes('getSettings: () => ({ access, mcpServers: mcpServers || {} }),') && (read('src/main/main.js').match(/mcpServers: readSettingsFile\(\)\.mcpServers \|\| \{\}/g) || []).length === 2, 'never passed');
+      const MM = read('src/main/main.js'), HH = read('src/renderer/index.html'), AG = read('src/backend/agent.js');
+      check('--user-data-dir is respected, for a separate profile', MM.includes("if (!app.commandLine.hasSwitch('user-data-dir')) app.setPath('userData'"), 'ignored');
+      check("errors from the main process lose Electron's wrapper", HH.includes("replace(/^Error invoking remote method '[^']*': (?:\\w*Error: )?/, '')"), 'wrapper shown');
+      check('Send shows keyboard focus', HH.includes('.send:focus-visible{outline:2px solid var(--gold);outline-offset:2px}'), 'no ring');
+      check('the model is told today\'s date', AG.includes("`Today's date: ${localDate()}. `"), 'no date');
+    }
     // ask_user, the way Claude Code asks: up to 4 questions, described options, one or
     // several picks, always a way to type your own; skip says so; typed answers count.
     {
