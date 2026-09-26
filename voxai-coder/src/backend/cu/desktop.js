@@ -107,7 +107,9 @@ function guard(s, ctx) {
 }
 /** Where the agent itself just put the pointer: the only moves that are not the user's. */
 const leftAt = (s, x, y) => { s.cursorAt = { x: Math.round(x), y: Math.round(y) }; };
-const busy = (ctx) => { try { if (ctx && typeof ctx.emit === 'function') ctx.emit({ type: 'desktop_control' }); } catch { /* the UI's problem */ } };
+// 'start' before an action touches the keyboard or mouse, 'end' once it is done: main.js holds Esc as
+// the stop key in between and for a few seconds after.
+const busy = (ctx, phase = 'start') => { try { if (ctx && typeof ctx.emit === 'function') ctx.emit({ type: 'desktop_control', phase }); } catch { /* the UI's problem */ } };
 const stopFn = (s, ctx) => () => s.stopped || Boolean(ctx && ctx.signal && ctx.signal.aborted);
 
 /** How the model's copy of a picture relates to the screen: images are fitted inside 2560 x 1600 (agent.js). */
@@ -158,6 +160,7 @@ function elementFor(s, index) {
 
 /** A fresh picture of the window, and which control has the keyboard now: what the agent checks after acting. */
 async function after(s, ctx, w, did) {
+  busy(ctx, 'end');
   await sleep(SETTLE_MS);
   let focused = '';
   try { const f = await uia.focused(); if (f && f.type) focused = `${f.type} "${f.name || ''}"`; } catch { /* no helper */ }

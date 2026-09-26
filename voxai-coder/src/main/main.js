@@ -154,7 +154,11 @@ function disarmDesktopEsc(runKey) {
   try { require('electron').globalShortcut.unregister('Escape'); } catch { /* not registered */ }
   escArm = null;
 }
-function armDesktopEsc(runKey, ctl) {
+// Held while a desktop action runs, and a few seconds after it ends -- not 30 s from its start, which
+// took Esc from every app for half a minute. Longer than an action, shorter than a pause to think:
+// after that, moving the mouse or Stop still stops the run.
+const ESC_AFTER_MS = 6000, ESC_DURING_MS = 60000;
+function armDesktopEsc(runKey, ctl, phase) {
   if (!escArm || escArm.runKey !== runKey) {
     disarmDesktopEsc();
     let ok = false;
@@ -162,7 +166,7 @@ function armDesktopEsc(runKey, ctl) {
     escArm = { runKey, ctl, timer: null, ok };
   }
   clearTimeout(escArm.timer);
-  escArm.timer = setTimeout(() => disarmDesktopEsc(runKey), 30000);
+  escArm.timer = setTimeout(() => disarmDesktopEsc(runKey), phase === 'end' ? ESC_AFTER_MS : ESC_DURING_MS);
 }
 // The agent's own Esc (closing a menu) must reach the app and must not end its run.
 try {
@@ -959,7 +963,7 @@ app.whenReady().then(() => {
           if (ev.type === 'tool_end' || ev.type === 'tool_start' || ev.type === 'permission') {
             scheduleSessionSave(sessionId);
           }
-          if (ev.type === 'desktop_control') armDesktopEsc(runKey, ctl);
+          if (ev.type === 'desktop_control') armDesktopEsc(runKey, ctl, ev.phase);
           if (ev.type === 'done' || ev.type === 'error' || ev.type === 'cancelled' || ev.type === 'limit_reached' || ev.type === 'budget_reached') break;
         }
       } catch (err) {

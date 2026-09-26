@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-/F0NIQvDeP+RmgcpS/X/lLoBUzrG4re3jORZjrbfxpY='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-JtX8KSR6CwBnWpfZfqAsvtzOMdzXIqBFI34ab7YutD0='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -3000,8 +3000,24 @@ function rowMeta(rec){
   // A summary that is still raw JSON says nothing at a glance; it is behind the click.
   return { html: t === 'done' || t === 'ok' || /^[\[{]/.test(t) ? '' : esc(t) };
 }
+/**
+ * Where a computer call really went, by the tool's own rule (cu/index.js surfaceFor): what the call
+ * says, else where this session's last call went. A step of desktop clicks that named neither
+ * backend nor window was headed "Used the browser". Kept per session, live and when reopened.
+ */
+function computerSurface(v, a){
+  a = a || {};
+  let s = a.backend === 'browser' || a.backend === 'native' ? a.backend
+    : a.url ? 'browser'
+      : a.action === 'open' && a.nativePath ? (/\.(exe|bat|cmd|lnk|msc)$/i.test(String(a.nativePath)) ? 'native' : 'browser')
+        : (a.action === 'focus' || a.window || a.hwnd || a.pid) ? 'native'
+          : (v && v.lastSurface) || 'browser';
+  if (v) v.lastSurface = s;
+  return s;
+}
 function addToolRow(name, args, instant){
   const v = RT(); const card = ensureRunCard(); if(!card) return null;
+  if (name === 'computer' && args && typeof args === 'object') args = Object.assign({}, args, { backend: computerSurface(v, args) });
   const kind = kindName(name, args);
   card.counts[kind] = (card.counts[kind]||0)+1;
   // A replayed step has no timing on record; show none rather than "0s".
@@ -4402,7 +4418,7 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
     else { const r = noteRow({ icon: 'globe', verb: 'Published', chip: a.title || a.path || 'artifact', meta: a.kind || '' }); const rr = flowRoot(v); if (rr) { rr.appendChild(r); followThread(); } }
   } else if (event.type === 'desktop_control') {
     // Driving the real keyboard and mouse: say so, and how to stop it (main.js arms Esc).
-    setActivity(v, 'Using your keyboard and mouse · Esc stops');
+    setActivity(v, 'Using your keyboard and mouse · Esc or moving the mouse stops it');
   } else if (event.type === 'awaiting_agents') {
     setStatus('waiting for ' + event.count + ' background agent' + (event.count === 1 ? '' : 's') + '…');
   } else if (event.type === 'agent_finished') {

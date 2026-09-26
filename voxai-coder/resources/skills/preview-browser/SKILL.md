@@ -41,9 +41,10 @@ If a skill exists for the service (check the skills index), load it too.
 - Open the sign-in page, then ask the user (ask_user or ask_confirm) to sign in in the
   preview and tell you when they are done. Human checks ("I am not a robot", Turnstile)
   are theirs too.
-- "Sign in with GitHub / Microsoft / Apple" and company single sign-on work: a pop-up
-  opens over the app and closes by itself.
-- "Sign in with Google" is refused inside app browsers -- Google's own rule. Offer: an
+- "Sign in with Google" works in the preview: the user types their Google details and may
+  be asked to confirm on their phone. "Sign in with GitHub / Microsoft / Apple" and company
+  single sign-on work the same way; a sign-in pop-up opens over the app and closes itself.
+- If a sign-in page refuses the preview ("this browser may not be secure"), offer an
   email-and-password sign-in if the site has one, or the command-line route, whose login
   (`npx wrangler login`, `vercel login`, `gh auth login`) opens the user's normal browser.
 - A sign-in stays with the preview; if a page shows the user is signed out, ask them to

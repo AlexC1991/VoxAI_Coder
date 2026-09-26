@@ -1463,6 +1463,7 @@ async function drain(gen) {
         && /async function click\([^)]*\) \{\n  pointAt\(x, y\);/.test(INP) && /async function scroll\([^)]*\) \{\n  pointAt\(x, y\);/.test(INP) && !/a\.SetCursorPos\(Math\.round\(x\)/.test(INP), 'clicks wherever the pointer is');
       check('a point off every screen is on no window', INP.includes('if (!onScreen(x, y)) return null;') && INP.includes("MonitorFromPoint: user32.func(") && DS.includes("'that part of the window is off the screen, so it cannot be clicked'"), 'covered by its own window');
       check('the helper and the screenshot script report their DPI awareness', read('native/VoxUia.cs').includes('{ "dpi", Native.Awareness() }') && read('src/backend/cu/native.js').includes("method = 'desktop'; dpi = [CU32]::GetAwarenessFromDpiAwarenessContext("), 'unknown');
+      check('the input module is per-monitor DPI aware in any process (tests match the app on a 125% screen)', INP.includes("user32.func('int __stdcall SetProcessDpiAwarenessContext(intptr_t v)')(-4)"), 'scaled coordinates in tests');
       check('a step of desktop work is headed "Used the desktop"', HTML.includes("return 'DESK';") && HTML.includes("else if (desk) { head = 'Used the desktop'; used.e = 1; }") && HTML.includes('const kind = kindName(name, args);'), 'browser');
       check('a password box is never typed into', DS.includes("if (e.password) throw new Error('that is a password box") && DS.includes("if (f && f.password) throw new Error("), 'types passwords');
       const CS = read('native/VoxUia.cs');
@@ -1471,7 +1472,16 @@ async function drain(gen) {
         && JSON.stringify(PKG0.build.asarUnpack) === JSON.stringify(['node_modules/koffi/**', 'node_modules/@koromix/**', 'resources/uia/**']) && !!PKG0.dependencies.koffi, PKG0.build.asarUnpack);
       check('the helper runs from outside the packed app', read('src/backend/cu/uia.js').includes(".replace(/app\\.asar([\\\\/])/, 'app.asar.unpacked$1')"), 'inside asar');
       check('desktop actions always ask, looking reads in words', AG.includes("return { kind: 'desktop-act', target: d.target") && AG.includes("kind !== 'desktop-act') {") && AG.includes("kind: 'desktop-look'") && HTML.includes("'desktop-act': 'Use your keyboard and mouse?'"), 'raw');
-      check('Esc stops a run that is driving the desktop, and is let go after', MAIN.includes("if (ev.type === 'desktop_control') armDesktopEsc(runKey, ctl);") && MAIN.includes("globalShortcut.register('Escape'") && MAIN.includes('disarmDesktopEsc(runKey);   // Esc goes back to the apps'), 'no kill switch');
+      check('Esc stops a run that is driving the desktop, and is let go after', MAIN.includes("if (ev.type === 'desktop_control') armDesktopEsc(runKey, ctl, ev.phase);") && MAIN.includes("globalShortcut.register('Escape'") && MAIN.includes('disarmDesktopEsc(runKey);   // Esc goes back to the apps'), 'no kill switch');
+      check('Esc is held during a desktop action and 6 s after it ends, not 30 s', MAIN.includes('const ESC_AFTER_MS = 6000, ESC_DURING_MS = 60000;') && MAIN.includes("phase === 'end' ? ESC_AFTER_MS : ESC_DURING_MS") && !MAIN.includes('disarmDesktopEsc(runKey), 30000')
+        && read('src/backend/cu/desktop.js').includes("async function after(s, ctx, w, did) {\n  busy(ctx, 'end');") && HTML.includes('Esc or moving the mouse stops it'), 'half a minute');
+      // The page decides a computer step's surface by the tool's own rule, so a step of bare clicks is headed right.
+      const surfSrc = (HTML.match(/function computerSurface\(v, a\)\{[\s\S]*?\n\}\n/) || [''])[0];
+      const cs = surfSrc ? new Function(surfSrc + '; return computerSurface;')() : null;
+      const vv = {};
+      const seq = cs && [cs(vv, { action: 'state', window: 'Calculator' }), cs(vv, { action: 'click', index: 3 }), cs(vv, { action: 'open', url: 'https://a.b' }), cs(vv, { action: 'click', index: 1 }), cs(vv, { action: 'open', nativePath: 'C:/w/calc.exe' })];
+      check('a step of desktop clicks without backend or window is headed as the desktop', !!seq && seq.join() === 'native,native,browser,browser,native' && HTML.includes("args = Object.assign({}, args, { backend: computerSurface(v, args) });"), seq);
+      check('the skills say a stop cannot recall an action under way, and Google sign-in works', read('resources/skills/computer-use/SKILL.md').includes('A stop cannot recall an action already under way') && read('resources/skills/preview-browser/SKILL.md').includes('"Sign in with Google" works in the preview') && !read('resources/skills/preview-browser/SKILL.md').includes('is refused inside app browsers'), 'stale');
       check('the computer tool can focus a window', TIX.includes("focus: 'cu_focus',") && read('src/backend/tools/sandbox.js').includes("'cu_list', 'cu_focus',"), 'no focus');
       // From the npm start round: a result that is only text, Esc, Store apps, starting programs.
       check('the helper reports the text a window shows (a display, a label)', CS.includes('c.ControlType == ControlType.Text && texts.Count < 60') && CS.includes('{ "texts", texts }'), 'controls only');

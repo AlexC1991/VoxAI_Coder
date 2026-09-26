@@ -81,6 +81,10 @@ function load() {
     CloseHandle: kernel32.func('int __stdcall CloseHandle(intptr_t h)'),
     QueryFullProcessImageNameW: kernel32.func('int __stdcall QueryFullProcessImageNameW(intptr_t h, uint32 flags, uint8_t *buf, _Inout_ uint32 *size)'),
   };
+  // Real screen pixels on a scaled display, in whatever process this runs. The app (Electron) already
+  // is per-monitor aware and this changes nothing there; in a plain Node process (the tests) Windows
+  // would otherwise hand out scaled coordinates on a 125% screen, unlike the app.
+  try { user32.func('int __stdcall SetProcessDpiAwarenessContext(intptr_t v)')(-4); } catch { /* already set */ }
   return api;
 }
 
