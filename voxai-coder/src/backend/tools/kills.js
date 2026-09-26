@@ -113,6 +113,19 @@ function onlyKills(cmd) {
   return parts.length > 0 && parts.every((p) => /^(taskkill|tskill|kill|Stop-Process|spps)(\.exe)?\b/i.test(p));
 }
 
+/**
+ * Is everything in this chain besides its kills harmless: only looking (isReadOnly) or a
+ * short local wait (ping 127.0.0.1 / localhost)? For an own kill chained with a pause.
+ */
+function harmlessBesidesKills(cmd, isReadOnly) {
+  const quiet = String(cmd || '').replace(/\s*\d?>\s*(nul|\/dev\/null)(?=\s|$|[&|;])/gi, ' ').replace(/\s*2>&1/g, ' ');
+  const parts = quiet.split(/&&|\|\||;|&/).map((p) => p.trim()).filter(Boolean);
+  const rest = parts.filter((p) => !/^(taskkill|tskill|kill|Stop-Process|spps)(\.exe)?\b/i.test(p));
+  if (!rest.length || rest.length === parts.length) return false;
+  const wait = (p) => /^ping(\.exe)?\s+(-n\s+\d{1,3}\s+)?(127\.0\.0\.1|localhost)(\s+-n\s+\d{1,3})?\s*$/i.test(p);
+  return rest.every((p) => wait(p) || (typeof isReadOnly === 'function' && isReadOnly(p)));
+}
+
 /** Every running process: pid -> { ppid, name }. Empty when it cannot be read. */
 function processTable() {
   return new Promise((resolve) => {
@@ -239,4 +252,4 @@ function killKeys(kills) {
   return [...kills.pids.map((p) => 'pid:' + p), ...kills.names.map((n) => 'name:' + baseName(n)), ...kills.other.map((o) => 'other:' + o)];
 }
 
-module.exports = { processKills, onlyKills, judgeKills, killKeys, pidDetails, processTable, nameMatches };
+module.exports = { processKills, onlyKills, harmlessBesidesKills, judgeKills, killKeys, pidDetails, processTable, nameMatches };

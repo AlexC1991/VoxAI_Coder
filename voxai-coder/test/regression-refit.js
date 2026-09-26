@@ -1806,6 +1806,7 @@ async function drain(gen) {
   {
     const K = require(path.join(ROOT, 'src/backend/tools/kills.js'));
     const pk = K.processKills;
+    const P = require(path.join(ROOT, 'src/backend/tools/procs.js'));
     check('os.kill, process.kill, psutil and (Get-Process -Id).Kill() name the pid they end',
       pk('python -c "import os, signal; os.kill(20340, signal.SIGTERM)"').pids[0] === 20340 && pk('node -e "process.kill(20340)"').pids[0] === 20340
       && pk('python -c "import psutil; psutil.Process(20340).terminate()"').pids[0] === 20340 && pk('powershell -Command "(Get-Process -Id 20340).Kill()"').pids[0] === 20340,
@@ -1832,6 +1833,16 @@ async function drain(gen) {
     const ends = ev.filter((e) => e.type === 'tool_end');
     check('refused once, the same pid through os.kill is refused without asking again', asked.length === 1 && ends.length === 2 && ends.every((e) => e.ok === false)
       && /already said no to ending PID 987650/.test(JSON.stringify(ends[1].result)) && /not with another command, not by asking them/.test(JSON.stringify(ends[1].result)), { asked: asked.length, ends: ends.map((e) => String(JSON.stringify(e.result)).slice(0, 160)) });
+    const { isReadOnlyCommand: ro } = require(path.join(ROOT, 'src/backend/tools/sandbox.js'));
+    check('its own kill with only a pause or a look after it counts as a lone kill', K.harmlessBesidesKills('taskkill /pid 3816 /T /F 2>&1 & ping -n 2 127.0.0.1 >NUL', ro)
+      && K.harmlessBesidesKills('taskkill /pid 5 /F & tasklist', ro) === false && K.harmlessBesidesKills('taskkill /pid 5 /F & dir', ro)
+      && !K.harmlessBesidesKills('taskkill /pid 5 /F & npm run build', ro) && !K.harmlessBesidesKills('ping -n 2 127.0.0.1', ro), 'chains');
+    P.claim(987700, 'kx-own-chain');
+    const askedC = [];
+    fakeOpenRouter((n) => (n === 1 ? call('c1', 'shell', { command: 'taskkill /pid 987700 /T /F 2>&1 & ping -n 2 127.0.0.1 >NUL' }) : say('restarted')));
+    await drain(runAgent({ session: { id: 'kx-own-chain', workdir: WD, messages: [] }, userText: 'restart the app', apiKey: 'k', model: 'm', access: 'auto', askPermission: async (q) => { askedC.push(q); return false; }, maxTurns: 3 }));
+    check('so in Auto it goes through without asking', askedC.length === 0, askedC);
+    check('and the Auto check is told which processes are the session\'s own', AGK.includes('Processes this session started itself (ending these by pid is its own business)'), 'auto check');
     check('the session keeps the refusal', sess._refusedKills && sess._refusedKills.has('pid:987650') && AGK.includes('const again = keys.filter((k) => refused.has(k));'), sess._refusedKills && [...sess._refusedKills]);
   }
 

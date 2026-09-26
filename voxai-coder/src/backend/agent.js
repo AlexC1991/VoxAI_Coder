@@ -31,7 +31,7 @@ const tools = require('./tools');
 const { compactSession, estimateSessionTokens } = require('./compact');
 const crypto = require('crypto');
 const { checkToolAllowed, checkShellCommand, isReadOnlyCommand } = require('./tools/sandbox');
-const { processKills, onlyKills, judgeKills, killKeys } = require('./tools/kills');
+const { processKills, onlyKills, harmlessBesidesKills, judgeKills, killKeys } = require('./tools/kills');
 const { chatOnce, reasoningParam } = require('./providers/openrouter');
 
 // Auto mode's safety check: one short question per action that would otherwise ask.
@@ -600,12 +600,15 @@ async function* runAgent(opts) {
     return { kind: name, target: summarizeArgs(a) };
   };
   // ---- Auto mode ----
+  const ownList = () => { try { return require('./tools/procs').list(session.id).map((r) => `${r.pid} (${String(r.command || r.name).slice(0, 60)})`).slice(0, 8); } catch { return []; } };
   const autoCheck = async (kind, target) => {
     pushEvent({ type: 'auto_check', phase: 'start', kind });
     const asked = String(userText || lastUserText(session) || '').slice(0, 1500);
     const messages = [
       { role: 'system', content: AUTO_POLICY },
       { role: 'user', content: `The user asked:\n${asked}\n\nProject folder: ${session.workdir}\n\n`
+        // Without this it called the agent stopping its own test app "unrelated to your app".
+        + (ownList().length ? `Processes this session started itself (ending these by pid is its own business): ${ownList().join('; ')}\n\n` : '')
         + `Action (${kind}):\n${String(target || '').slice(0, 2000)}` },
     ];
     try {
@@ -657,7 +660,10 @@ async function* runAgent(opts) {
       if (kills) {
         const v = await judgeKills(kills, session.id);
         if (v.own) {
-          if (['test', 'auto', 'full'].includes(access) && onlyKills(target)) return true;
+          // Its own, alone or with only a look-around or a pause after it ("& ping -n 2
+          // 127.0.0.1 >NUL"): that chain sent it to the Auto check, which called stopping
+          // its own test app "unrelated", and the run could not restart what it built.
+          if (['test', 'auto', 'full'].includes(access) && (onlyKills(target) || harmlessBesidesKills(target, isReadOnlyCommand))) return true;
         } else {
           // A no stands for the session. Found live: refused, the agent asked again four
           // times in other words, then got round the check -- and ended the user's app.
