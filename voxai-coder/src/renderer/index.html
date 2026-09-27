@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-E+vPj6ZDGAvpQPvgtBJQynGhYapZpIqGVDAqglAYX5I='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-BDmqHwvCx27C942jtKiHIMD+XzIS49GarS/WHFmF7yo='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1106,7 +1106,7 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
                 <span class="pk-body" id="modelMenuList"></span>
                 <span class="pk-foot" id="modelMenuFoot" aria-live="polite"><span class="fid" id="pkId"></span></span>
               </span></span>
-            <span class="chip" id="chipTeam" hidden title="Team: this model plans and reviews; a cheaper model writes the code"><svg class="gl" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="8" cy="8" r="3"></circle><circle cx="16" cy="10" r="2.5"></circle><path d="M3 20c0-3 2.5-5 5-5s5 2 5 5"></path><path d="M13 19c.3-2.3 1.6-4 3-4 1.8 0 3.5 1.7 3.5 4"></path></svg><b id="chipTeamVal">Team</b><svg class="cv" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg><span class="menu op" id="menuTeam"></span></span>
+            <span class="chip" id="chipTeam" hidden title="Team: this model plans and reviews; a cheaper model writes the code"><svg class="gl" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="8" cy="8" r="3"></circle><circle cx="16" cy="10" r="2.5"></circle><path d="M3 20c0-3 2.5-5 5-5s5 2 5 5"></path><path d="M13 19c.3-2.3 1.6-4 3-4 1.8 0 3.5 1.7 3.5 4"></path></svg><b id="chipTeamVal">Team</b><svg class="cv" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg></span>
             <span class="chip" id="chipReason"><svg class="gl" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 12h3l2-5 3 10 2-5h6"></path></svg><b id="chipReasonVal">Model default</b><svg class="cv" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg><span class="menu op" id="menuReason"></span></span>
             <span class="chip" id="chipAccess"><svg class="gl" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg><b id="chipAccessVal">Ask first</b><svg class="cv" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg><span class="menu op" id="menuAccess"></span></span>
             <button class="plan-sw" id="chipPlan" type="button" role="switch" aria-checked="false" title="Plan mode: explore first, present a plan, get approval before changing anything"><i></i>Plan</button>
@@ -3769,6 +3769,7 @@ function shareInfo(id){
   const s = String(id || '').toLowerCase(); if (!s) return null;
   const who = { meta: 'Meta', poolside: 'Poolside', nvidia: 'NVIDIA', google: 'Google', qwen: 'Alibaba (Qwen)', thinkingmachines: 'Thinking Machines' }[s.split('/')[0]] || s.split('/')[0];
   if (/-contributor(\b|$)/.test(s)) return { how: 'yes', who };
+  if (s.split('/')[0] === 'stealth') return { how: 'yes', who: 'the unnamed lab behind it' };
   if (/:free$/.test(s)) return { how: 'may', who };
   return null;
 }
@@ -3820,8 +3821,26 @@ function paintShareBadge(){
 // $ per 1M output tokens from the catalogue; expensive at $5 or more (backend/team.js).
 const outPerM = (id) => { const m = modelEntry(id); return m && m.completionCents != null ? Number(m.completionCents) * 1e4 : null; };
 const isExpensiveModel = (id) => (outPerM(id) || 0) >= 5;
-// The coders offered: cheap models that can use tools, the proven one first.
-const TEAM_CODERS = ['deepseek/deepseek-v4.1-flash', 'poolside/laguna-s-2.1', 'meta/muse-spark-1.3-contributor', 'poolside/laguna-s-2.1:free'];
+// The coders offered: every model in the catalogue that can code and costs under $3 per 1M
+// tokens both in and out, cheapest first -- with the one proven in this app at the top.
+// (It was a hand-picked list of four; the user: "pull all under $3 for incoming and outgoing".)
+const TEAM_PROVEN = 'deepseek/deepseek-v4.1-flash';
+const TEAM_MAX_PER_M = 3;
+function teamCoders(){
+  if (!ALL_MODELS.length) return [];
+  if (!PK_BROWSE) PK_BROWSE = browseModelIds(ALL_MODELS);
+  const perM = (c) => Number(c) * 1e4;
+  const cost = (m) => perM(m.promptCents) * 0.8 + perM(m.completionCents) * 0.2;
+  // Routers (openrouter/free, openrouter/auto) pick a model per request -- the free one would
+  // send the code to data-sharing models without saying so -- so only real models are offered.
+  // Models that share your data come after the rest, so a free one is never picked by accident.
+  const rank = (m) => (m.id === TEAM_PROVEN ? 0 : shareInfo(m.id) ? 2 : 1);
+  return ALL_MODELS.filter((m) => m.tools !== false && m.id !== activeModel() && PK_BROWSE.has(m.id) && !/^~|^openrouter\//.test(m.id)
+      && m.promptCents != null && m.completionCents != null && perM(m.promptCents) >= 0 && perM(m.completionCents) >= 0
+      && perM(m.promptCents) < TEAM_MAX_PER_M && perM(m.completionCents) < TEAM_MAX_PER_M)
+    .sort((a, b) => (rank(a) - rank(b)) || (cost(a) - cost(b)) || modelLabel(a.id).localeCompare(modelLabel(b.id)))
+    .map((m) => m.id);
+}
 function paintTeamChip(){
   const c = $('chipTeam'); if (!c) return;
   const v = actView(), coder = v && v.coderModel;
@@ -3829,17 +3848,6 @@ function paintTeamChip(){
   c.classList.toggle('on', !!coder);
   const short = (id) => modelLabel(id).replace(/^(Claude|DeepSeek|Poolside|Meta|OpenAI|Google)\s+/i, '').split(' ').slice(0, 2).join(' ');
   $('chipTeamVal').textContent = coder ? short(activeModel()) + ' plans \u00b7 ' + short(coder) + ' codes' : 'Team';
-}
-function renderTeamMenu(){
-  const menu = $('menuTeam'); if (!menu) return;
-  const v = actView(), cur = (v && v.coderModel) || '';
-  const price = (id) => { const m = modelEntry(id); return m ? modelPrice(m) : ''; };
-  const ids = TEAM_CODERS.filter((id) => modelEntry(id) && id !== activeModel());
-  if (cur && !ids.includes(cur)) ids.unshift(cur);
-  const rows = [{ key: '', name: modelLabel(activeModel()) + ' does it all', on: !cur, note: 'One model reads, plans and writes the code.' }]
-    .concat(ids.map((id) => { const sh = shareInfo(id); return { key: id, name: modelLabel(id) + (sh ? '  \u00b7  shares data' : '') + '  \u00b7  ' + price(id), on: id === cur,
-      note: (sh ? 'Shares your coding data with ' + sh.who + '. ' : '') + modelLabel(activeModel()) + ' plans and reviews; ' + modelLabel(id) + ' makes the edits and runs the commands.' }; }));
-  renderOptionMenu(menu, 'Who writes the code', rows, async (k) => { $('chipTeam').classList.remove('open'); await setCoder(k); });
 }
 async function setCoder(id){
   const v = actView(); if (!v || !activeId) return;
@@ -3855,7 +3863,7 @@ function teamHintAfter(v, ev){
   const cost = Number(ev.cost) || 0;
   if (v.coderModel || cost < 0.5 || !isExpensiveModel(model) || v._teamHintNo) return;
   if (((S.teamHintNo || {})[model] || 0) >= 2) return;
-  const coder = TEAM_CODERS.find((id) => modelEntry(id) && !shareInfo(id)) || 'deepseek/deepseek-v4.1-flash';
+  const coder = teamCoders().find((id) => !shareInfo(id)) || TEAM_PROVEN;
   const avg = (id) => { const m = modelEntry(id); return m ? Number(m.promptCents) * 0.8 + Number(m.completionCents) * 0.2 : null; };
   const p = avg(model), q = avg(coder);
   if (!(p > 0) || q == null) return;
@@ -4032,10 +4040,33 @@ function pkFoot(id){
   $('pkId').textContent = id ? ((m && m.name) || id) : '';
   $('pkId').title = id || '';
 }
+/**
+ * One picker for both chips. From the model chip it picks the session's model; from the Team
+ * chip it picks the coder -- the same owners, search and look, limited to models under $3 per
+ * 1M in and out (teamCoders). The menu moves to the chip that opened it.
+ */
+let PK_FOR = 'model';
+function openPicker(chip, mode){
+  PK_FOR = mode;
+  const m = $('menuModel');
+  if (m && m.parentNode !== chip) chip.appendChild(m);
+  PK_VIEW = 'home';
+  const si = $('modelSearch'); si.value = '';
+  si.placeholder = mode === 'coder' ? 'Search coders under $' + TEAM_MAX_PER_M : 'Search models';
+  renderModelMenu();
+  setTimeout(() => si.focus(), 0);
+}
 function renderModelMenu(){
   const box = $('modelMenuList'); if (!box) return;
   const q = (($('modelSearch') && $('modelSearch').value) || '').trim().toLowerCase();
-  const cur = activeModel();
+  const forCoder = PK_FOR === 'coder';
+  const OK = forCoder ? new Set(teamCoders()) : null;
+  const allowed = (m) => !OK || OK.has(m.id);
+  const pick = async (id) => {
+    if (forCoder) { $('chipTeam').classList.remove('open'); await setCoder(id); }
+    else { await setModel(id); $('chipModel').classList.remove('open'); }
+  };
+  const cur = forCoder ? ((actView() && actView().coderModel) || '') : activeModel();
   box.innerHTML = '';
   if (!ALL_MODELS.length) {
     box.appendChild(el('div', 'mp-empty', S && S.hasOpenRouterKey ? 'Loading models from OpenRouter\u2026' : 'Add your OpenRouter key in Settings to choose a model.'));
@@ -4054,30 +4085,40 @@ function renderModelMenu(){
     if (sh) { const b = el('span', 'shr', 'shares data'); b.title = shareSentence(m.id, sh); r.querySelector('.nm').after(b); }
     if (m.tools === false) r.style.opacity = '.6';
     r.onmouseenter = () => { box.querySelectorAll('.hot').forEach((x) => x.classList.remove('hot')); r.classList.add('hot'); pkFoot(m.id); };
-    r.onclick = async (e) => { e.stopPropagation(); await setModel(m.id); $('chipModel').classList.remove('open'); };
+    r.onclick = async (e) => { e.stopPropagation(); await pick(m.id); };
     return r;
   };
   if (q) {
-    const hits = ALL_MODELS.filter((m) => { const d = describeModel(m); return (d.name + ' ' + d.provider + ' ' + m.id).toLowerCase().includes(q); });
+    const hits = ALL_MODELS.filter((m) => { const d = describeModel(m); return allowed(m) && (d.name + ' ' + d.provider + ' ' + m.id).toLowerCase().includes(q); });
     hits.slice(0, 200).forEach((m) => box.appendChild(rowFor(m)));
     if (!hits.length) box.appendChild(el('div', 'mp-empty', 'No model matches. Try part of the id, like <span style="font-family:\'Sometype Mono\',monospace">claude</span>.'));
   } else if (PK_VIEW !== 'home') {
-    const list = ALL_MODELS.filter((m) => PK_BROWSE.has(m.id) && describeModel(m).provider === PK_VIEW);
+    const list = ALL_MODELS.filter((m) => PK_BROWSE.has(m.id) && allowed(m) && describeModel(m).provider === PK_VIEW);
     const back = el('div', 'mp-back', '<i>\u2039</i>' + esc(PK_VIEW) + ' <span>' + list.length + (list.length === 1 ? ' model' : ' models') + '</span>');
     back.onclick = (e) => { e.stopPropagation(); PK_VIEW = 'home'; renderModelMenu(); };
     box.appendChild(back);
     list.forEach((m) => box.appendChild(rowFor(m)));
+  } else if (forCoder) {
+    // Choosing the coder: none (one model does it all), the proven one, the one in use.
+    box.appendChild(el('div', 'mp-label', '<span>Who writes the code</span><span>under $' + TEAM_MAX_PER_M + ' per 1M, in \u00b7 out</span>'));
+    const all = menuRow(modelLabel(activeModel()) + ' does it all', !cur, '');
+    all.onmouseenter = () => pkFoot(activeModel());
+    all.onclick = async (e) => { e.stopPropagation(); await pick(''); };
+    box.appendChild(all);
+    [TEAM_PROVEN, cur].filter((x, i, a) => x && a.indexOf(x) === i && OK.has(x)).forEach((id) => box.appendChild(rowFor(modelEntry(id))));
   } else {
     const recent = [cur].concat(RECENT_MODELS).filter((x, i, a) => x && a.indexOf(x) === i).slice(0, 5);
     box.appendChild(el('div', 'mp-label', '<span>Recent</span><span>per 1M tokens, in \u00b7 out</span>'));
     recent.forEach((id) => {
       const m = modelEntry(id);
       if (m) box.appendChild(rowFor(m));
-      else { const r = menuRow(modelLabel(id), id === cur, ''); r.dataset.id = id; r.onmouseenter = () => pkFoot(id); r.onclick = async (e) => { e.stopPropagation(); await setModel(id); $('chipModel').classList.remove('open'); }; box.appendChild(r); }
+      else { const r = menuRow(modelLabel(id), id === cur, ''); r.dataset.id = id; r.onmouseenter = () => pkFoot(id); r.onclick = async (e) => { e.stopPropagation(); await pick(id); }; box.appendChild(r); }
     });
+  }
+  if (!q && PK_VIEW === 'home') {
     box.appendChild(el('div', 'mp-sep'));
     const counts = new Map();
-    ALL_MODELS.forEach((m) => { if (PK_BROWSE.has(m.id)) { const p = describeModel(m).provider; counts.set(p, (counts.get(p) || 0) + 1); } });
+    ALL_MODELS.forEach((m) => { if (PK_BROWSE.has(m.id) && allowed(m)) { const p = describeModel(m).provider; counts.set(p, (counts.get(p) || 0) + 1); } });
     const curProv = modelEntry(cur) ? describeModel(modelEntry(cur)).provider : '';
     const provs = [...counts.keys()].sort((a, b) => (a === curProv ? -1 : b === curProv ? 1 : a.localeCompare(b)));
     box.appendChild(el('div', 'mp-label', '<span>Providers</span><span>' + provs.length + '</span>'));
@@ -4146,12 +4187,7 @@ async function setModel(id){
 }
 
 function initModelPicker(){
-  wireChip('chipModel', () => {
-    PK_VIEW = 'home';
-    const si = $('modelSearch'); si.value = '';
-    renderModelMenu();
-    setTimeout(() => si.focus(), 0);
-  });
+  wireChip('chipModel', () => openPicker($('chipModel'), 'model'));
   const si = $('modelSearch');
   si.oninput = () => { renderModelMenu(); };
   si.onkeydown = pkKey;
@@ -7152,7 +7188,7 @@ function addCodeCopy(root){
   initModelPicker();
   wireChip('chipReason', renderReasonMenu);
   wireChip('chipAccess', renderAccessMenu);
-  wireChip('chipTeam', renderTeamMenu);
+  wireChip('chipTeam', () => openPicker($('chipTeam'), 'coder'));
   $('shTeamTry').onclick = () => { const v = actView(); if (v && v.teamHint) setCoder(v.teamHint.coder); };
   $('shTeamNo').onclick = teamHintNo;
   $('chipPlan').onclick = async () => {

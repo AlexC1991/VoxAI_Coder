@@ -2328,6 +2328,11 @@ async function drain(gen) {
     check('the hint: only after a run of $0.50+ on an expensive model, and two Not nows end it', HTMLt.includes("if (v.coderModel || cost < 0.5 || !isExpensiveModel(model) || v._teamHintNo) return;")
       && HTMLt.includes("if (((S.teamHintNo || {})[model] || 0) >= 2) return;"), 'hint');
     check('the session keeps its coder', read('src/backend/sessions.js').includes("coderModel: o.coderModel || ''") && MAINt.includes("ipcMain.handle('sessions:setCoder'"), 'saved');
+    check('stealth models and anything priced at nothing count as sharing', T.sharesData('stealth/space-bunny-alpha').how === 'yes' && T.sharesData('x/y', { prompt: '0', completion: '0' }).how === 'may'
+      && !T.sharesData('x/y', { promptCents: 0.001, completionCents: 0.002 }) && MAINt.includes('sharesData: team.sharesData(m.id, m.pricing),'), 'free');
+    check('Team uses the model picker itself: same owners and search, only models under $3 in and out, routers left out', HTMLt.includes("wireChip('chipTeam', () => openPicker($('chipTeam'), 'coder'));")
+      && HTMLt.includes("const OK = forCoder ? new Set(teamCoders()) : null;") && HTMLt.includes('perM(m.promptCents) < TEAM_MAX_PER_M && perM(m.completionCents) < TEAM_MAX_PER_M')
+      && HTMLt.includes("!/^~|^openrouter\\//.test(m.id)") && !HTMLt.includes('TEAM_CODERS') && !HTMLt.includes('renderTeamMenu'), 'picker');
   }
 
   // ------------------------------------------------------------------ [WD]

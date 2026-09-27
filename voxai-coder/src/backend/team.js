@@ -26,13 +26,18 @@ const MAKER = { meta: 'Meta', 'meta-llama': 'Meta', poolside: 'Poolside', nvidia
  * 'yes': a contributor tier -- sharing is the deal. 'may': a free model, whose providers may
  * log or train on it.
  */
-function sharesData(id) {
+function sharesData(id, cap) {
   const s = String(id || '').toLowerCase();
   if (!s) return null;
   const prefix = s.split('/')[0];
   const who = MAKER[prefix] || (prefix ? prefix.charAt(0).toUpperCase() + prefix.slice(1) : 'the model\'s maker');
   if (/-contributor(\b|$)|:contributor$/.test(s)) return { how: 'yes', who };
+  // Anonymous "stealth" models: their prompts and replies are logged for the lab behind them.
+  if (prefix === 'stealth') return { how: 'yes', who: 'the unnamed lab behind it' };
   if (/:free$/.test(s)) return { how: 'may', who };
+  // Nothing to pay at all (a free model without ":free" in its name): someone is paid in data.
+  const price = (c, k) => (c ? Number(c[k + 'Cents'] != null ? c[k + 'Cents'] : c[k]) : NaN);
+  if (cap && price(cap, 'prompt') === 0 && price(cap, 'completion') === 0) return { how: 'may', who };
   return null;
 }
 

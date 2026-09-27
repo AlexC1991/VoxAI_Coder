@@ -1100,7 +1100,7 @@ app.whenReady().then(() => {
     // A model that shares what it is sent with its maker runs only in a project you agreed to share.
     // The consent is in the app, not hidden in a model's name (backend/team.js).
     for (const m of [sess.model || s.openrouterModel, sess.coderModel || '']) {
-      const sh = team.sharesData(m);
+      const sh = team.sharesData(m, modelCapCache.byId.get(m));
       if (sh && !s.dataShareOk[team.projectKey(sess.workdir)]) {
         throw new Error(`DATA_SHARE_CONSENT: ${m} shares your coding data with ${sh.who}. Choose it again in the model picker and agree for this project, or pick another model.`);
       }
@@ -1648,7 +1648,7 @@ ipcMain.handle('openrouter:generations', async (_e, { limit = 40, cursor } = {})
           // audio generators (Nano Banana, GPT Image, Lyria...) and models without tool
           // calling were all in the picker; none of them can read or edit a file.
           // Shares what it is sent with its maker (contributor tiers, free models): backend/team.js.
-          sharesData: team.sharesData(m.id),
+          sharesData: team.sharesData(m.id, m.pricing),
           coding: params.has('tools') && !!(m.architecture && Array.isArray(m.architecture.output_modalities)
             && m.architecture.output_modalities.length === 1 && m.architecture.output_modalities[0] === 'text'),
         };
