@@ -73,7 +73,7 @@ async function saveSession(userData, session) {
   const dir = sessionsDir(userData);
   await fsp.mkdir(dir, { recursive: true });
   const lines = [
-    JSON.stringify({ kind: 'meta', id: session.id, title: session.title, workdir: session.workdir, model: session.model, ...(session.parentId ? { parentId: session.parentId } : {}), createdAt: session.createdAt, updatedAt: session.updatedAt }),
+    JSON.stringify({ kind: 'meta', id: session.id, title: session.title, workdir: session.workdir, model: session.model, ...(session.coderModel ? { coderModel: session.coderModel } : {}), ...(session.parentId ? { parentId: session.parentId } : {}), createdAt: session.createdAt, updatedAt: session.updatedAt }),
     ...session.messages.map((m) => JSON.stringify({ kind: 'message', message: m })),
     ...(session.usage || []).map((u) => JSON.stringify({ kind: 'usage', usage: u })),
     // Where runs stopped at a limit or failed, so a reopened session says so.
@@ -122,7 +122,7 @@ async function loadSession(userData, id) {
   for (const line of raw.split('\n')) {
     if (!line.trim()) continue;
     const o = JSON.parse(line);
-    if (o.kind === 'meta') Object.assign(session, { title: o.title, workdir: o.workdir, model: o.model, parentId: o.parentId || null, createdAt: o.createdAt, updatedAt: o.updatedAt });
+    if (o.kind === 'meta') Object.assign(session, { title: o.title, workdir: o.workdir, model: o.model, coderModel: o.coderModel || '', parentId: o.parentId || null, createdAt: o.createdAt, updatedAt: o.updatedAt });
     else if (o.kind === 'message') session.messages.push(o.message);
     else if (o.kind === 'usage') session.usage.push(o.usage);
     else if (o.kind === 'todos') session.todos = o.todos;
@@ -238,7 +238,7 @@ async function deleteSession(userData, id) {
 /** Serialize a session as JSONL text (for export). */
 function exportSession(session) {
   const lines = [
-    JSON.stringify({ kind: 'meta', id: session.id, title: session.title, workdir: session.workdir, model: session.model, ...(session.parentId ? { parentId: session.parentId } : {}), createdAt: session.createdAt, updatedAt: session.updatedAt }),
+    JSON.stringify({ kind: 'meta', id: session.id, title: session.title, workdir: session.workdir, model: session.model, ...(session.coderModel ? { coderModel: session.coderModel } : {}), ...(session.parentId ? { parentId: session.parentId } : {}), createdAt: session.createdAt, updatedAt: session.updatedAt }),
     ...(session.messages || []).map((m) => JSON.stringify({ kind: 'message', message: m })),
     ...(session.usage || []).map((u) => JSON.stringify({ kind: 'usage', usage: u })),
     ...(session.stops || []).map((st) => JSON.stringify({ kind: 'stop', stop: st })),

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-NBwu9BBO85bryBs3V3tDxZoFtmj1a19+4oWCxHajsQc='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-E+vPj6ZDGAvpQPvgtBJQynGhYapZpIqGVDAqglAYX5I='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -933,6 +933,26 @@ tests"). Scroll the row instead of breaking words:
 .proj-more:hover{color:var(--ink);background:var(--panel2)}
 @media (prefers-reduced-motion: reduce){ .proj-b,.proj-in,.proj-h .chev{transition:none} }
 
+/* ---- data-sharing models and Team (backend/team.js) ---- */
+.mp-row .shr{flex:none;font:600 10px "Sometype Mono",monospace;color:#8fb3d9;background:rgba(143,179,217,.12);border:1px solid rgba(143,179,217,.35);border-radius:5px;padding:0 5px;margin-left:6px}
+.wh-share{flex:none;font:600 11px "Sometype Mono",monospace;color:#8fb3d9;background:rgba(143,179,217,.1);border:1px solid rgba(143,179,217,.3);border-radius:5px;padding:2px 8px;white-space:nowrap;cursor:help}
+#chipTeam.on b{color:var(--gold)}
+#chipTeam.on{border-color:rgba(200,169,97,.45);background:rgba(200,169,97,.08)}
+.sh-team{display:inline-flex;align-items:center;gap:10px;color:var(--mut);min-width:0}
+.sh-team b{color:var(--gold);font-weight:700}
+.sh-team .q{color:var(--faint);font-weight:400}
+.share-bg{position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px}
+.share-dlg{width:min(460px,100%);background:var(--panel2);border:1px solid var(--edge2);border-radius:12px;box-shadow:0 18px 50px rgba(0,0,0,.6);padding:16px 16px 14px;display:flex;flex-direction:column;gap:10px}
+.share-dlg h3{margin:0;font:700 15px Chivo,sans-serif;color:var(--ink);display:flex;align-items:center;gap:8px}
+.share-dlg h3 i{font-style:normal;color:#8fb3d9}
+.share-dlg p{margin:0;color:var(--mut);font-size:13px;line-height:1.55}
+.share-dlg p b{color:var(--ink)}
+.share-dlg .proj{font:12px "Sometype Mono",monospace;color:var(--sub);background:var(--deep);border:1px solid var(--edge);border-radius:7px;padding:6px 9px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.share-dlg .acts{display:flex;gap:8px;justify-content:flex-end;margin-top:4px}
+.share-dlg .acts button{height:30px;padding:0 13px;border-radius:7px;border:1px solid var(--edge2);background:transparent;color:var(--ink);font:600 12.5px Chivo,sans-serif;cursor:pointer}
+.share-dlg .acts button:hover{background:var(--sel)}
+.share-dlg .acts .ok{background:rgba(143,179,217,.14);border-color:rgba(143,179,217,.5);color:#b9d2ec}
+
 /* ---- sessions side by side (main/split.js) ----
    2: two columns. 3: this one on the left, two stacked on the right. 4: two by two.
    The other panes are separate pages slotted into .split-slot holes. */
@@ -1022,7 +1042,7 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
       </button>
     </div>
     <div class="work" id="screen-work">
-      <div class="workhead"><span class="dot run" id="runDot" style="display:none"></span><h1 class="sr-only" id="sessTitle">New session</h1><button type="button" class="wh-dir" id="whDir" title="Open this folder in File Explorer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="sub" id="sessSub"></span><svg class="wh-dir-go" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg></button><span class="wh-branch" id="cbBranch" hidden></span><span class="wh-sp"></span><span class="workstats" id="statPill" tabindex="0" hidden><span class="stat st-cost"><b id="sessStatCost"></b></span><span class="stat st-tok"><b id="sessStatTok"></b> tokens</span><span class="stat-card" role="tooltip"><span class="stat"><i>Price per 1M</i><b id="sessStatRate"></b></span><span class="stat" id="sessStatCacheWrap" style="display:none"><i>Served from cache</i><b id="sessStatCache"></b></span><span class="stat" id="sessStatBudgetWrap" style="display:none"><i>This run</i><b id="sessStatBudget"></b></span></span></span><button class="pp-toggle ic" id="btnCompact" title="Summarise older turns now"></button><button class="pp-toggle ic" id="ppToggle" title="Toggle preview panel"></button><button type="button" class="pane-x" id="btnPaneClose" title="Close this pane (the session keeps going)" aria-label="Close this pane"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button></div>
+      <div class="workhead"><span class="dot run" id="runDot" style="display:none"></span><h1 class="sr-only" id="sessTitle">New session</h1><button type="button" class="wh-dir" id="whDir" title="Open this folder in File Explorer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="sub" id="sessSub"></span><svg class="wh-dir-go" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg></button><span class="wh-branch" id="cbBranch" hidden></span><span class="wh-share" id="shareBadge" hidden></span><span class="wh-sp"></span><span class="workstats" id="statPill" tabindex="0" hidden><span class="stat st-cost"><b id="sessStatCost"></b></span><span class="stat st-tok"><b id="sessStatTok"></b> tokens</span><span class="stat-card" role="tooltip"><span class="stat"><i>Price per 1M</i><b id="sessStatRate"></b></span><span class="stat" id="sessStatCacheWrap" style="display:none"><i>Served from cache</i><b id="sessStatCache"></b></span><span class="stat" id="sessStatBudgetWrap" style="display:none"><i>This run</i><b id="sessStatBudget"></b></span></span></span><button class="pp-toggle ic" id="btnCompact" title="Summarise older turns now"></button><button class="pp-toggle ic" id="ppToggle" title="Toggle preview panel"></button><button type="button" class="pane-x" id="btnPaneClose" title="Close this pane (the session keeps going)" aria-label="Close this pane"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button></div>
       <div class="scroll"><div id="thread" style="width:100%;max-width:760px;display:flex;flex-direction:column;padding-bottom:20px">
         <div class="msg" style="color:var(--dim)">Open a folder, pick an OpenRouter model in ⚙ Settings, and ask for code. The agent runs on your own <b style="color:var(--gold)">vox</b> backend — file edits, shell, tests — billed to your OpenRouter key.</div>
       </div></div>
@@ -1047,6 +1067,7 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
             <span class="sh-goal" id="shGoal" hidden><span class="sh-goal-ic" aria-hidden="true">◎</span><span id="shGoalTxt"></span><button class="sh-lnk" id="shGoalClear" type="button">Clear goal</button></span>
             <span class="sh-work" id="shWork" hidden><span class="spin"></span><span id="shWorkTxt">Working</span><span class="tm" id="shWorkTm"></span></span>
             <span class="sh-warn" id="shWarn" hidden><span id="shWarnTxt"></span><button class="sh-lnk" id="shCompact" type="button">Summarise now</button></span>
+            <span class="sh-team" id="shTeam" hidden><span id="shTeamTxt"></span><button class="sh-lnk" id="shTeamTry" type="button">Try it</button><button class="sh-lnk q" id="shTeamNo" type="button">Not now</button></span>
             <span class="sh-warn" id="shCache" hidden><span id="shCacheTxt"></span><button class="sh-lnk" id="shCacheFix" type="button">Summarise first</button></span>
             <span class="sh-warn" id="shImg" hidden><span id="shImgTxt"></span><button class="sh-lnk" id="shImgFix" type="button"></button></span>
             <span class="sh-steer" id="steerHint" hidden>Steering message <b id="steerHintTarget"></b><button id="steerHintCancel" type="button">Cancel</button></span>
@@ -1085,6 +1106,7 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
                 <span class="pk-body" id="modelMenuList"></span>
                 <span class="pk-foot" id="modelMenuFoot" aria-live="polite"><span class="fid" id="pkId"></span></span>
               </span></span>
+            <span class="chip" id="chipTeam" hidden title="Team: this model plans and reviews; a cheaper model writes the code"><svg class="gl" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="8" cy="8" r="3"></circle><circle cx="16" cy="10" r="2.5"></circle><path d="M3 20c0-3 2.5-5 5-5s5 2 5 5"></path><path d="M13 19c.3-2.3 1.6-4 3-4 1.8 0 3.5 1.7 3.5 4"></path></svg><b id="chipTeamVal">Team</b><svg class="cv" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg><span class="menu op" id="menuTeam"></span></span>
             <span class="chip" id="chipReason"><svg class="gl" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 12h3l2-5 3 10 2-5h6"></path></svg><b id="chipReasonVal">Model default</b><svg class="cv" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg><span class="menu op" id="menuReason"></span></span>
             <span class="chip" id="chipAccess"><svg class="gl" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg><b id="chipAccessVal">Ask first</b><svg class="cv" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg><span class="menu op" id="menuAccess"></span></span>
             <button class="plan-sw" id="chipPlan" type="button" role="switch" aria-checked="false" title="Plan mode: explore first, present a plan, get approval before changing anything"><i></i>Plan</button>
@@ -1741,6 +1763,8 @@ function paintShelf(){
       $('shGoalTxt').title = g.condition + (g.last && g.last.reason ? '\n\nLast check: ' + g.last.reason : '');
     }
   }
+  const th = $('shTeam'), hint = v && v.teamHint;
+  if (th) { th.hidden = steering || busy || !hint; if (hint) $('shTeamTxt').innerHTML = hint.html; }
   const cn = v ? cacheNote(v) : null, cw = $('shCache');
   if (cw) { cw.hidden = steering || !cn || !!img; if (cn) { $('shCacheTxt').textContent = cn.text; cw.title = cn.title; $('shCacheFix').hidden = !!busy; } }
   const w = v ? contextWarning(v.ctxFill) : '';
@@ -3737,6 +3761,119 @@ function renderReasonMenu(){
   });
 }
 
+// ---- data-sharing models and Team (backend/team.js) ----
+// Who a model shares with, from the catalogue (main.js); models not listed yet by their name.
+function shareInfo(id){
+  const m = modelEntry(id);
+  if (m && 'sharesData' in m) return m.sharesData || null;
+  const s = String(id || '').toLowerCase(); if (!s) return null;
+  const who = { meta: 'Meta', poolside: 'Poolside', nvidia: 'NVIDIA', google: 'Google', qwen: 'Alibaba (Qwen)', thinkingmachines: 'Thinking Machines' }[s.split('/')[0]] || s.split('/')[0];
+  if (/-contributor(\b|$)/.test(s)) return { how: 'yes', who };
+  if (/:free$/.test(s)) return { how: 'may', who };
+  return null;
+}
+function shareSentence(id, sh){
+  return sh.how === 'yes'
+    ? 'Choosing this model shares your coding data: ' + sh.who + ' may use this project\u2019s code, your messages and the model\u2019s replies to train and improve its models. That is why it costs less.'
+    : 'Choosing this model may share your coding data: it is free because ' + sh.who + ' or its hosts may log what you send and use it to train models. Free models allow 50 requests a day (1,000 once your OpenRouter account has bought $10 of credit).';
+}
+const projectKey = (wd) => String(wd || '').replace(/[\\/]+$/, '').replace(/\//g, '\\').toLowerCase();
+function projectShared(wd){ return !!(S && S.dataShareOk && S.dataShareOk[projectKey(wd)]); }
+/**
+ * Before a model that shares data is used in a project: say so, plainly, and let the user
+ * decide for this project. Resolves true when it may be used. The answer is kept per project.
+ */
+function confirmShare(id){
+  const sh = shareInfo(id);
+  if (!sh) return Promise.resolve(true);
+  const v = actView(), wd = (v && viewDir(v)) || S.workingDir || '';
+  if (projectShared(wd)) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    const bg = el('div', 'share-bg');
+    bg.setAttribute('role', 'dialog'); bg.setAttribute('aria-modal', 'true'); bg.setAttribute('aria-labelledby', 'shareTtl');
+    bg.innerHTML = '<div class="share-dlg"><h3 id="shareTtl"><i>\u25c9</i><span></span></h3><p class="s1"></p><p class="s2"></p><div class="proj"></div><div class="acts"><button type="button" class="no">Pick another model</button><button type="button" class="ok">Share this project\u2019s data</button></div></div>';
+    bg.querySelector('h3 span').textContent = (sh.how === 'yes' ? 'This model shares your coding data' : 'This model may share your coding data');
+    bg.querySelector('.s1').textContent = shareSentence(id, sh);
+    bg.querySelector('.s2').innerHTML = 'Only choose it for code you are happy to share. <b>Your answer is kept for this project only</b>; other projects ask again.';
+    bg.querySelector('.proj').textContent = modelLabel(id) + '  \u00b7  ' + (wd || 'no project folder');
+    const done = async (ok) => {
+      bg.remove(); document.removeEventListener('keydown', onKey, true);
+      if (ok && wd) { try { await window.voxai.dataShareSet(wd, true); S = await window.voxai.getSettings(); } catch {} }
+      resolve(!!ok && !!wd);
+    };
+    const onKey = (e) => { if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); done(false); } };
+    document.addEventListener('keydown', onKey, true);
+    bg.querySelector('.no').onclick = () => done(false);
+    bg.querySelector('.ok').onclick = () => done(true);
+    bg.onclick = (e) => { if (e.target === bg) done(false); };
+    document.body.appendChild(bg);
+    bg.querySelector('.no').focus();
+  });
+}
+function paintShareBadge(){
+  const b = $('shareBadge'); if (!b) return;
+  const v = actView(), ids = [activeModel(), v && v.coderModel].filter(Boolean);
+  const hit = ids.map((id) => [id, shareInfo(id)]).find(([, s]) => s);
+  b.hidden = !hit;
+  if (hit) { b.textContent = 'Shares data with ' + hit[1].who; b.title = shareSentence(hit[0], hit[1]); }
+}
+// $ per 1M output tokens from the catalogue; expensive at $5 or more (backend/team.js).
+const outPerM = (id) => { const m = modelEntry(id); return m && m.completionCents != null ? Number(m.completionCents) * 1e4 : null; };
+const isExpensiveModel = (id) => (outPerM(id) || 0) >= 5;
+// The coders offered: cheap models that can use tools, the proven one first.
+const TEAM_CODERS = ['deepseek/deepseek-v4.1-flash', 'poolside/laguna-s-2.1', 'meta/muse-spark-1.3-contributor', 'poolside/laguna-s-2.1:free'];
+function paintTeamChip(){
+  const c = $('chipTeam'); if (!c) return;
+  const v = actView(), coder = v && v.coderModel;
+  c.hidden = !v || (!coder && !isExpensiveModel(activeModel()));
+  c.classList.toggle('on', !!coder);
+  const short = (id) => modelLabel(id).replace(/^(Claude|DeepSeek|Poolside|Meta|OpenAI|Google)\s+/i, '').split(' ').slice(0, 2).join(' ');
+  $('chipTeamVal').textContent = coder ? short(activeModel()) + ' plans \u00b7 ' + short(coder) + ' codes' : 'Team';
+}
+function renderTeamMenu(){
+  const menu = $('menuTeam'); if (!menu) return;
+  const v = actView(), cur = (v && v.coderModel) || '';
+  const price = (id) => { const m = modelEntry(id); return m ? modelPrice(m) : ''; };
+  const ids = TEAM_CODERS.filter((id) => modelEntry(id) && id !== activeModel());
+  if (cur && !ids.includes(cur)) ids.unshift(cur);
+  const rows = [{ key: '', name: modelLabel(activeModel()) + ' does it all', on: !cur, note: 'One model reads, plans and writes the code.' }]
+    .concat(ids.map((id) => { const sh = shareInfo(id); return { key: id, name: modelLabel(id) + (sh ? '  \u00b7  shares data' : '') + '  \u00b7  ' + price(id), on: id === cur,
+      note: (sh ? 'Shares your coding data with ' + sh.who + '. ' : '') + modelLabel(activeModel()) + ' plans and reviews; ' + modelLabel(id) + ' makes the edits and runs the commands.' }; }));
+  renderOptionMenu(menu, 'Who writes the code', rows, async (k) => { $('chipTeam').classList.remove('open'); await setCoder(k); });
+}
+async function setCoder(id){
+  const v = actView(); if (!v || !activeId) return;
+  if (id && !(await confirmShare(id))) return;
+  try { await window.voxai.sessionsSetCoder(activeId, id || ''); } catch {}
+  v.coderModel = id || ''; v.teamHint = null;
+  refreshChips(); paintShelf();
+  if (id) toast(modelLabel(activeModel()) + ' plans; ' + modelLabel(id) + ' writes the code from your next message.');
+}
+/** After a run that cost something on an expensive model: one quiet line with that run's numbers. */
+function teamHintAfter(v, ev){
+  const model = v.model || S.openrouterModel;
+  const cost = Number(ev.cost) || 0;
+  if (v.coderModel || cost < 0.5 || !isExpensiveModel(model) || v._teamHintNo) return;
+  if (((S.teamHintNo || {})[model] || 0) >= 2) return;
+  const coder = TEAM_CODERS.find((id) => modelEntry(id) && !shareInfo(id)) || 'deepseek/deepseek-v4.1-flash';
+  const avg = (id) => { const m = modelEntry(id); return m ? Number(m.promptCents) * 0.8 + Number(m.completionCents) * 0.2 : null; };
+  const p = avg(model), q = avg(coder);
+  if (!(p > 0) || q == null) return;
+  const est = cost * 0.35 + cost * 0.65 * (q / p);
+  const out = (Array.isArray(ev.parts) ? ev.parts.find((x) => x.key === 'output') : null);
+  v.teamHint = { coder, html: 'That run cost <b>$' + cost.toFixed(2) + '</b>' + (out ? ', $' + Number(out.cost).toFixed(2) + ' of it output' : '') + '. '
+    + esc(modelLabel(model)) + ' can plan and review while ' + esc(modelLabel(coder)) + ' writes the code: about <b>$' + est.toFixed(2) + '</b>.' };
+  if (v === actView()) paintShelf();
+}
+async function teamHintNo(){
+  const v = actView(); if (!v) return;
+  const model = v.model || S.openrouterModel;
+  v.teamHint = null; v._teamHintNo = true;
+  const no = Object.assign({}, S.teamHintNo || {}); no[model] = (no[model] || 0) + 1;
+  try { S = await window.voxai.saveSettings({ teamHintNo: no }); } catch {}
+  paintShelf();
+}
+
 // ---- access ----
 function renderAccessMenu(){
   const menu = $('menuAccess'); if (!menu) return;
@@ -3751,6 +3888,7 @@ function renderAccessMenu(){
 function refreshChips(){
   $('chipModelVal').textContent = modelLabel(activeModel());
   $('chipModel').title = activeModel() || '';
+  try { paintTeamChip(); paintShareBadge(); } catch {}
   paintReasonChip();
   $('chipAccessVal').textContent = ACCESS_LABELS[S.access] || ACCESS_LABELS.ask;
   const pl = $('chipPlan'); if (pl) pl.setAttribute('aria-checked', String(!!S.planMode));
@@ -3912,6 +4050,8 @@ function renderModelMenu(){
     const extra = PK_BROWSE.has(m.id) ? '' : (d.variant && d.variant !== 'free' ? d.variant : d.snapshot);
     const r = menuRow(d.name + (extra ? ' · ' + extra : ''), m.id === cur, modelPrice(m));
     r.dataset.id = m.id;
+    const sh = shareInfo(m.id);
+    if (sh) { const b = el('span', 'shr', 'shares data'); b.title = shareSentence(m.id, sh); r.querySelector('.nm').after(b); }
     if (m.tools === false) r.style.opacity = '.6';
     r.onmouseenter = () => { box.querySelectorAll('.hot').forEach((x) => x.classList.remove('hot')); r.classList.add('hot'); pkFoot(m.id); };
     r.onclick = async (e) => { e.stopPropagation(); await setModel(m.id); $('chipModel').classList.remove('open'); };
@@ -3990,6 +4130,7 @@ function contextString(m){ return (m && m.context) ? Math.round(m.context / 1024
 
 async function setModel(id){
   if (!id) return;
+  if (!(await confirmShare(id))) return;
   S = await window.voxai.saveSettings({ openrouterModel: id });
   // The default for NEW sessions is above; this switches the session you are in.
   if (activeId && window.voxai.sessionsSetModel) {
@@ -4072,6 +4213,7 @@ async function openSession(id){
     v._title = full.title; v._workdir = full.workdir;
     v.workdir = full.workdir;   // the context bar needs the real path, not just the label
     v.model = full.model || '';  // what a run in THIS session will actually use
+    v.coderModel = full.coderModel || '';   // Team: who writes the code under it ('' = off)
     // Fix 1: restore the persisted usage ledger so cost/cache history survives restarts.
     v.cost = 0; v.tokens = 0; v.rate = 0; v.inTokens = 0; v.outTokens = 0; v.cacheReadTokens = 0; v.cacheWriteTokens = 0;
     if (full.stats) {
@@ -4473,7 +4615,7 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
   if (event.type === 'user_input' && event.inputId) (v.shownInputs || (v.shownInputs = new Set())).add(event.inputId);
   if (event.type === 'goal') { onGoalEvent(v, event); T = null; return; }
   if (event.type === 'loop') { onLoopEvent(v, event); T = null; return; }
-  if (event.type === 'run_summary') { if (Number(event.ms) >= 1000 && v.root) { v.root.appendChild(tookLine(event)); if (v === actView()) followThread(); } T = null; return; }
+  if (event.type === 'run_summary') { if (Number(event.ms) >= 1000 && v.root) { v.root.appendChild(tookLine(event)); if (v === actView()) followThread(); } teamHintAfter(v, event); T = null; return; }
   // A finished run takes its approval, if one was still showing, with it.
   if (['done', 'error', 'cancelled', 'limit_reached', 'budget_reached'].includes(event.type) && v.perm) {
     clearTimeout(v.perm.timer); v.perm = null; v.permQueue = []; if (sid === activeId) paintAsk();
@@ -6324,6 +6466,9 @@ async function doSend(v, text, parts){
       .replace(/^(Error:\s*)+/, '');
     // Nothing was sent, so the message is not drawn as sent: it goes back in the box.
     try { if (bubble) bubble.remove(); } catch {}
+    // Refused because the project was never shared: ask now; agreeing means Send works next time.
+    const cm = /^DATA_SHARE_CONSENT: (\S+)/.exec(reason);
+    if (cm) setTimeout(() => { confirmShare(cm[1]).then((ok) => { if (ok) toast('This project can use it now. Send again.'); }); }, 0);
     if (cur) {
       T = cur; clearStatus();
       const r = RR(); if (r) { r.appendChild(noticeRow({ tone: 'bad', icon: 'alert', title: 'Couldn’t send that', text: tidyPaths(reason) + ' Your message is back in the box.' })); followThread(); }
@@ -7007,6 +7152,9 @@ function addCodeCopy(root){
   initModelPicker();
   wireChip('chipReason', renderReasonMenu);
   wireChip('chipAccess', renderAccessMenu);
+  wireChip('chipTeam', renderTeamMenu);
+  $('shTeamTry').onclick = () => { const v = actView(); if (v && v.teamHint) setCoder(v.teamHint.coder); };
+  $('shTeamNo').onclick = teamHintNo;
   $('chipPlan').onclick = async () => {
     S = await window.voxai.saveSettings({ planMode: !S.planMode });
     refreshChips();

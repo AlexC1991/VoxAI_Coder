@@ -2300,6 +2300,36 @@ async function drain(gen) {
     check('the first time it hides to the tray, it says so once', ATh.includes("tray.displayBalloon({ iconType: 'info', title: 'VoxAI Coder is still running',") && ATh.includes("saveSetting && saveSetting('trayHintShown', true)"), 'tray');
   }
 
+  // ------------------------------------------------------------------ [TM]
+  console.log('\n[TM] Team (an expensive planner, a cheap coder) and models that share your data');
+  {
+    const T = require(path.join(ROOT, 'src/backend/team.js'));
+    const c = T.sharesData('meta/muse-spark-1.3-contributor'), f = T.sharesData('poolside/laguna-s-2.1:free');
+    check('a contributor tier shares (Meta); a free model may; a normal one does not', c && c.how === 'yes' && c.who === 'Meta' && f && f.how === 'may' && f.who === 'Poolside'
+      && !T.sharesData('meta/muse-spark-1.3') && !T.sharesData('deepseek/deepseek-v4.1-flash'), { c, f });
+    const real = 'OpenRouter 404: 0 endpoints out of 1 requested are available matching your guardrail restrictions and data policy. We removed them for the following reasons: Paid model training violation (account settings): 1 endpoint excluded';
+    check('OpenRouter\'s data-policy refusal is said plainly, with where to change it', /allows providers that may train on your data/.test(T.explainProviderError(real, 'meta/muse-spark-1.3-contributor'))
+      && /openrouter\.ai\/settings\/privacy/.test(T.explainProviderError('No endpoints found matching your data policy', 'x')) && T.explainProviderError('HTTP 500', 'x') === '', 'explain');
+    check('a free model\'s daily limit is said as one', /free limit .* is used up for today/.test(T.explainProviderError('429 Rate limit exceeded: free-models-per-day', 'poolside/laguna-s-2.1:free')), 'limit');
+    check('expensive means $5+ per 1M out (Opus yes, V4.1 Flash no)', T.isExpensive({ completionCents: 0.002 }) && !T.isExpensive({ completionCents: 0.000029 }), 'expensive');
+    check('the planner is told to plan, hand steps to the coder, and check its work', /spawn_agent/.test(T.teamPrompt('deepseek/deepseek-v4.1-flash')) && /check the work before the next step/.test(T.teamPrompt('x')) && T.teamPrompt('') === '', 'prompt');
+    check('same folder, same consent (case and slashes aside)', T.projectKey('A:/Github/Shop/') === T.projectKey('a:\\github\\shop'), 'key');
+    const AGt = read('src/backend/agent.js'), MAINt = read('src/main/main.js'), HTMLt = read('src/renderer/index.html');
+    check('with a coder: it is the default worker, starting it needs no approval, and its cost is "Coder"', AGt.includes('defaultSubModel: coderModel || subagentModel,')
+      && AGt.includes("if (coderModel && (kind === 'spawn_agent' || kind === 'spawn_parallel')) return true;") && AGt.includes("addExtra(session, coderModel ? 'Coder' : 'Sub-agents', subCost);")
+      && AGt.includes("+ (isSubAgent ? '' : teamPrompt(coderModel));"), 'agent');
+    check('Auto\'s checker never sends your commands to a model that shares data', AGt.includes('if (checkModel && checkModel !== model && !sharesData(checkModel)) {'), 'checker');
+    check('a sharing model runs only in a project you agreed to share (checked before every run)', MAINt.includes('if (sh && !s.dataShareOk[team.projectKey(sess.workdir)]) {')
+      && MAINt.includes('for (const m of [sess.model || s.openrouterModel, sess.coderModel || \'\']) {'), 'guard');
+    check('choosing one shows the disclaimer first: "Choosing this model shares your coding data"', HTMLt.includes("async function setModel(id){\n  if (!id) return;\n  if (!(await confirmShare(id))) return;")
+      && HTMLt.includes("'Choosing this model shares your coding data: ' + sh.who") && HTMLt.includes('Share this project\\u2019s data') && HTMLt.includes("if (id && !(await confirmShare(id))) return;"), 'disclaimer');
+    check('the picker and the header say it shares; the Team chip shows for expensive models', HTMLt.includes("const b = el('span', 'shr', 'shares data');") && HTMLt.includes("b.textContent = 'Shares data with ' + hit[1].who;")
+      && HTMLt.includes("c.hidden = !v || (!coder && !isExpensiveModel(activeModel()));"), 'ui');
+    check('the hint: only after a run of $0.50+ on an expensive model, and two Not nows end it', HTMLt.includes("if (v.coderModel || cost < 0.5 || !isExpensiveModel(model) || v._teamHintNo) return;")
+      && HTMLt.includes("if (((S.teamHintNo || {})[model] || 0) >= 2) return;"), 'hint');
+    check('the session keeps its coder', read('src/backend/sessions.js').includes("coderModel: o.coderModel || ''") && MAINt.includes("ipcMain.handle('sessions:setCoder'"), 'saved');
+  }
+
   // ------------------------------------------------------------------ [WD]
   console.log('\n[WD] the session folder in the header opens in File Explorer; a path as a url opens that file');
   {

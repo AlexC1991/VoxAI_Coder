@@ -15,6 +15,7 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Menu, View, WebContentsView } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const team = require('../backend/team');
 const os = require('os');
 
 const { runAgent, pendingAsk, answerPendingAsk } = require('../backend/agent');
@@ -139,6 +140,10 @@ function getSettings(redacted = true) {
     notifyNative: raw.notifyNative === true,   // Windows' own notification instead of the VoxAI card
     trayOnMinimize: raw.trayOnMinimize === true,
     trayOnClose: raw.trayOnClose === true,
+    // Projects you said may be shared with a data-sharing model's maker (backend/team.js): folder key -> { at }.
+    dataShareOk: raw.dataShareOk && typeof raw.dataShareOk === 'object' ? raw.dataShareOk : {},
+    // The Team hint ("let a cheap model code"): times you said Not now, by model. Two and it stops.
+    teamHintNo: raw.teamHintNo && typeof raw.teamHintNo === 'object' ? raw.teamHintNo : {},
     webSearchEnabled: raw.webSearchEnabled !== false && raw.webSearchEnabled !== 'false',
     webSearchEngine: ['exa', 'parallel', 'perplexity'].includes(raw.webSearchEngine) ? raw.webSearchEngine : 'exa',
     webSearchMaxResults: Math.min(10, Math.max(1, Math.round(Number(raw.webSearchMaxResults) || 5))),
@@ -837,7 +842,7 @@ app.whenReady().then(() => {
     // questions come from agent:live instead).
     const running = [...controllers.keys()].some((k) => k.startsWith(id + ':'));
     const ask = running ? null : pendingAsk(sess);
-    return { id: sess.id, title: sess.title, workdir: sess.workdir, model: sess.model, messages: sess.messages, todos: sess.todos, usage: sess.usage, stats: sess.stats, stops: sess.stops || [], runLog: sess.runLog || [], context, pendingAsk: ask };
+    return { id: sess.id, title: sess.title, workdir: sess.workdir, model: sess.model, coderModel: sess.coderModel || '', messages: sess.messages, todos: sess.todos, usage: sess.usage, stats: sess.stats, stops: sess.stops || [], runLog: sess.runLog || [], context, pendingAsk: ask };
   });
   // To the Recycle Bin, not erased: one misclick on Delete lost a whole conversation
   // for good. If the bin refuses, nothing is deleted and the user is told why.
@@ -912,6 +917,24 @@ app.whenReady().then(() => {
   // so switching models changed the chip and nothing else -- the next send still went
   // to the old model. (Found live: "switch to a vision model and send again" was
   // refused a second time, naming the model the user had just switched away from.)
+  // Team: who writes the code under this session's model ('' = off).
+  ipcMain.handle('sessions:setCoder', async (_e, { id, model }) => {
+    if (!id) return false;
+    const sess = await getLive(id);
+    sess.coderModel = String(model || '').trim();
+    await store.saveSession(userData(), sess);
+    return true;
+  });
+  // You agreed that this project may be shared with a data-sharing model's maker (or took it back).
+  ipcMain.handle('datashare:set', (_e, { workdir, ok }) => {
+    const key = team.projectKey(workdir);
+    if (!key) return false;
+    const raw = readSettingsFile();
+    raw.dataShareOk = raw.dataShareOk && typeof raw.dataShareOk === 'object' ? raw.dataShareOk : {};
+    if (ok) raw.dataShareOk[key] = { at: new Date().toISOString() }; else delete raw.dataShareOk[key];
+    writeSettingsFile(raw);
+    return true;
+  });
   ipcMain.handle('sessions:setModel', async (_e, { id, model }) => {
     const m = String(model || '').trim();
     if (!id || !m) return false;
@@ -1074,6 +1097,14 @@ app.whenReady().then(() => {
     await assertModelUsable(sess.model || s.openrouterModel, fetchModels, {
       images: (attachments || []).filter((a) => a && (a.type === 'image_url' || a.dataUrl)).length,
     });
+    // A model that shares what it is sent with its maker runs only in a project you agreed to share.
+    // The consent is in the app, not hidden in a model's name (backend/team.js).
+    for (const m of [sess.model || s.openrouterModel, sess.coderModel || '']) {
+      const sh = team.sharesData(m);
+      if (sh && !s.dataShareOk[team.projectKey(sess.workdir)]) {
+        throw new Error(`DATA_SHARE_CONSENT: ${m} shares your coding data with ${sh.who}. Choose it again in the model picker and agree for this project, or pick another model.`);
+      }
+    }
     if (!resume && sess.title === 'New session') sess.title = text.slice(0, 60);
     // A message from you while a goal is paused picks it back up ("continue" works).
     if (!goalContinue && sess.goal && sess.goal.status === 'active') { sess.goal.paused = false; sess.goal.pausedReason = ''; sess.goal.idle = 0; }
@@ -1124,6 +1155,8 @@ app.whenReady().then(() => {
           checkModel: s.autoCheckModel || '',
           checkReasoningSpec: s.autoCheckModel ? modelReasoning(s.autoCheckModel) : undefined,
           cacheTtl: s.claudeCacheHour ? '1h' : '',
+          // Team: the cheap model that writes the code under this one (backend/team.js).
+          coderModel: sess.coderModel && sess.coderModel !== (sess.model || s.openrouterModel) ? sess.coderModel : '',
           // Which thinking levels this model takes, so the chip's choice means something.
           reasoningSpec: modelReasoning(sess.model || s.openrouterModel),
           subagentModel: s.subagentModel, subagentMaxTurns: s.subagentMaxTurns, subagentTimeoutMs: s.subagentTimeoutMs, mcpServers: readSettingsFile().mcpServers || {},
@@ -1156,7 +1189,8 @@ app.whenReady().then(() => {
           if (ev.type === 'done' || ev.type === 'error' || ev.type === 'cancelled' || ev.type === 'limit_reached' || ev.type === 'budget_reached') { runEnd = ev.type; break; }
         }
       } catch (err) {
-        const c1 = allRenderers(); c1 && c1.send('agent:event', { sessionId, runKey, event: { type: 'error', message: err.message } });
+        const said = team.explainProviderError(err.message, sess.model || s.openrouterModel) || (sess.coderModel && team.explainProviderError(err.message, sess.coderModel)) || err.message;
+        const c1 = allRenderers(); c1 && c1.send('agent:event', { sessionId, runKey, event: { type: 'error', message: said } });
       } finally {
         controllers.delete(runKey);
         // A run that ended (Stop, an error) takes its open questions and approvals with
@@ -1613,6 +1647,8 @@ ipcMain.handle('openrouter:generations', async (_e, { limit = 40, cursor } = {})
           // Can it do this job at all? It has to write text and call tools. Image and
           // audio generators (Nano Banana, GPT Image, Lyria...) and models without tool
           // calling were all in the picker; none of them can read or edit a file.
+          // Shares what it is sent with its maker (contributor tiers, free models): backend/team.js.
+          sharesData: team.sharesData(m.id),
           coding: params.has('tools') && !!(m.architecture && Array.isArray(m.architecture.output_modalities)
             && m.architecture.output_modalities.length === 1 && m.architecture.output_modalities[0] === 'text'),
         };

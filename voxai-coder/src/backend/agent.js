@@ -34,6 +34,7 @@ const { checkToolAllowed, checkShellCommand, isReadOnlyCommand, isProjectCommand
 const { processKills, onlyKills, harmlessBesidesKills, judgeKills, killKeys } = require('./tools/kills');
 const checkpoints = require('./tools/checkpoints');
 const { chatOnce, reasoningParam } = require('./providers/openrouter');
+const { teamPrompt, sharesData, explainProviderError } = require('./team');
 
 // Auto mode's safety check: one short question per action that would otherwise ask.
 // Modelled on Claude Code's auto mode -- serve the request, stay in the project, and
@@ -575,6 +576,8 @@ async function* runAgent(opts) {
     checkReasoningSpec = undefined,
     // Claude's prompt cache: '' (5 minutes) or '1h' (Settings).
     cacheTtl = '',
+    // Team (backend/team.js): a cheap model that does the hands-on work as this run's sub-agent. '' = off.
+    coderModel = '',
     // { enabled, engine, maxResults } from Settings. null = defaults (on, exa, 5).
     webSearch = null,
   } = opts;
@@ -702,7 +705,7 @@ async function* runAgent(opts) {
         extra: { ...(spec === undefined ? { reasoning: { enabled: false } } : reasoningParam('none', spec, m)), usage: { include: true } } });
       const said = (r) => String((r && r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content) || '');
       let r;
-      if (checkModel && checkModel !== model) {
+      if (checkModel && checkModel !== model && !sharesData(checkModel)) {
         try { r = await ask(checkModel, checkReasoningSpec); } catch (e) { if (signal && signal.aborted) throw e; r = null; }
         // An answer it could not read: the session's model decides, rather than you being asked for nothing.
         if (r && readAutoDecision(said(r)).reason === 'no clear answer') r = null;
@@ -774,6 +777,8 @@ async function* runAgent(opts) {
           return true;
         }
       }
+      // Team: handing a step to the coder is the setup you chose; what the coder does is checked like anything else.
+      if (coderModel && (kind === 'spawn_agent' || kind === 'spawn_parallel')) return true;
       if (autoRule(kind, target, access, session.workdir)) return true;
       let note = '';
       // Auto: clicking and typing in the agent's own local page is the work itself (not a password).
@@ -811,7 +816,7 @@ async function* runAgent(opts) {
   // Search off means the tool is not offered at all, and the prompt must not tell the
   // model to use it -- an instruction naming a missing tool invites made-up calls.
   const webSearchOn = !(webSearch && webSearch.enabled === false);
-  const systemPrompt = SYSTEM(session.workdir, access, planMode, durable, webSearchOn) + goalPrompt(session.goal);
+  const systemPrompt = SYSTEM(session.workdir, access, planMode, durable, webSearchOn) + goalPrompt(session.goal) + (isSubAgent ? '' : teamPrompt(coderModel));
   const estimatedBefore = estimateSessionTokens(session, systemPrompt);
   // User-visible compaction notices (like Codex/Claude Code): tell the UI before
   // and after we fold older turns, so compaction is never silent.
@@ -965,7 +970,10 @@ async function* runAgent(opts) {
       runner: (o) => runAgent(o),
       // askPermission: a worker's prompts come to the same place as this run's (spawn.js).
       agentOpts: { apiKey, host, model, reasoningEffort, reasoningSpec, access, sessionId: session.id, signal, isSubAgent, workdir: session.workdir, visionHelper, checkModel, checkReasoningSpec, cacheTtl, askPermission, checkpointSession: session,
-        defaultSubModel: subagentModel, defaultSubMaxTurns: subagentMaxTurns, defaultSubTimeoutMs: subagentTimeoutMs,
+        // Team: the coder is the default worker, with room for a real step (a build and its check).
+        defaultSubModel: coderModel || subagentModel,
+        defaultSubMaxTurns: coderModel ? Math.max(40, Number(subagentMaxTurns) || 0) : subagentMaxTurns,
+        defaultSubTimeoutMs: coderModel ? Math.max(15 * 60 * 1000, Number(subagentTimeoutMs) || 0) : subagentTimeoutMs,
         // Sub-agents spend the PARENT's remaining allowance, never a fresh one.
         // Rebuilt each turn so a fan-out later in the run sees the depleted figure.
         budgetRemaining: Math.max(0, budget - spent), priceIn, priceOut, modelVision, webSearch },
@@ -1106,7 +1114,8 @@ async function* runAgent(opts) {
         yield { type: 'error', message: `The connection dropped part-way through the answer (${err.message}). What arrived is kept above; send "continue" to pick up from there.` };
         return;
       }
-      yield { type: 'error', message: err.message };
+      // OpenRouter's refusals (a data policy, a free model's daily limit), said so they can be acted on.
+      yield { type: 'error', message: explainProviderError(err.message, model) || err.message };
       return;
     }
     while (emitQueue.length) yield emitQueue.shift();
@@ -1366,7 +1375,7 @@ async function* runAgent(opts) {
             const runUsage = runUsageOf(session);
             runUsage.input += subIn; runUsage.output += subOut; runUsage.cacheRead += subCR; runUsage.cost += subCost;
             runUsage.subIn = (runUsage.subIn || 0) + subIn; runUsage.subOut = (runUsage.subOut || 0) + subOut; runUsage.subCR = (runUsage.subCR || 0) + subCR;
-            addExtra(session, 'Sub-agents', subCost);
+            addExtra(session, coderModel ? 'Coder' : 'Sub-agents', subCost);
           }
           // Charge sub-agent spend to the parent's cap. Without this a fan-out is
           // the cheapest way to blow straight past the limit: each child tracks its
