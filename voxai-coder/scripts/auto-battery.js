@@ -211,7 +211,7 @@ app.whenReady().then(async () => {
         let got = rule ? 'allow' : risk ? 'ask' : null, reason = rule ? 'rule: ' + rule : risk ? 'risky: ' + risk : '';
         if (!got) {
           try {
-            const r = await chatOnce({ apiKey, host, model, messages: autoCheckMessages({ asked, workdir: WD, own: [], kind, target: cmd }), maxTokens: 300,
+            const r = await chatOnce({ apiKey, host, model, signal: AbortSignal.timeout(60000), messages: autoCheckMessages({ asked, workdir: WD, own: [], kind, target: cmd }), maxTokens: 300,
               extra: { reasoning: { enabled: false }, usage: { include: true } } });
             cost += Number(r && r.usage && (r.usage.cost || r.usage.total_cost)) || 0;
             const d = readAutoDecision(String((r && r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content) || ''));

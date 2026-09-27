@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-BDmqHwvCx27C942jtKiHIMD+XzIS49GarS/WHFmF7yo='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-kNQ/kJYADL9Pt651Lbi0rHinZuXFkKMGAri+prnJK/8='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -939,6 +939,8 @@ tests"). Scroll the row instead of breaking words:
 #chipTeam.on b{color:var(--gold)}
 #chipTeam.on{border-color:rgba(200,169,97,.45);background:rgba(200,169,97,.08)}
 .sh-team{display:inline-flex;align-items:center;gap:10px;color:var(--mut);min-width:0}
+/* display above beat the hidden attribute: its empty "Try it / Not now" showed in the bar during every run. */
+.sh-team[hidden]{display:none}
 .sh-team b{color:var(--gold);font-weight:700}
 .sh-team .q{color:var(--faint);font-weight:400}
 .share-bg{position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px}
@@ -3962,6 +3964,9 @@ function describeModel(m){
   let provider = '';
   const c = name.indexOf(': ');
   if (c > 0) { provider = name.slice(0, c); name = name.slice(c + 2); }
+  // The maker in the id decides the group (learnProviders), whatever this one model is labelled.
+  const slug0 = id.replace(/^~/, '').split('/')[0];
+  if (slug0 && typeof MODEL_SLUG_PROV !== 'undefined' && MODEL_SLUG_PROV && MODEL_SLUG_PROV[slug0]) provider = MODEL_SLUG_PROV[slug0];
   if (!provider) {
     // No "Provider: " in the name: use the name the catalogue gives this id's vendor on
     // its other models, so "mistralai/..." joins "Mistral" rather than starting its own.
@@ -4023,12 +4028,21 @@ function modelPrice(m){
 }
 let RECENT_MODELS = [];
 let MODEL_SLUG_PROV = null;   // vendor slug in the id -> the provider name the catalogue uses
+// One owner per maker in the id (x-ai/...), named as most of its models name it. OpenRouter
+// renamed xAI to "SpaceXAI" on its models but not on the grok-latest alias, and the picker
+// split them: under xAI the user found one "Grok" and thought the rest were missing. When a
+// maker goes by two names, the group shows both ("SpaceXAI · xAI").
 function learnProviders(models){
-  const map = {};
+  const counts = {};
   for (const m of models || []) {
     const name = String(m.name || ''), c = name.indexOf(': ');
     const slug = String(m.id || '').replace(/^~/, '').split('/')[0];
-    if (c > 0 && slug && !map[slug]) map[slug] = name.slice(0, c);
+    if (c > 0 && slug) { const k = name.slice(0, c); (counts[slug] = counts[slug] || {})[k] = ((counts[slug] || {})[k] || 0) + 1; }
+  }
+  const map = {};
+  for (const [slug, names] of Object.entries(counts)) {
+    const byUse = Object.keys(names).sort((a, b) => names[b] - names[a]);
+    map[slug] = byUse.join(' · ');
   }
   MODEL_SLUG_PROV = map;
 }

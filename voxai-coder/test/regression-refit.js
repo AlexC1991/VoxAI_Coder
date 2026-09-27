@@ -2337,12 +2337,27 @@ async function drain(gen) {
       && HTMLt.includes("c.hidden = !v || (!coder && !isExpensiveModel(activeModel()));"), 'ui');
     check('the hint: only after a run of $0.50+ on an expensive model, and two Not nows end it', HTMLt.includes("if (v.coderModel || cost < 0.5 || !isExpensiveModel(model) || v._teamHintNo) return;")
       && HTMLt.includes("if (((S.teamHintNo || {})[model] || 0) >= 2) return;"), 'hint');
+    check('a hidden Team hint is really hidden (no bare Try it / Not now during runs)', HTMLt.includes('.sh-team[hidden]{display:none}'), 'hint shows');
     check('the session keeps its coder', read('src/backend/sessions.js').includes("coderModel: o.coderModel || ''") && MAINt.includes("ipcMain.handle('sessions:setCoder'"), 'saved');
     check('stealth models and anything priced at nothing count as sharing', T.sharesData('stealth/space-bunny-alpha').how === 'yes' && T.sharesData('x/y', { prompt: '0', completion: '0' }).how === 'may'
       && !T.sharesData('x/y', { promptCents: 0.001, completionCents: 0.002 }) && MAINt.includes('sharesData: team.sharesData(m.id, m.pricing),'), 'free');
     check('Team uses the model picker itself: same owners and search, only models under $3 in and out, routers left out', HTMLt.includes("wireChip('chipTeam', () => openPicker($('chipTeam'), 'coder'));")
       && HTMLt.includes("const OK = forCoder ? new Set(teamCoders()) : null;") && HTMLt.includes('perM(m.promptCents) < TEAM_MAX_PER_M && perM(m.completionCents) < TEAM_MAX_PER_M')
       && HTMLt.includes("!/^~|^openrouter\\//.test(m.id)") && !HTMLt.includes('TEAM_CODERS') && !HTMLt.includes('renderTeamMenu'), 'picker');
+  }
+
+  // ------------------------------------------------------------------ [PV]
+  console.log('\n[PV] one owner per maker in the model picker');
+  {
+    const H = read('src/renderer/index.html');
+    const grab = (name) => { const i = H.indexOf('function ' + name + '('); let d = 0, j = H.indexOf('{', i); for (; j < H.length; j++) { if (H[j] === '{') d++; else if (H[j] === '}' && --d === 0) break; } return H.slice(i, j + 1); };
+    const mod = new Function(`let MODEL_SLUG_PROV = null; const MODEL_DATE_TAIL = /$^/;\n${grab('learnProviders')}\n${grab('describeModel')}\nreturn { learnProviders, describeModel };`)();
+    const cat = [{ id: 'x-ai/grok-4.7', name: 'SpaceXAI: Grok 4.7' }, { id: 'x-ai/grok-4.6', name: 'SpaceXAI: Grok 4.6' }, { id: '~x-ai/grok-latest', name: 'xAI: Grok Latest' },
+      { id: 'anthropic/claude-opus-5.5', name: 'Anthropic: Claude Opus 5.5' }, { id: 'mistralai/mistral-x', name: 'Mistral X' }, { id: 'mistralai/mistral-large', name: 'Mistral: Mistral Large' }];
+    mod.learnProviders(cat);
+    const p = (id) => mod.describeModel(cat.find((m) => m.id === id)).provider;
+    check('Grok is one group even when OpenRouter labels its models two ways ("SpaceXAI · xAI")', p('x-ai/grok-4.7') === 'SpaceXAI · xAI' && p('~x-ai/grok-latest') === 'SpaceXAI · xAI', [p('x-ai/grok-4.7'), p('~x-ai/grok-latest')]);
+    check('a model with no label joins its maker; others keep their one name', p('mistralai/mistral-x') === 'Mistral' && p('anthropic/claude-opus-5.5') === 'Anthropic', [p('mistralai/mistral-x'), p('anthropic/claude-opus-5.5')]);
   }
 
   // ------------------------------------------------------------------ [SZ]
