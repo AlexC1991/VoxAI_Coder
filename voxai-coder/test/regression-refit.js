@@ -1395,7 +1395,11 @@ async function drain(gen) {
     check('the address is a field you can type in', HTML.includes('<input class="pp-urlmono" id="ppUrl" type="text"') && HTML.includes("if (u && document.activeElement !== u) u.value ="), 'read-only');
     check('a new-tab link opens in the preview; a sign-in pop-up is a window over the app', /browserV\.webContents\.setWindowOpenHandler\(\(\{ url, disposition \}\) => \{[\s\S]{0,300}if \(disposition !== 'new-window'\) \{ try \{ browserV\.webContents\.loadURL\(url\)[\s\S]{0,200}action: 'allow'[\s\S]{0,120}parent: win\(\)/.test(MAIN) && /sandbox: true, webSecurity: true/.test(MAIN), 'bare windows');
     check('the app\'s window is never mistaken for a pop-up', MAIN.includes('const w = mainWindow = new BrowserWindow({') && MAIN.includes("function win() { return (mainWindow && !mainWindow.isDestroyed()) ? mainWindow"), 'first window');
-    check('acting on a website asks you, even in Auto', AG.includes("if (name !== 'computer' || surface === 'native' || !['click', 'type', 'press'].includes(act)) return null;") && AG.includes("if (access === 'auto' && kind !== 'browser-act' && kind !== 'desktop-act') {") && AG.includes('const gate = (await browserGate(tc.name, args)) || permissionAsk(tc.name, args);'), 'auto-approved');
+    // The user: "Auto is just for dangerous stuff" -- in Auto, browser actions go to the check, the
+    // agent's own local page just runs; the other modes keep their fixed rules.
+    check('in Auto, acting on a website goes to the check; on the agent\'s own local page it just runs', AG.includes("if (name !== 'computer' || surface === 'native' || !['click', 'type', 'press'].includes(act)) return null;")
+      && AG.includes("if (access === 'auto' && kind === 'browser-act' && opts && opts.local && !opts.password) return true;") && AG.includes("      if (access === 'auto') {")
+      && AG.includes('const gate = (await browserGate(tc.name, args)) || permissionAsk(tc.name, args);'), 'policy');
     check('local pages are not asked about that way', AG.includes("!/^(localhost|127\\.0\\.0\\.1|\\[::1\\])$/i.test(u.hostname)"), 'asks for localhost');
     check('"Always" covers the site, and says so', MAIN.includes("const key = kind + '\\u0000' + String(alwaysKey || target || '');") && AG.includes('alwaysLabel: `Always on ${host}`') && HTML.includes("$('askAlways').textContent = p.alwaysLabel ||"), 'one action only');
     check('a password field\'s contents are never read for the prompt', AG.includes("(el.type !== 'password' && el.type !== 'hidden' ? el.value : '')") && AG.includes('Type into a password field'), 'shows the password');
@@ -1517,7 +1521,7 @@ async function drain(gen) {
       check('the helper is built and unpacked with the app, with koffi', PKG0.scripts.predist.includes('node scripts/build-uia.js') && PKG0.scripts.prestart.includes('node scripts/build-uia.js')
         && JSON.stringify(PKG0.build.asarUnpack) === JSON.stringify(['node_modules/koffi/**', 'node_modules/@koromix/**', 'resources/uia/**']) && !!PKG0.dependencies.koffi, PKG0.build.asarUnpack);
       check('the helper runs from outside the packed app', read('src/backend/cu/uia.js').includes(".replace(/app\\.asar([\\\\/])/, 'app.asar.unpacked$1')"), 'inside asar');
-      check('desktop actions always ask, looking reads in words', AG.includes("return { kind: 'desktop-act', target: d.target") && AG.includes("kind !== 'desktop-act') {") && AG.includes("kind: 'desktop-look'") && HTML.includes("'desktop-act': 'Use your keyboard and mouse?'"), 'raw');
+      check('desktop actions read in words (Auto\'s check judges them; other modes ask)', AG.includes("return { kind: 'desktop-act', target: d.target") && AG.includes("kind: 'desktop-look'") && HTML.includes("'desktop-act': 'Use your keyboard and mouse?'"), 'raw');
       check('Esc stops a run that is driving the desktop, and is let go after', MAIN.includes("if (ev.type === 'desktop_control') armDesktopEsc(runKey, ctl, ev.phase);") && MAIN.includes("globalShortcut.register('Escape'") && MAIN.includes('disarmDesktopEsc(runKey);   // Esc goes back to the apps'), 'no kill switch');
       check('Esc is held during a desktop action and 6 s after it ends, not 30 s', MAIN.includes('const ESC_AFTER_MS = 6000, ESC_DURING_MS = 60000;') && MAIN.includes("phase === 'end' ? ESC_AFTER_MS : ESC_DURING_MS") && !MAIN.includes('disarmDesktopEsc(runKey), 30000')
         && read('src/backend/cu/desktop.js').includes("async function after(s, ctx, w, did) {\n  busy(ctx, 'end');") && HTML.includes('Esc or moving the mouse stops it'), 'half a minute');
@@ -1984,6 +1988,35 @@ async function drain(gen) {
     const HTMLr = read('src/renderer/index.html');
     check('the reminder is quiet in the thread and on reopening', HTMLr.includes("} else if (event.type === 'warning' && event.code === 'plan-close') {") && HTMLr.includes("if (/^\\[VOX PLAN\\]/.test(first)) { finalizeRunCard(); continue; }"), 'noisy');
     check('the file or command on an action line is toned like inline code', HTMLr.includes('.tr-chip{font:12.5px "Sometype Mono",monospace;color:var(--mut);background:rgba(127,127,127,.12);border:0;'), 'chip');
+  }
+
+  // ------------------------------------------------------------------ [AB]
+  console.log('\n[AB] Auto and the browser: its own local page runs, a website goes to the check in words');
+  {
+    const runClick = async (url) => {
+      const asked = [];
+      let checked = null;
+      const enc = new TextEncoder();
+      global.fetch = async (_u, opts) => {
+        const b = JSON.parse(opts.body);
+        if (b.stream === false) { checked = b.messages[1].content; return { ok: true, text: async () => JSON.stringify({ choices: [{ message: { content: '{"decision":"ask","reason":"test"}' } }] }) }; }
+        const n = b.messages.filter((m) => m.role === 'assistant').length + 1;
+        const chunks = n === 1 ? call('b1', 'computer', { action: 'click', index: 1 }) : say('done');
+        return { ok: true, text: async () => '', body: new ReadableStream({ start(c) { for (const ch of chunks) c.enqueue(enc.encode('data: ' + JSON.stringify(ch) + '\n\n')); c.enqueue(enc.encode('data: [DONE]\n\n')); c.close(); } }) };
+      };
+      const fakeView = { getURL: () => url, executeJavaScript: async () => JSON.stringify({ label: 'Begin', password: false }) };
+      await Promise.race([
+        drain(runAgent({ session: { id: 'ab-' + url.length, workdir: WD, messages: [] }, userText: 'play the game', apiKey: 'k', model: 'm', access: 'auto',
+          askPermission: async (q) => { asked.push(q); return false; }, onAttachAtlas: () => fakeView, maxTurns: 3 })),
+        new Promise((r) => setTimeout(r, 20000)),
+      ]);
+      return { asked, checked };
+    };
+    const local = await runClick('http://localhost:5173/');
+    check('Auto: a click in the agent\'s own app on localhost runs without asking or checking', local.asked.length === 0 && local.checked === null, local);
+    const site = await runClick('https://example.com/shop');
+    check('Auto: a click on a website goes to the check, described in words; you are asked only if it says so', site.checked && /Click "Begin" on example\.com/.test(site.checked)
+      && site.asked.length === 1 && site.asked[0].target === 'Click "Begin" on example.com' && /^Auto mode wants your say: test/.test(site.asked[0].note), site);
   }
 
   try { fs.rmSync(WD, { recursive: true, force: true }); } catch {}
