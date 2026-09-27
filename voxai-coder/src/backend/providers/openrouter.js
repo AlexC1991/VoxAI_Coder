@@ -101,6 +101,20 @@ async function post(host, init) {
  * @param {(delta:{token?:string, toolCallDelta?:object, done?:boolean, raw?:object})=>void} [opts.onEvent]
  * @returns {Promise<{content:string, toolCalls:Array<{id:string,name:string,arguments:string}>, usage:object, raw:object}>}
  */
+/**
+ * Requests to ":free" models today, counted the way OpenRouter counts its free allowance (50 a
+ * day, or 1,000 once the account has bought $10 of credit; its day is UTC). Only this app's
+ * requests: other apps on the same key are not seen. main.js keeps it on disk (onChange).
+ */
+const freeUse = { day: '', n: 0, onChange: null };
+function noteFree(model) {
+  if (!/:free$/i.test(String(model || ''))) return;
+  const day = new Date().toISOString().slice(0, 10);
+  if (freeUse.day !== day) { freeUse.day = day; freeUse.n = 0; }
+  freeUse.n++;
+  if (freeUse.onChange) { try { freeUse.onChange({ day: freeUse.day, n: freeUse.n }); } catch {} }
+}
+
 async function chatCompletions(opts) {
   const {
     apiKey, host = DEFAULT_HOST, model, messages, tools,
@@ -179,6 +193,7 @@ async function chatCompletions(opts) {
     const text = await res.text().catch(() => '');
     throw responseError(res.status, text);
   }
+  noteFree(model);
   return consumeSSE(res.body, onEvent);
 }
 
@@ -420,7 +435,8 @@ async function chatOnce({ apiKey, host = DEFAULT_HOST, model, messages, maxToken
   });
   const text = await res.text();
   if (!res.ok) throw responseError(res.status, text);
+  noteFree(model);
   return JSON.parse(text);
 }
 
-module.exports = { chatCompletions, chatOnce, responseError, DEFAULT_HOST, applyCacheBreakpoints, cacheMode, reasoningParam, normalizeReasoning, nearestEffort, EFFORTS };
+module.exports = { chatCompletions, chatOnce, responseError, freeUse, DEFAULT_HOST, applyCacheBreakpoints, cacheMode, reasoningParam, normalizeReasoning, nearestEffort, EFFORTS };

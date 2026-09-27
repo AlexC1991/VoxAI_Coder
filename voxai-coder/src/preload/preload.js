@@ -102,6 +102,8 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
     add: (sid, at) => ipcRenderer.invoke('split:add', { sid, at }),
     swap: (at, sid) => ipcRenderer.invoke('split:swap', { at, sid }),
     hold: (on) => ipcRenderer.send('split:hold', !!on),
+    // A dialog or menu is open: the preview and panes step aside; resolves to their snapshots.
+    overlay: (on) => ipcRenderer.invoke('overlay:hold', !!on),
     setMain: (sid) => ipcRenderer.send('split:main', sid || ''),
     remove: (sid) => ipcRenderer.invoke('split:remove', sid),
     state: () => ipcRenderer.invoke('split:state'),

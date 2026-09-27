@@ -34,7 +34,7 @@ const { checkToolAllowed, checkShellCommand, isReadOnlyCommand, isProjectCommand
 const { processKills, onlyKills, harmlessBesidesKills, judgeKills, killKeys } = require('./tools/kills');
 const checkpoints = require('./tools/checkpoints');
 const { chatOnce, reasoningParam } = require('./providers/openrouter');
-const { teamPrompt, sharesData, explainProviderError } = require('./team');
+const { teamPrompt, teamGuard, sharesData, explainProviderError } = require('./team');
 
 // Auto mode's safety check: one short question per action that would otherwise ask.
 // Modelled on Claude Code's auto mode -- serve the request, stay in the project, and
@@ -604,6 +604,7 @@ async function* runAgent(opts) {
     if (emitWake) { const w = emitWake; emitWake = null; try { w(); } catch {} }
   };
   let planApproved = planMode ? false : true;
+  const teamRun = { coderFails: 0, written: 0 };   // Team: coder runs that did not finish (after two the planner may do the work), lines the planner wrote
   const resolveIn = (wd, p) => {
     const pathMod = require('path');
     const full = pathMod.resolve(wd, p);
@@ -1287,6 +1288,15 @@ async function* runAgent(opts) {
           continue;
         }
       }
+      // TEAM: the planner hands the writing to the coder (see teamGuard).
+      if (coderModel && !isSubAgent) {
+        const msg = teamGuard(tc.name, args, teamRun);
+        if (msg) {
+          session.messages.push({ role: 'tool', tool_call_id: id, content: msg });
+          yield { type: 'tool_end', id, name: tc.name, ok: false, result: msg };
+          continue;
+        }
+      }
       // sandbox policy: deny tools outside the access level; tools that need a
       // permission decision (ALWAYS_PROMPT / lower-level) go through askPermission
       // instead of hard-erroring, and a denial tells the model NOT to retry.
@@ -1369,6 +1379,7 @@ async function* runAgent(opts) {
           const subs = (result.task_results && Array.isArray(result.task_results))
             ? result.task_results
             : [result];
+          if (coderModel) teamRun.coderFails += subs.filter((s) => !s || s.ok === false).length;
           let subIn = 0, subOut = 0, subCR = 0, subCost = 0;
           for (const s of subs) {
             const u = s && s.usage || {};

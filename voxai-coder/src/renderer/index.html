@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-mgTgEnGt9YtO0225bKDOoYhyaQga9fVvECJbwMBh7zQ='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-/ZE9HcUk8RjLcSEy9x4sI8V+W0DFD9DwwJaTAh3BJeI='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -105,6 +105,8 @@ button{font-family:inherit} ::selection{background:rgba(200,169,97,.26)}
 .sf-dot.ok{background:var(--add)} .sf-dot.bad{background:var(--del)}
 .sf-label{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sf-bal{font-family:"Sometype Mono",monospace;font-size:12px;color:var(--mut);white-space:nowrap}
+.sf-free{font-family:"Sometype Mono",monospace;font-size:11px;color:var(--mut);white-space:nowrap}
+.sf-free.low{color:var(--gold)}.sf-free.out{color:var(--del)}
 .work{flex:1;min-width:0;display:flex;flex-direction:column}
 /* One line, always. A session is titled by its first message, so titles are often long,
    and with the preview open the header is narrow: the title wrapped one word per line,
@@ -951,6 +953,7 @@ tests"). Scroll the row instead of breaking words:
 .sh-team[hidden]{display:none}
 .sh-team b{color:var(--gold);font-weight:700}
 .sh-team .q{color:var(--faint);font-weight:400}
+#overlayShots{position:fixed;inset:0;z-index:30;pointer-events:none}#overlayShots img{position:absolute;display:block;border-radius:6px}
 .share-bg{position:fixed;inset:0;z-index:120;background:rgba(0,0,0,.55);display:flex;align-items:center;justify-content:center;padding:16px}
 .share-dlg{width:min(460px,100%);background:var(--panel2);border:1px solid var(--edge2);border-radius:12px;box-shadow:0 18px 50px rgba(0,0,0,.6);padding:16px 16px 14px;display:flex;flex-direction:column;gap:10px}
 .share-dlg h3{margin:0;font:700 15px Chivo,sans-serif;color:var(--ink);display:flex;align-items:center;gap:8px}
@@ -1048,6 +1051,7 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
       <button class="side-foot" id="sideStatus" type="button" title="Account and balance">
         <span class="sf-dot" id="backendState"></span>
         <span class="sf-label" id="backendDetail">Starting…</span>
+        <span class="sf-free" id="freeTxt" hidden></span>
         <span class="sf-bal" id="creditsTxt">—</span>
       </button>
     </div>
@@ -3181,9 +3185,33 @@ function stopNotice(ev, live){
     [/^No provider is serving this model/, 'Model not available'],
     [/^The model's provider.* had a problem/, 'The provider had a problem'],
     [/^The connection dropped part-way/, 'The connection dropped'],
+    [/:free is busy right now/, 'Free model busy'],
+    [/^The free limit for .* is used up for today/, 'Free limit used up for today'],
+    [/^Too many requests to free models this minute/, 'Too many free requests this minute'],
+    [/^OpenRouter refused this request/, 'OpenRouter refused this model'],
+    [/only runs when your OpenRouter account allows providers that may train/, 'Blocked by your OpenRouter privacy settings'],
   ];
   const hit = TITLES.find(([re]) => re.test(msg));
-  return noticeRow({ tone: 'bad', icon: 'alert', title: hit ? hit[1] : 'Something went wrong', text: tidyPaths(msg) });
+  return noticeRow({ tone: 'bad', icon: 'alert', title: hit ? hit[1] : 'Something went wrong', text: tidyPaths(msg), actions: live ? freeWayOut(msg) : [] });
+}
+/**
+ * A free model turned away (busy, or its free allowance spent): the ways on, one click each.
+ * The run ended on the error and the way on was the model picker and typing "continue".
+ */
+function freeWayOut(msg){
+  const fm = /([a-z0-9._~-]+\/[a-z0-9._-]+:free)\b/i.exec(msg);
+  if (!fm || !/is busy right now|free limit .* is used up|Too many requests to free models/i.test(msg)) return [];
+  const acts = [];
+  if (/is busy right now|this minute/i.test(msg)) acts.push({ label: 'Try again', onClick: continueRun });
+  const paidId = fm[1].replace(/:free$/i, '');
+  const paid = ALL_MODELS.find((m) => m.id === paidId);
+  if (paid) acts.push({ label: 'Use the paid version' + (modelPrice(paid) ? ' (' + modelPrice(paid) + ')' : ''), ghost: acts.length > 0,
+    onClick: async (b) => { b.disabled = true; await setModel(paidId); continueRun(); } });
+  acts.push({ label: 'Pick another free model', ghost: true, onClick: () => setTimeout(() => {
+    const c = $('chipModel'); closeChips(c); c.classList.add('open'); openPicker(c, 'model');
+    const si = $('modelSearch'); si.value = 'free'; renderModelMenu(); placeMenu(c);
+  }, 0) });
+  return acts;
 }
 /** Carry on after a stop: the same as typing "continue". */
 function continueRun(b){ if (b) b.disabled = true; const p = $('prompt'); if (p) { p.value = 'continue'; send(); } }
@@ -5067,6 +5095,35 @@ function splitWhyNot(sid){
   if (SPLIT.panes.length + 1 >= SPLIT.max) return 'Up to ' + SPLIT.max + ' side by side';
   return '';
 }
+/**
+ * The preview and the split panes are views laid over this page, so they covered its dialogs and
+ * menus ("New session" cut in half by the preview). While one is open they step aside, and a
+ * snapshot of each stands in their place under the dialog's dimming.
+ */
+const OVERLAY_OPEN = '.modal-bg.show, .share-bg, .chip.open';
+let overlayOn = false, overlayBusy = false, overlayTick = 0;
+async function syncOverlay(){
+  if (PANE || overlayBusy || !window.voxai.split || !window.voxai.split.overlay) return;
+  const want = !!document.querySelector(OVERLAY_OPEN);
+  if (want === overlayOn) return;
+  overlayBusy = true;
+  try {
+    overlayOn = want;
+    let layer = $('overlayShots');
+    if (!want) { if (layer) layer.remove(); await window.voxai.split.overlay(false); return; }
+    const shots = await window.voxai.split.overlay(true);
+    if (!document.querySelector(OVERLAY_OPEN)) return;   // closed while the snapshots were taken: the next check puts the views back
+    layer = el('div'); layer.id = 'overlayShots'; layer.setAttribute('aria-hidden', 'true');
+    for (const s of shots || []) {
+      const im = document.createElement('img'); im.src = s.url; im.alt = '';
+      im.style.cssText = `left:${s.rect.x}px;top:${s.rect.y}px;width:${s.rect.width}px;height:${s.rect.height}px`;
+      layer.appendChild(im);
+    }
+    document.body.appendChild(layer);
+  } finally { overlayBusy = false; setTimeout(syncOverlay, 0); }
+}
+if (!PANE) new MutationObserver(() => { if (!overlayTick) overlayTick = requestAnimationFrame(() => { overlayTick = 0; syncOverlay(); }); })
+  .observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ['class'] });
 function tellMainSession(){ if (!PANE && window.voxai.split && window.voxai.split.setMain) window.voxai.split.setMain(activeId || ''); }
 async function openBeside(sid){
   const why = splitWhyNot(sid);
@@ -6583,6 +6640,19 @@ async function doSend(v, text, parts){
   }
 }
 
+/** Free requests used today, beside the balance: shown once a free model has been used today. */
+function paintFree(f){
+  const t = $('freeTxt'); if (!t) return;
+  const used = f ? Number(f.used) || 0 : 0;
+  t.hidden = !used;
+  if (!used) return;
+  const cap = f.cap ? Number(f.cap) : 0;
+  t.textContent = cap ? used.toLocaleString('en-US') + '/' + cap.toLocaleString('en-US') + ' free' : used + ' free';
+  t.classList.toggle('out', !!cap && used >= cap);
+  t.classList.toggle('low', !!cap && used < cap && used >= cap * 0.8);
+  t.title = 'Requests to free models today (the day ends at midnight UTC)' + (cap ? '. OpenRouter allows ' + cap.toLocaleString('en-US') + ' a day'
+    + (cap === 50 ? ', or 1,000 once your account has bought $10 of credit' : '') : '') + '. Only VoxAI’s requests are counted here.';
+}
 function fmtUsd(cents){ if(cents==null) return '—'; return (cents/100).toLocaleString('en-US',{style:'currency',currency:'USD'}); }
 function fmtUsdD(v){ if(v==null) return '—'; return Number(v).toLocaleString('en-US',{style:'currency',currency:'USD'}); } // dollars already (OpenRouter credits API returns $)
 async function refreshUsage(){
@@ -6591,6 +6661,7 @@ async function refreshUsage(){
   cr.textContent='checking…'; bar.title = '';
   let u=null;
   try{ u = await window.voxai.openrouterUsage(); }catch(e){ u={ok:false,error:String(e&&e.message||e)}; }
+  paintFree(u && u.ok ? u.free : null);
   if(!u || !u.ok){
     cr.textContent = (u && u.error === 'no-key') ? 'key not set' : 'could not load balance';
     bar.title = (u && u.error) ? u.error : 'check key / network';

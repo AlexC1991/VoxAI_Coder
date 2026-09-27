@@ -69,6 +69,33 @@ function explainProviderError(message, model) {
 }
 
 /**
+ * Team's one hard rule: the planner does not write the code itself. Told only in words, Opus and
+ * Sonnet as planners wrote every file themselves and the coder was never called, so Team cost
+ * what the planner alone costs. A small fix (a few lines) is still the planner's to make, up to
+ * about 40 lines a run in all: refused one big write, a planner wrote the same file ten lines at a
+ * time. Once the coder has failed twice the planner may take over.
+ * `st` is the run's { coderFails, written }; '' when the call may go ahead.
+ */
+const TEAM_SMALL_CHARS = 600, TEAM_SMALL_LINES = 12, TEAM_RUN_LINES = 40;
+function teamGuard(name, args, st) {
+  const run = st && typeof st === 'object' ? st : { coderFails: Number(st) || 0, written: 0 };
+  if ((run.coderFails || 0) >= 2) return '';
+  const a = args || {};
+  let text = null;
+  if (name === 'write') text = String(a.content || '');
+  else if (name === 'edit') text = String(a.after != null ? a.after : (a.new_string || ''));
+  else if (name === 'patch') text = (Array.isArray(a.edits) ? a.edits : []).map((e) => String((e && e.new) || '')).join('\n');
+  if (text === null) return '';
+  const lines = text.split('\n').length;
+  const small = text.length <= TEAM_SMALL_CHARS && lines <= TEAM_SMALL_LINES;
+  if (small && (run.written || 0) + lines <= TEAM_RUN_LINES) { run.written = (run.written || 0) + lines; return ''; }
+  const why = small ? `you have already written ${run.written} lines yourself in this run, and splitting work into small pieces does not change whose it is`
+    : `this ${name} is ${lines} lines`;
+  return `TEAM: ${why}; that is the coder's job, not yours. Call spawn_agent (role "build") and tell the coder `
+    + 'which file to change, what to change, and how to check it. Make only small fixes (a few lines) yourself. Do not retry this call.';
+}
+
+/**
  * The planner's standing orders when a coder is set. Kept short: every token of it is paid
  * at the planner's price on every turn (it sits in the cached head, so mostly at the read price).
  */
@@ -78,7 +105,7 @@ function teamPrompt(coderModel) {
 - Look at what you need, then write a short numbered plan.
 - Give each step to the coder with spawn_agent (role "build"; the coder model is already chosen): say exactly what to change, in which files, and how to check it (the command to run and what should happen). Name files; do not paste whole files.
 - When it reports back, check the work before the next step: read the changed parts or run git diff and the check. If it is wrong, send it back with the specific fix. If a step fails twice, do it yourself.
-- Make one- or two-line fixes yourself rather than handing them over.
+- Make one- or two-line fixes yourself rather than handing them over. A bigger write, edit or patch from you is refused: that is the coder's.
 - Keep your own messages short. Your tokens cost many times the coder's.`;
 }
 
@@ -92,4 +119,4 @@ function teamEstimate(cost, plannerCap, coderCap) {
   return cost * 0.35 + cost * 0.65 * (q / p);
 }
 
-module.exports = { EXPENSIVE_OUT_PER_M, outPerM, isExpensive, sharesData, projectKey, explainProviderError, teamPrompt, teamEstimate };
+module.exports = { EXPENSIVE_OUT_PER_M, outPerM, isExpensive, sharesData, projectKey, explainProviderError, teamPrompt, teamGuard, teamEstimate };

@@ -2387,6 +2387,38 @@ async function drain(gen) {
     check('a model with no label joins its maker; others keep their one name', p('mistralai/mistral-x') === 'Mistral' && p('anthropic/claude-opus-5.5') === 'Anthropic', [p('mistralai/mistral-x'), p('anthropic/claude-opus-5.5')]);
   }
 
+  // ------------------------------------------------------------------ [TD]
+  console.log('\n[TD] Team hands the writing to the coder; free models: a way on, and today\'s count; idle browsers sleep');
+  {
+    const T = require(path.join(ROOT, 'src/backend/team.js'));
+    const A = read('src/backend/agent.js'), M = read('src/main/main.js'), H = read('src/renderer/index.html'), O = read('src/backend/providers/openrouter.js');
+    const big = 'line\n'.repeat(30);
+    check('the planner\'s big write, edit or patch is refused with where to send it; a small fix is not', /spawn_agent/.test(T.teamGuard('write', { content: big }, 0))
+      && !!T.teamGuard('edit', { after: big }, 0) && !!T.teamGuard('patch', { edits: [{ old: 'a', new: big }] }, 0)
+      && T.teamGuard('edit', { after: 'x = 1;' }, 0) === '' && T.teamGuard('shell', { command: 'npm test' }, 0) === '', 'guard');
+    check('after the coder fails twice the planner may do the work itself', T.teamGuard('write', { content: big }, 2) === '', 'fails');
+    const st = { coderFails: 0, written: 0 }, ten = 'a\n'.repeat(9) + 'a';
+    const five = [1, 2, 3, 4, 5].map(() => T.teamGuard('write', { content: ten }, st));
+    check('small pieces add up: about 40 lines a run, then the rest is the coder\'s (a planner wrote a refused file ten lines at a time)', five.slice(0, 4).every((x) => x === '') && /splitting work into small pieces/.test(five[4]), five.map((x) => !!x));
+    check('the agent applies the rule to the planner only, and counts coder runs that did not finish', A.includes('if (coderModel && !isSubAgent) {\n        const msg = teamGuard(tc.name, args, teamRun);')
+      && A.includes("if (coderModel) teamRun.coderFails += subs.filter((s) => !s || s.ok === false).length;") && /refused: that is the coder's/.test(T.teamPrompt('x/y')), 'agent');
+    check('a free model\'s error offers: try again (busy), the paid version, another free model', H.includes('function freeWayOut(msg){') && H.includes("actions: live ? freeWayOut(msg) : []")
+      && H.includes("acts.push({ label: 'Try again', onClick: continueRun });") && H.includes("label: 'Use the paid version'") && H.includes("acts.push({ label: 'Pick another free model'"), 'wayout');
+    check('free requests are counted per UTC day when OpenRouter takes them, kept on disk, shown with the day\'s cap', O.includes('function noteFree(model) {') && (O.match(/noteFree\(model\);/g) || []).length === 2
+      && M.includes("path.join(userData(), 'free-usage.json')") && M.includes('cap: acctTotal != null ? (acctTotal >= 10 ? 1000 : 50)') && H.includes('function paintFree(f){') && H.includes('id="freeTxt"'), 'free');
+    const OR = require(path.join(ROOT, 'src/backend/providers/openrouter.js'));
+    const n0 = OR.freeUse.n; OR.freeUse.day = new Date().toISOString().slice(0, 10);
+    check('the counter only counts :free models', (() => { const src = O.slice(O.indexOf('function noteFree'), O.indexOf('async function chatCompletions')); const f = new Function('freeUse', src + '\nnoteFree("a/b:free"); noteFree("a/b"); return freeUse.n;'); return f({ day: OR.freeUse.day, n: 0, onChange: null }) === 1; })(), n0);
+    const SPl = read('src/main/split.js'), PRE = read('src/preload/preload.js');
+    check('a dialog or menu in the page is not covered by the preview or split panes: they step aside and a snapshot stands in', H.includes("const OVERLAY_OPEN = '.modal-bg.show, .share-bg, .chip.open';")
+      && H.includes('const shots = await window.voxai.split.overlay(true);') && H.includes('#overlayShots{position:fixed;inset:0;z-index:30;pointer-events:none}')
+      && M.includes("ipcMain.handle('overlay:hold', async (e, on) => {") && M.includes('if (overlayHeld) { v.setVisible(false); continue; }') && M.includes('split.hold(dragHeld || overlayHeld)')
+      && SPl.includes('function shown() {') && PRE.includes("overlay: (on) => ipcRenderer.invoke('overlay:hold', !!on),"), 'overlay');
+    check('the session on show gets its own browser in the preview as soon as it has one (it showed a blank page)', M.includes('    if (sid === shownSid) showBrowserOf(sid);'), 'shown');
+    check('a parked browser sleeps when no run uses it and wakes for a run or when shown', M.includes('function napBrowser(v, asleep) {') && M.includes('napBrowser(v, !browserInUse(v));')
+      && M.includes('        stackBrowser(v, true);\n        napBrowser(v, false);') && M.includes('    napBrowsers();   // this session\'s browser wakes for the run') && M.includes('        napBrowsers();   // and sleeps again once nothing is using it'), 'nap');
+  }
+
   // ------------------------------------------------------------------ [SZ]
   console.log('\n[SZ] what every request starts with is smaller');
   {

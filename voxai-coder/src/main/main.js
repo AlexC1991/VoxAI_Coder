@@ -611,6 +611,7 @@ let previewRect = null;
  * browser tools and screenshots work on them unseen. browserV is always the one on show.
  */
 let BROWSER_PREFS = null;
+let overlayHeld = false, dragHeld = false;   // a dialog is open in the page / a session is being dragged
 let defaultBrowser = null;              // before any session has its own
 const sessionBrowsers = new Map();      // session id -> WebContentsView
 let shownSid = '';
@@ -659,8 +660,13 @@ function browserFor(sid) {
   if (!v) {
     v = makeBrowserView();
     v._onTop = null;            // parked (below) until it is the one on show
+    v._sid = sid;
     sessionBrowsers.set(sid, v);
     stackBrowser(v, false);
+    // The session on show got its browser only now, mid-run: the preview has to switch to it.
+    // It stayed on the empty default one, and opening the preview showed a blank page while its
+    // tab strip listed the agent's page. Found in a live test.
+    if (sid === shownSid) showBrowserOf(sid);
   }
   return v;
 }
@@ -711,6 +717,27 @@ function wakeParked(v) {
   if (!v || v._onTop !== false || !v._park || v._park.isDestroyed()) return;
   try { const c = v._park.contentView; c.removeChildView(v); c.addChildView(v); } catch {}
 }
+/** Is a run going in this session (or, for the browser no session owns, in any)? */
+function browserInUse(v) {
+  const sid = v && v._sid;
+  for (const k of controllers.keys()) if (!sid || k.startsWith(sid + ':')) return true;
+  return false;
+}
+/**
+ * A parked browser with nobody using it sleeps: hidden and throttled, so a game left running in
+ * it stops using the CPU once the run is over. It wakes when a run starts in its session or
+ * when it is shown. A view hidden in an off-screen window does not draw again on its own when
+ * shown, so waking puts it back in its window as well (wakeParked).
+ */
+function napBrowser(v, asleep) {
+  if (!v || v._asleep === asleep) return;
+  v._asleep = asleep;
+  try { v.webContents.setBackgroundThrottling(asleep); } catch {}
+  try { v.setVisible(!asleep); } catch {}
+  if (!asleep) wakeParked(v);
+}
+/** Runs started or ended: wake the browsers that are needed, put the rest to sleep. */
+function napBrowsers() { layoutAtlas(); }
 function unpark(v) { try { if (v && v._park && !v._park.isDestroyed()) v._park.destroy(); } catch {} if (v) v._park = null; }
 /** The main pane now shows this session: the preview shows its browser. */
 function showBrowserOf(sid) {
@@ -779,6 +806,8 @@ function layoutAtlas() {
       if (v === browserV && showing) {
         const r = previewRect;
         stackBrowser(v, true);
+        napBrowser(v, false);
+        if (overlayHeld) { v.setVisible(false); continue; }
         v.setBounds({ x: Math.max(0, Math.round(r.x)), y: Math.max(0, Math.round(r.y)), width: Math.max(20, Math.round(r.width)), height: Math.max(20, Math.round(r.height)) });
         try { if (typeof v.setBorderRadius === 'function') v.setBorderRadius(6); } catch {}
         v.setVisible(true);
@@ -786,7 +815,7 @@ function layoutAtlas() {
         stackBrowser(v, false);
         try { const p = v._park; if (p && !p.isDestroyed()) { const b = p.getContentBounds(); if (b.width !== under.width || b.height !== under.height) p.setContentBounds({ x: PARK_AT, y: PARK_AT, width: under.width, height: under.height }); } } catch {}
         v.setBounds(under);
-        v.setVisible(true);
+        napBrowser(v, !browserInUse(v));
       }
     }
   } catch (e) {
@@ -867,7 +896,28 @@ app.whenReady().then(() => {
   // Split panes (split.js). The window's own page lays them out; a pane can close itself.
   ipcMain.handle('split:add', (_e, a) => (split ? split.add(a && typeof a === 'object' ? a.sid : a, a && a.at) : { ok: false, error: 'not ready' }));
   ipcMain.handle('split:swap', (_e, { at, sid } = {}) => (split ? split.swap(at, sid) : { ok: false, error: 'not ready' }));
-  ipcMain.on('split:hold', (e, on) => { if (split && e.sender === chatWebContents()) split.hold(!!on); });
+  ipcMain.on('split:hold', (e, on) => { if (split && e.sender === chatWebContents()) { dragHeld = !!on; split.hold(dragHeld || overlayHeld); } });
+  // A dialog or menu is open in the window's page. The preview and the split panes are views laid
+  // over the page, so they covered its dialogs ("New session" cut in half by the preview). They
+  // step aside while it is open, and the page shows a snapshot of each in its place, under the
+  // dialog's dimming, so nothing seems to vanish.
+  ipcMain.handle('overlay:hold', async (e, on) => {
+    if (e.sender !== chatWebContents()) return [];
+    on = !!on;
+    if (on === overlayHeld) return [];
+    if (!on) { overlayHeld = false; if (split) split.hold(dragHeld); layoutAtlas(); return []; }
+    const views = [];
+    if (browserV && browserV._onTop && atlasOpen) { try { if (browserV.getVisible()) views.push({ view: browserV, rect: browserV.getBounds() }); } catch {} }
+    if (split && split.active()) views.push(...split.shown());
+    const shots = [];
+    for (const { view, rect } of views) {
+      try { const img = await view.webContents.capturePage(); shots.push({ rect, url: img.toDataURL() }); } catch {}
+    }
+    overlayHeld = true;
+    if (split) split.hold(true);
+    layoutAtlas();
+    return shots;
+  });
   ipcMain.on('split:main', (e, sid) => { if (split && e.sender === chatWebContents()) { split.setMain(sid); saveSplitLayout(); showBrowserOf(sid); } });
   // A tab in the preview: show that session's page (the main pane stays where it is).
   ipcMain.on('preview:tab', (e, sid) => {
@@ -1228,6 +1278,7 @@ app.whenReady().then(() => {
     const runT0 = Date.now();   // for "Worked for ..." when it ends
     const ctl = new AbortController();
     controllers.set(runKey, ctl);
+    napBrowsers();   // this session's browser wakes for the run
     const w = win();
 
     const askPermission = askPermissionFor(sessionId, runKey);
@@ -1312,6 +1363,7 @@ app.whenReady().then(() => {
         // it: nothing is left waiting for an answer that can no longer go anywhere.
         for (const [k, p] of pendingInputs) if (p.runKey === runKey) { pendingInputs.delete(k); try { p.resolve({ answer: null, cancelled: true }); } catch {} }
         for (const [k, p] of pendingPerms) if (p.runKey === runKey) { pendingPerms.delete(k); try { p.resolve(false, false); } catch {} }
+        napBrowsers();   // and sleeps again once nothing is using it
         disarmDesktopEsc(runKey);   // Esc goes back to the apps
         // flush any pending debounced save now (dupe with the final save below is fine)
         if (saveTimers.has(sessionId)) { clearTimeout(saveTimers.get(sessionId)); saveTimers.delete(sessionId); }
@@ -1588,6 +1640,13 @@ function orAuth() { const s = getSettings(false); if (!s.openrouterKey && !s.man
 
 // Balance (credits) — account data via the MANAGEMENT key (regular keys get 403),
 // key-quota via the normal chat key.
+// Today's requests to free models (providers/openrouter.js counts them), kept across restarts.
+const freeUse = require('../backend/providers/openrouter').freeUse;
+{
+  const file = () => path.join(userData(), 'free-usage.json');
+  try { const j = JSON.parse(fs.readFileSync(file(), 'utf8')); if (j && j.day) { freeUse.day = String(j.day); freeUse.n = Number(j.n) || 0; } } catch {}
+  freeUse.onChange = (v) => { try { fs.writeFileSync(file(), JSON.stringify(v)); } catch {} };
+}
 ipcMain.handle('openrouter:usage', async () => {
   const auth = orAuth();
   if (!auth) return { ok: false, error: 'no-key' };
@@ -1633,6 +1692,10 @@ ipcMain.handle('openrouter:usage', async () => {
     out.creditsBy = credBy;       // which key answered /credits (mgmt | chat | null)
     out.keyStatus = keyStatus;
     out.raw = { credits: cred, key };
+    // OpenRouter's free allowance: 50 requests a day, 1,000 once $10 of credit has been bought.
+    const today = new Date().toISOString().slice(0, 10);
+    out.free = { used: freeUse.day === today ? freeUse.n : 0,
+      cap: acctTotal != null ? (acctTotal >= 10 ? 1000 : 50) : (key.is_free_tier ? 50 : null) };
     return out;
   } catch (e) {
     return { ok: false, error: String((e && e.message) || e) };
