@@ -2175,7 +2175,7 @@ async function drain(gen) {
     check('what happens in a session reaches every pane; an answer in one clears the others', (MAIN.match(/allRenderers\(\)/g) || []).length >= 12
       && MAIN.includes("allRenderers().send('agent:perm-done', { permId, allowed: !!allowed })") && MAIN.includes("allRenderers().send('agent:input-done', { inputId })")
       && HTMLs.includes('if (window.voxai.onInputDone) window.voxai.onInputDone('), 'wiring');
-    check('side by side the preview never opens: the agent\'s page loads under the window\'s own page', MAIN.includes("if ((split && split.active()) || v !== browserV) { layoutAtlas(); broadcastTabs(); return; }")
+    check('side by side the preview never opens: the agent\'s page loads parked, off screen', MAIN.includes("if ((split && split.active()) || v !== browserV) { layoutAtlas(); broadcastTabs(); return; }")
       && MAIN.includes("if (split && split.active()) return { ok: false, error: 'the preview is off while sessions are side by side' };")
       && MAIN.includes('stackBrowser(v, false);') && MAIN.includes('(hasPage(bv) || (bv === browserV && atlasOpen) || (split && split.active()))')
       && HTMLs.includes("  if (splitOn()) { toast('The preview is off while sessions are side by side.'); return; }"), 'preview');
@@ -2352,8 +2352,14 @@ async function drain(gen) {
     const M = read('src/main/main.js'), H = read('src/renderer/index.html'), CUi = read('src/backend/cu/index.js');
     check('each session has its own browser; a run opens its pages there', M.includes('function browserFor(sid) {') && M.includes('sessionBrowsers.set(sid, v);')
       && M.includes('onOpenUrl: (url) => { try { atlasOpenUrl(url, sess.workdir, sessionId); } catch {} },') && M.includes('const bv = browserFor(sessionId);'), 'per session');
-    check('the preview shows the main pane\'s session; the others draw under the page, unseen', M.includes('split.setMain(sid); saveSplitLayout(); showBrowserOf(sid);')
-      && M.includes('stackBrowser(v, false);') && M.includes('v.setVisible(hasPage(v));'), 'shown');
+    check('the preview shows the main pane\'s session; the others are parked off screen, unseen', M.includes('split.setMain(sid); saveSplitLayout(); showBrowserOf(sid);')
+      && M.includes('stackBrowser(v, false);') && M.includes('parkWindow(v).contentView.addChildView(v);'), 'shown');
+    check('a parked browser keeps drawing (a game\'s requestAnimationFrame runs): own window off screen, never hidden, woken after each load', M.includes('const PARK_AT = -20000;')
+      && /new BaseWindow\(\{ x: PARK_AT, y: PARK_AT,[^}]*skipTaskbar: true, focusable: false/.test(M) && M.includes("wc.on('did-navigate', () => wakeParked(v));")
+      && M.includes('    if (!onTop) wakeParked(v);') && M.includes('      v.setVisible(true);\n      v.setBounds({ x: 0, y: 0, width: parkSize.width, height: parkSize.height });')
+      && !M.includes('v.setVisible(hasPage(v));'), 'park');
+    check('the parked windows close with the app, so it still quits', M.includes("w.on('closed', () => { for (const v of [defaultBrowser, ...sessionBrowsers.values()]) unpark(v); });")
+      && M.includes('  unpark(v);\n  try { v.webContents.close(); } catch {}'), 'quit');
     check('a deleted session\'s browser goes with it', M.includes('    if (split) split.remove(id);\n    dropBrowser(id);'), 'drop');
     check('the preview lists a tab per session page and switches on a click', M.includes('tabs: previewTabs()') && M.includes("ipcMain.on('preview:tab'")
       && H.includes('function paintPreviewTabs(tabs){') && H.includes('id="ppTabs"'), 'tabs');

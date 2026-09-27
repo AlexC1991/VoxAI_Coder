@@ -328,6 +328,8 @@ function createWindow() {
   };
   w.on('maximize', reportState);
   w.on('unmaximize', reportState);
+  // The parked browsers' windows go with the app's, or the app would never quit.
+  w.on('closed', () => { for (const v of [defaultBrowser, ...sessionBrowsers.values()]) unpark(v); });
   if (attention) attention.wireWindow(w);
   // Native application menu (File / View / Help) — Alt reveals it on Windows
   const template = [
@@ -492,6 +494,9 @@ function attachSplitViews(w) {
   const browserPrefs = {
     contextIsolation: true, nodeIntegration: false, sandbox: true,
     webSecurity: true, allowRunningInsecureContent: false,
+    // Each session's browser keeps running while it sits under the chat: without this a game's
+    // requestAnimationFrame loop never fires there and the agent sees a frozen page.
+    backgroundThrottling: false,
   };
   rootV = new View();
   chatV = new WebContentsView({ webPreferences: chatPrefs });
@@ -617,6 +622,7 @@ function makeBrowserView() {
     // Keep the preview's address bar and tabs honest as the page navigates (links, redirects).
     const told = () => { if (v === browserV) broadcastPreviewState(); else broadcastTabs(); };
     wc.on('did-navigate', told);
+    wc.on('did-navigate', () => wakeParked(v));
     wc.on('did-navigate-in-page', told);
     wc.on('page-title-updated', () => broadcastTabs());
     // The preview sits inside the app's own chrome, so its scrollbars have to look like the
@@ -652,23 +658,60 @@ function browserFor(sid) {
   let v = sessionBrowsers.get(sid);
   if (!v) {
     v = makeBrowserView();
-    rootV.addChildView(v, 0);   // under the window's page until it is the one on show
-    v._onTop = false;
+    v._onTop = null;            // parked (below) until it is the one on show
     sessionBrowsers.set(sid, v);
+    stackBrowser(v, false);
   }
   return v;
 }
 const hasPage = (v) => { try { const u = v.webContents.getURL(); return !!u && u !== 'about:blank'; } catch { return false; } };
-/** Above the window's page (on show in the preview) or under it (drawing, unseen). */
+/**
+ * Where a browser not on show waits: a window of its own, off every screen. Under the chat it
+ * would be covered, and Chromium neither calls a covered page visible nor draws it more than
+ * about once a second -- a game the agent is testing there never gets requestAnimationFrame
+ * and looks frozen. Off screen it is drawn for real, and screenshots of it still work. One
+ * window each, so no browser covers another. A parked view is never hidden: once a view in an
+ * off-screen window is hidden it does not draw again when shown, so it is shown before it goes
+ * in and a fresh window is made each time it is parked.
+ */
+// Far off every screen, but not at -32000: that is where Windows puts a minimized window, and
+// Chromium then calls the page hidden again.
+const PARK_AT = -20000;
+let parkSize = { width: 720, height: 900 };
+function parkWindow(v) {
+  if (v._park && !v._park.isDestroyed()) return v._park;
+  const { BaseWindow } = require('electron');
+  const p = new BaseWindow({ x: PARK_AT, y: PARK_AT, width: parkSize.width, height: parkSize.height, show: false, frame: false, skipTaskbar: true, focusable: false, resizable: false });
+  try { p.showInactive(); } catch {}
+  v._park = p;
+  return p;
+}
+/** Above the window's page (on show in the preview) or parked off screen (drawing, unseen). */
 function stackBrowser(v, onTop) {
   if (!rootV || !v || v._onTop === onTop) return;
   try {
-    rootV.removeChildView(v);
-    const at = onTop ? Math.max(0, (rootV.children || []).indexOf(chatV)) + 1 : 0;
-    rootV.addChildView(v, at);
+    if (v._onTop === false && v._park && !v._park.isDestroyed()) { v._park.contentView.removeChildView(v); unpark(v); }
+    else if (v._onTop === true) rootV.removeChildView(v);
+    if (onTop) rootV.addChildView(v, Math.max(0, (rootV.children || []).indexOf(chatV)) + 1);
+    else {
+      v.setVisible(true);
+      v.setBounds({ x: 0, y: 0, width: parkSize.width, height: parkSize.height });
+      parkWindow(v).contentView.addChildView(v);
+    }
     v._onTop = onTop;
+    if (!onTop) wakeParked(v);
   } catch { /* stays where it was */ }
 }
+/**
+ * A page loaded into a parked browser starts out hidden (nothing tells it the off-screen window
+ * is showing it), and a hidden page draws no frames. Taking the view out of its window and
+ * putting it back tells it.
+ */
+function wakeParked(v) {
+  if (!v || v._onTop !== false || !v._park || v._park.isDestroyed()) return;
+  try { const c = v._park.contentView; c.removeChildView(v); c.addChildView(v); } catch {}
+}
+function unpark(v) { try { if (v && v._park && !v._park.isDestroyed()) v._park.destroy(); } catch {} if (v) v._park = null; }
 /** The main pane now shows this session: the preview shows its browser. */
 function showBrowserOf(sid) {
   shownSid = String(sid || '');
@@ -684,7 +727,8 @@ function dropBrowser(sid) {
   if (!v) return;
   sessionBrowsers.delete(sid);
   if (browserV === v) browserV = defaultBrowser;
-  try { rootV.removeChildView(v); } catch {}
+  try { if (v._onTop) rootV.removeChildView(v); } catch {}
+  unpark(v);
   try { v.webContents.close(); } catch {}
   layoutAtlas(); broadcastPreviewState();
 }
@@ -725,10 +769,11 @@ function layoutAtlas() {
 
     const sideBySide = !!(split && split.active());
     const showing = !sideBySide && atlasOpen && previewRect && previewRect.width > 20 && previewRect.height > 20;
-    // Out of sight but drawing: a hidden view captures blank, and one laid out past the
-    // window's edge never draws a frame. So the browsers not on show sit UNDER the window's
-    // own page, the size a preview would be -- side by side, all of them.
+    // Out of sight but drawing: a hidden view captures blank, and one under the window's page
+    // is barely drawn. So the browsers not on show are parked in windows off screen, the size
+    // a preview would be (see parkWindow).
     const under = { x: 0, y: 0, width: Math.max(320, Math.round(W / 2)), height: H };
+    parkSize = { width: under.width, height: under.height };
     for (const v of [defaultBrowser, ...sessionBrowsers.values()]) {
       if (!v) continue;
       if (v === browserV && showing) {
@@ -739,8 +784,9 @@ function layoutAtlas() {
         v.setVisible(true);
       } else {
         stackBrowser(v, false);
+        try { const p = v._park; if (p && !p.isDestroyed()) { const b = p.getContentBounds(); if (b.width !== under.width || b.height !== under.height) p.setContentBounds({ x: PARK_AT, y: PARK_AT, width: under.width, height: under.height }); } } catch {}
         v.setBounds(under);
-        v.setVisible(hasPage(v));
+        v.setVisible(true);
       }
     }
   } catch (e) {
