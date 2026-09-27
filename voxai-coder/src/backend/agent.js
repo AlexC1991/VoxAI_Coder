@@ -980,7 +980,7 @@ async function* runAgent(opts) {
         defaultSubTimeoutMs: coderModel ? Math.max(15 * 60 * 1000, Number(subagentTimeoutMs) || 0) : subagentTimeoutMs,
         // Sub-agents spend the PARENT's remaining allowance, never a fresh one.
         // Rebuilt each turn so a fan-out later in the run sees the depleted figure.
-        budgetRemaining: Math.max(0, budget - spent), priceIn, priceOut, modelVision, webSearch },
+        budgetRemaining: Math.max(0, budget - spent), priceIn, priceOut, modelVision, webSearch, onOpenUrl, onAttachAtlas },
       // mcpServers were never passed, so no configured MCP server could be seen.
       getSettings: () => ({ access, mcpServers: mcpServers || {} }),
       getAccess: () => access,
@@ -1379,7 +1379,15 @@ async function* runAgent(opts) {
           const subs = (result.task_results && Array.isArray(result.task_results))
             ? result.task_results
             : [result];
-          if (coderModel) { teamRun.coderFails += subs.filter((s) => !s || s.ok === false).length; teamRun.refused = 0; }
+          if (coderModel) {
+            teamRun.coderFails += subs.filter((s) => !s || s.ok === false).length; teamRun.refused = 0;
+            // Something you can see, built and never looked at: say so to the planner, which
+            // otherwise took "done" on trust (a Breakout game checked on a stubbed canvas).
+            const unseen = subs.filter((s) => s && s.ok !== false && !s.browser_checks
+              && (s.files_changed || []).some((f) => /\.(html?|css|jsx?|tsx?|vue|svelte)$/i.test(String((f && f.path) || ''))));
+            if (unseen.length) result.team_note = 'The coder changed files you can see but never opened them in the browser. '
+              + 'Send it back (spawn_agent with resume: its subId) to open the result, use it like a person would, and fix what looks or plays wrong.';
+          }
           let subIn = 0, subOut = 0, subCR = 0, subCost = 0;
           for (const s of subs) {
             const u = s && s.usage || {};

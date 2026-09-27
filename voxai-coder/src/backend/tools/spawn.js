@@ -32,7 +32,9 @@ const bg = require('../background');
 // web_fetch / web_search change nothing on disk, so read-only workers get them: without
 // them an `explore` agent could not research anything outside the repo at all.
 const READ_TOOLS = ['read', 'grep', 'glob', 'search', 'rag', 'doc_rag', 'lsp', 'fs', 'todo', 'web_fetch', 'web_search'];
-const WRITE_TOOLS = READ_TOOLS.concat(['write', 'edit', 'patch', 'shell', 'node_repl', 'memory']);
+// The browser too: Team tells the planner that testing in the browser is the coder's job, and
+// without it the coder "tested" a Breakout game on a stubbed canvas and nobody saw it play.
+const WRITE_TOOLS = READ_TOOLS.concat(['write', 'edit', 'patch', 'shell', 'node_repl', 'memory', 'computer']);
 
 const ROLES = {
   explore: {
@@ -46,8 +48,10 @@ const ROLES = {
     tools: WRITE_TOOLS,
     access: null,            // inherits the parent's access level
     brief: 'You are an implementation agent. Make the change you were asked for, verify it (run the '
-      + 'tests or a syntax check), and report exactly which files you changed and how. Stay strictly '
-      + 'inside the scope you were given — another agent may be working nearby.',
+      + 'tests or a syntax check), and report exactly which files you changed and how. If what you made '
+      + 'can be seen (a page, a game, an app screen), open it with the computer tool and use it the way a '
+      + 'person would: click, type, play. Look at the screenshots, fix what looks or behaves wrong, and say '
+      + 'what you saw. Stay strictly inside the scope you were given — another agent may be working nearby.',
   },
   review: {
     tools: READ_TOOLS,
@@ -216,6 +220,9 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
         compactThreshold: agentOpts.compactThreshold,
         hardFraction: agentOpts.hardFraction,
         isSubAgent: true,
+        // The session's own browser: the worker's checks show in its preview, one action at a time.
+        onOpenUrl: agentOpts.onOpenUrl || null,
+        onAttachAtlas: agentOpts.onAttachAtlas || null,
       });
       if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
         timer = setTimeout(() => { timedOut = true; try { subCtl.abort(); } catch {} }, timeoutMs);
@@ -249,6 +256,7 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
     const budgetHit = events.find((e) => e.type === 'budget_reached');
     const limitHit = events.find((e) => e.type === 'limit_reached');
     const toolCount = events.filter((e) => e.type === 'tool_start').length;
+    const browserChecks = events.filter((e) => e.type === 'tool_start' && e.name === 'computer').length;
 
     // The receipt. Latest operation per path wins, so a file edited three times
     // appears once in its final state rather than three times.
@@ -307,6 +315,7 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
       stopReason,
       complete: stopReason === 'completed',
       tools: toolCount,
+      browser_checks: browserChecks,
       elapsedMs: Date.now() - t0,
       files_changed: filesChanged,
       ...(failedVerify.length ? { needs_attention: failedVerify.map((f) => f.path) } : {}),

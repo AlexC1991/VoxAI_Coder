@@ -2396,6 +2396,12 @@ async function drain(gen) {
     check('the planner\'s big write, edit or patch is refused with where to send it; a small fix is not', /spawn_agent/.test(T.teamGuard('write', { content: big }, 0))
       && !!T.teamGuard('edit', { after: big }, 0) && !!T.teamGuard('patch', { edits: [{ old: 'a', new: big }] }, 0)
       && T.teamGuard('edit', { after: 'x = 1;' }, 0) === '' && T.teamGuard('shell', { command: 'npm test' }, 0) === '', 'guard');
+    const SPw = read('src/backend/tools/spawn.js');
+    check('the coder can use the session\'s browser and is told to try what it built like a person would (it had no browser, so Team\'s "the coder tests it" could not happen)',
+      SPw.includes("const WRITE_TOOLS = READ_TOOLS.concat(['write', 'edit', 'patch', 'shell', 'node_repl', 'memory', 'computer']);")
+      && SPw.includes('onAttachAtlas: agentOpts.onAttachAtlas || null,') && A.includes('priceIn, priceOut, modelVision, webSearch, onOpenUrl, onAttachAtlas },')
+      && /open it with the computer tool and use it the way a/.test(SPw) && SPw.includes('browser_checks: browserChecks,'), 'coder browser');
+    check('visual work the coder never opened is flagged to the planner, to send it back', A.includes('if (unseen.length) result.team_note =') && A.includes('/\\.(html?|css|jsx?|tsx?|vue|svelte)$/i.test('), 'unseen');
     const lk = { coderFails: 0, written: 0, looks: 0 }; const looks = [1, 2, 3, 4].map(() => T.teamGuard('computer', { action: 'screenshot' }, lk));
     check('the planner gets a few browser actions; testing past that is the coder\'s (Sonnet took nine screenshots itself)', looks.slice(0, 3).every((x) => x === '') && /testing in the browser is the coder/.test(looks[3]) && /test in the browser and report/.test(T.teamPrompt('x/y')), looks.map((x) => !!x));
     check('after the coder fails twice the planner may do the work itself', T.teamGuard('write', { content: big }, 2) === '', 'fails');
@@ -2403,7 +2409,7 @@ async function drain(gen) {
     const five = [1, 2, 3, 4, 5].map(() => T.teamGuard('write', { content: ten }, st));
     check('small pieces add up: about 40 lines a run, then the rest is the coder\'s (a planner wrote a refused file ten lines at a time)', five.slice(0, 4).every((x) => x === '') && /splitting work into small pieces/.test(five[4]), five.map((x) => !!x));
     check('the agent applies the rule to the planner only, and counts coder runs that did not finish', A.includes('if (coderModel && !isSubAgent) {\n        const msg = teamGuard(tc.name, args, teamRun);')
-      && A.includes("if (coderModel) { teamRun.coderFails += subs.filter((s) => !s || s.ok === false).length; teamRun.refused = 0; }") && /refused: that is the coder's/.test(T.teamPrompt('x/y')), 'agent');
+      && A.includes("teamRun.coderFails += subs.filter((s) => !s || s.ok === false).length; teamRun.refused = 0;") && /refused: that is the coder's/.test(T.teamPrompt('x/y')), 'agent');
     const rf = { coderFails: 0, written: 0, looks: 3 }; const r1 = T.teamGuard('computer', {}, rf), r2 = T.teamGuard('computer', {}, rf);
     check('a second refusal in a row is said plainly: the next call must be spawn_agent (a planner kept trying the browser)', !/refused \d+ times/.test(r1) && /refused 2 times in a row\. Stop trying/.test(r2), [r1.slice(0, 40), r2.slice(0, 40)]);
     check('a model OpenRouter refuses to VoxAI is remembered a week, greyed in the picker with why, kept off the coder list; a run on it that works clears it',
