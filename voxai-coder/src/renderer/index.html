@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-691G4EVeEUoC3YmewfYklSF3Vpp9eiGbfSouGdCwL+8='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-mqGxsU5aQ3/t6n2lVvBJT/4KkSf8KsDbn8tu46QdjqA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -112,7 +112,16 @@ button{font-family:inherit} ::selection{background:rgba(200,169,97,.26)}
    truncate (the path gives way first) and the stats never shrink. */
 .workhead{height:44px;flex:none;display:flex;align-items:center;gap:10px;padding:0 18px;border-bottom:1px solid var(--edge);min-width:0;overflow:hidden}
 .workhead .t{font-weight:700;font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:60px;flex:0 1 auto}
-.workhead .sub{font-family:"Sometype Mono",monospace;font-size:13px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 8 auto}
+.workhead .sub{font-family:"Sometype Mono",monospace;font-size:13px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto}
+/* The session's folder: a link to it in File Explorer. The folder mark and the arrow say it opens. */
+.wh-dir{display:inline-flex;align-items:center;gap:6px;min-width:0;flex:0 8 auto;margin-left:-7px;padding:3px 7px;border:0;border-radius:6px;background:none;color:var(--faint);cursor:pointer;font:inherit}
+.wh-dir svg{flex:none}
+.wh-dir .wh-dir-go{opacity:0;transform:translate(-2px,2px);transition:opacity .15s,transform .15s}
+.wh-dir:hover,.wh-dir:focus-visible{background:var(--panel2);color:var(--gold)}
+.wh-dir:hover .sub,.wh-dir:focus-visible .sub{color:var(--ink);text-decoration:underline;text-decoration-color:var(--edge2);text-underline-offset:3px}
+.wh-dir:hover .wh-dir-go,.wh-dir:focus-visible .wh-dir-go{opacity:1;transform:none}
+.wh-dir:focus-visible{outline:1px solid var(--gold);outline-offset:1px}
+.wh-dir:has(.sub:empty){display:none}
 .workhead .pp-toggle,.workhead .dot{flex:none}
 .workhead .wh-sp{flex:1}
 .workhead .wh-branch{flex:none;font-family:"Sometype Mono",monospace;font-size:12px;color:var(--gold);background:rgba(200,169,97,.08);padding:2px 8px;border-radius:5px;white-space:nowrap}
@@ -917,6 +926,49 @@ tests"). Scroll the row instead of breaking words:
 .proj-more{align-self:flex-start;border:0;background:none;color:var(--sub);font:12px Chivo,sans-serif;cursor:pointer;padding:4px 8px;border-radius:5px}
 .proj-more:hover{color:var(--ink);background:var(--panel2)}
 @media (prefers-reduced-motion: reduce){ .proj-b,.proj-in,.proj-h .chev{transition:none} }
+
+/* ---- sessions side by side (main/split.js) ----
+   2: two columns. 3: this one on the left, two stacked on the right. 4: two by two.
+   The other panes are separate pages slotted into .split-slot holes. */
+html[data-split] .main{display:grid;grid-template-columns:auto minmax(0,1fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(0,1fr)}
+html[data-split] .side{grid-row:1 / 3;grid-column:1}
+html[data-split] .work{grid-column:2;grid-row:1 / 3;min-height:0}
+html[data-split="4"] .work{grid-row:1}
+#splitSlots{display:contents}
+.split-slot{position:relative;min-width:0;min-height:0;background:var(--bg);display:flex;align-items:center;justify-content:center;border:0 solid var(--edge2)}
+.split-wait{font:12px "Sometype Mono",monospace;color:var(--faint)}
+html[data-split="2"] .split-slot[data-i="0"]{grid-column:3;grid-row:1 / 3;border-left-width:1px}
+html[data-split="3"] .split-slot[data-i="0"]{grid-column:3;grid-row:1;border-left-width:1px}
+html[data-split="3"] .split-slot[data-i="1"]{grid-column:3;grid-row:2;border-left-width:1px;border-top-width:1px}
+html[data-split="4"] .split-slot[data-i="0"]{grid-column:3;grid-row:1;border-left-width:1px}
+html[data-split="4"] .split-slot[data-i="1"]{grid-column:2;grid-row:2;border-top-width:1px}
+html[data-split="4"] .split-slot[data-i="2"]{grid-column:3;grid-row:2;border-left-width:1px;border-top-width:1px}
+/* No preview while side by side, here or in a pane. */
+html[data-split] #ppToggle,html[data-split] .pp-divider,html[data-split] .preview-panel,
+.pane-mode #ppToggle,.pane-mode .pp-divider,.pane-mode .preview-panel{display:none!important}
+/* A pane: one session, no title bar or session list; its title and a close button on top. */
+.pane-mode .titlebar,.pane-mode .side{display:none!important}
+html[data-split] .composer-keys,.pane-mode .composer-keys{display:none}
+.pane-title{font:700 14px Chivo,sans-serif;color:var(--ink);margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:none;max-width:45%}
+.pane-x{flex:none;display:none;align-items:center;justify-content:center;width:26px;height:26px;border:0;border-radius:6px;background:none;color:var(--sub);cursor:pointer}
+.pane-mode .pane-x{display:inline-flex}
+.pane-x:hover{background:var(--panel2);color:var(--ink)}
+/* The pane with the keyboard: a gold line under its header. */
+html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-shadow:inset 0 -2px 0 var(--gold)}
+.pane-flash .workhead{animation:paneFlash .7s ease}
+@keyframes paneFlash{0%,100%{background:transparent}30%{background:rgba(200,169,97,.16)}}
+/* Dragging a session in: where it will open. */
+.work{position:relative}
+.split-drop{position:absolute;inset:0;z-index:60;pointer-events:none;display:none}
+.split-drop.on{display:block}
+.split-drop .sd-box{position:absolute;top:10px;bottom:10px;right:10px;width:calc(50% - 15px);border:2px dashed var(--gold);border-radius:12px;background:rgba(200,169,97,.08);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--gold);text-align:center;padding:12px}
+.pane-mode .split-drop .sd-box{left:10px;width:auto}
+.split-drop .sd-box b{font:600 14px Chivo,sans-serif}
+.split-drop .sd-box span{font:12px "Sometype Mono",monospace;color:var(--sub)}
+.split-drop.no .sd-box{border-color:var(--edge2);background:rgba(0,0,0,.25);color:var(--sub)}
+/* In the list: open in a pane. */
+.sess.in-pane{box-shadow:inset 2px 0 0 var(--edge2)}
+.sess.in-pane .s-t::after{content:"side by side";margin-left:8px;font:10.5px "Sometype Mono",monospace;color:var(--faint)}
 </style>
 </head>
 <body>
@@ -962,7 +1014,7 @@ tests"). Scroll the row instead of breaking words:
       </button>
     </div>
     <div class="work" id="screen-work">
-      <div class="workhead"><span class="dot run" id="runDot" style="display:none"></span><h1 class="sr-only" id="sessTitle">New session</h1><span class="sub" id="sessSub"></span><span class="wh-branch" id="cbBranch" hidden></span><span class="wh-sp"></span><span class="workstats" id="statPill" tabindex="0" hidden><span class="stat st-cost"><b id="sessStatCost"></b></span><span class="stat st-tok"><b id="sessStatTok"></b> tokens</span><span class="stat-card" role="tooltip"><span class="stat"><i>Price per 1M</i><b id="sessStatRate"></b></span><span class="stat" id="sessStatCacheWrap" style="display:none"><i>Served from cache</i><b id="sessStatCache"></b></span><span class="stat" id="sessStatBudgetWrap" style="display:none"><i>This run</i><b id="sessStatBudget"></b></span></span></span><button class="pp-toggle ic" id="btnCompact" title="Summarise older turns now"></button><button class="pp-toggle ic" id="ppToggle" title="Toggle preview panel"></button></div>
+      <div class="workhead"><span class="dot run" id="runDot" style="display:none"></span><h1 class="sr-only" id="sessTitle">New session</h1><button type="button" class="wh-dir" id="whDir" title="Open this folder in File Explorer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="sub" id="sessSub"></span><svg class="wh-dir-go" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg></button><span class="wh-branch" id="cbBranch" hidden></span><span class="wh-sp"></span><span class="workstats" id="statPill" tabindex="0" hidden><span class="stat st-cost"><b id="sessStatCost"></b></span><span class="stat st-tok"><b id="sessStatTok"></b> tokens</span><span class="stat-card" role="tooltip"><span class="stat"><i>Price per 1M</i><b id="sessStatRate"></b></span><span class="stat" id="sessStatCacheWrap" style="display:none"><i>Served from cache</i><b id="sessStatCache"></b></span><span class="stat" id="sessStatBudgetWrap" style="display:none"><i>This run</i><b id="sessStatBudget"></b></span></span></span><button class="pp-toggle ic" id="btnCompact" title="Summarise older turns now"></button><button class="pp-toggle ic" id="ppToggle" title="Toggle preview panel"></button><button type="button" class="pane-x" id="btnPaneClose" title="Close this pane (the session keeps going)" aria-label="Close this pane"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button></div>
       <div class="scroll"><div id="thread" style="width:100%;max-width:760px;display:flex;flex-direction:column;padding-bottom:20px">
         <div class="msg" style="color:var(--dim)">Open a folder, pick an OpenRouter model in ⚙ Settings, and ask for code. The agent runs on your own <b style="color:var(--gold)">vox</b> backend — file edits, shell, tests — billed to your OpenRouter key.</div>
       </div></div>
@@ -1040,6 +1092,7 @@ tests"). Scroll the row instead of breaking words:
         <div class="composer-keys" id="cmpKeys"><span>↵ send</span><span>⇧↵ new line</span></div>
       </div></div>
     </div>
+    <div id="splitSlots"></div>
     <!-- Resizable Atlas-style split: real browser pane docked beside the chat.
          Drag the divider (ppDivider) to resize; chat + composer reflow with it. -->
     <div class="pp-divider" id="ppDivider" title="Drag to resize browser"></div>
@@ -1113,6 +1166,7 @@ tests"). Scroll the row instead of breaking words:
     <button type="button" data-set="account" aria-current="page"><svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M15 8l2 2"/></svg>Account</button>
     <button type="button" data-set="spend"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.8 0-3 .9-3 2.1 0 2.9 6 1.4 6 4.3 0 1.2-1.2 2.1-3 2.1-1.4 0-2.6-.6-3-1.6M12 6v2M12 16v2"/></svg>Spending</button>
     <button type="button" data-set="web"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16" y2="16"/></svg>Web search</button>
+    <button type="button" data-set="notify"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>Notifications</button>
     <button type="button" data-set="subs"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="14" width="7" height="7" rx="1.5"/></svg>Sub-agents</button>
     <button type="button" data-set="ctx"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/></svg>Context</button>
     <button type="button" data-set="memory"><svg viewBox="0 0 24 24"><path d="M9 4a3 3 0 0 0-3 3v1a3 3 0 0 0-2 5 3 3 0 0 0 2 5 3 3 0 0 0 6 1V4.5A2.5 2.5 0 0 0 9 4zM15 4a3 3 0 0 1 3 3v1a3 3 0 0 1 2 5 3 3 0 0 1-2 5 3 3 0 0 1-6 1"/></svg>Memory</button>
@@ -1145,6 +1199,13 @@ tests"). Scroll the row instead of breaking words:
       </div>
     </section>
 
+    <section class="set-page" data-set="notify" hidden>
+      <header class="set-top"><h3>Notifications</h3><p>When a session needs you -- an approval or a question -- and VoxAI isn’t the window in front.</p></header>
+      <div class="set-scroll">
+        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Windows notification</div><div class="set-desc">A notification in the corner saying which project needs you and what for. Allow or Deny an approval right from it, or open the session.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntToast" role="switch" aria-checked="false" aria-label="Windows notification"></button></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Taskbar badge</div><div class="set-desc">The taskbar button shows how many are waiting, and flashes when a new one comes in.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntTaskbar" role="switch" aria-checked="false" aria-label="Taskbar badge"></button></div></div></div>
+        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Minimize to the system tray</div><div class="set-desc">Minimizing hides the window to the tray icon instead of the taskbar. Click the icon to bring it back.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntTrayMin" role="switch" aria-checked="false" aria-label="Minimize to the system tray"></button></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Close to the system tray</div><div class="set-desc">Closing the window keeps VoxAI running in the tray, so runs carry on. Quit from the tray icon.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntTrayClose" role="switch" aria-checked="false" aria-label="Close to the system tray"></button></div></div></div>
+      </div>
+    </section>
     <section class="set-page" data-set="subs" hidden>
       <header class="set-top"><h3>Sub-agents</h3><p>Workers the agent can hand self-contained jobs to. They report back and share the run’s spending limit.</p></header>
       <div class="set-scroll">
@@ -1185,6 +1246,11 @@ tests"). Scroll the row instead of breaking words:
 <script src="vendor/vte.browser.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
+// A split pane (main/split.js) is this page with ?pane=<session id>: that session only.
+const PANE = new URLSearchParams(location.search).get('pane') || '';
+if (PANE) document.documentElement.classList.add('pane-mode');
+let SPLIT = { panes: [], max: 4 };   // the sessions open in panes beside the first
+const splitOn = () => !!PANE || SPLIT.panes.length > 0;
 // Access levels: short names for the chip, one plain sentence each for the menu.
 const ACCESS = ['ask','edit','test','auto','full'];
 const ACCESS_LABELS = { ask:'Ask first', edit:'Edit files', test:'Edit and test', auto:'Auto', full:'Full access' };
@@ -1868,6 +1934,7 @@ function ppSetOpen(open){
 }
 
 function ppOpen(url){
+  if (splitOn()) { toast('The preview is off while sessions are side by side.'); return; }
   const b = ppBridge();
   const t = $('ppToggle'); if (t) t.classList.add('on');
   // Show the destination immediately. Waiting for main to broadcast back left the
@@ -3911,6 +3978,7 @@ async function ensureSession(){
   return newSession();
 }
 async function newSession(dir){
+  if (PANE) return;
   const workdir = dir || (S && S.workingDir) || '';
   const created = await window.voxai.sessionsCreate({ title: 'New session', workdir: workdir, model: S.openrouterModel });
   if (!created || created.ok === false) throw new Error((created && created.error) || 'Could not start a session.');
@@ -3948,6 +4016,8 @@ async function newSession(dir){
   return created.id;
 }
 async function openSession(id){
+  if (!PANE && SPLIT.panes.includes(id)) { window.voxai.split.focus(id); return; }
+  if (PANE && id !== PANE) { toast('Open it from the session list in the main pane.'); return; }
   setTimeout(function(){ try { refreshCtx(); paintCtxBar(); } catch {} }, 30);
   let v = viewStore.get(id);
   let full = null;
@@ -4291,6 +4361,10 @@ function renderSessionList(){
       const b = el('button', 'sess' + (s.id === activeId ? ' active' : ''));
       b.type = 'button';
       b.dataset.sid = s.id;
+      // Drag it into the chat to open it side by side.
+      b.draggable = true;
+      b.ondragstart = (e) => { if (SELECTING()) { e.preventDefault(); return; } DRAG_SID = s.id; e.dataTransfer.setData(SESS_MIME, s.id); e.dataTransfer.effectAllowed = 'copy'; };
+      if (SPLIT.panes.includes(s.id)) b.classList.add('in-pane');
       const busy = !!(viewStore.get(s.id) && viewStore.get(s.id).busy);
       const waiting = sessWaiting(s);
       // A dot only while it is working. Every idle session used to carry the same gold
@@ -4474,7 +4548,8 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
       v.cost = (v.cost || 0) + (Number(u.prompt_cost)||0) + (Number(u.completion_cost)||0);
       v.rate = v.tokens ? (v.cost / v.tokens) * 1000000 : null;
     }
-    if (v.tokens) updateSessStats(v);
+    // Only the session on screen: another one's usage (a pane, a run in the background) painted this header.
+    if (v.tokens && v === actView()) updateSessStats(v);
   } else if (event.type === 'done') {
     clearTimeout(v.statusTimer);
     finalizeStream(); finalizeRunCard();
@@ -4686,6 +4761,116 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
   T = null;
 }
 window.voxai.onAgentEvent(onAgentEvt);
+// Settings > Notifications: switch id -> setting.
+const NT_TOGS = [['ntToast', 'notifyToast'], ['ntTaskbar', 'notifyTaskbar'], ['ntTrayMin', 'trayOnMinimize'], ['ntTrayClose', 'trayOnClose']];
+// An approval answered from a Windows notification: the box stops asking.
+if (window.voxai.onPermDone) window.voxai.onPermDone(({ permId, allowed }) => {
+  for (const v of viewStore.values()) {
+    if (v.permQueue) v.permQueue = v.permQueue.filter((q) => q.permId !== permId);
+    if (v.perm && v.perm.permId === permId) {
+      clearTimeout(v.perm.timer); v.perm = null;
+      if (v.permQueue && v.permQueue.length) { v.perm = v.permQueue.shift(); v.perm.shownAt = Date.now(); }
+      setActivity(v, allowed ? 'Working' : 'Thinking');
+      if (v === actView()) paintAsk();
+    }
+  }
+  refreshSessionList();
+});
+// ---- sessions side by side (main/split.js) ----
+// The first page lays the panes out and measures their holes; each pane is its own page.
+const SESS_MIME = 'application/x-voxai-session';
+let DRAG_SID = null;   // what is being dragged from this page's list
+function splitWhyNot(sid){
+  if (!window.voxai.split) return 'Not available here';
+  if (sid && (PANE ? sid === PANE : sid === activeId)) return 'Already open here';
+  if (sid && SPLIT.panes.includes(sid)) return 'Already open side by side';
+  if (SPLIT.panes.length + 1 >= SPLIT.max) return 'Up to ' + SPLIT.max + ' side by side';
+  return '';
+}
+async function openBeside(sid){
+  const why = splitWhyNot(sid);
+  if (why) { toast(why + '.'); if (SPLIT.panes.includes(sid)) window.voxai.split.focus(sid); return; }
+  const r = await window.voxai.split.add(sid);
+  if (!r || !r.ok) toast('Could not open it side by side: ' + ((r && r.error) || 'unknown') + '.');
+}
+function paintSplit(){
+  const n = PANE ? 0 : SPLIT.panes.length;
+  if (n) document.documentElement.dataset.split = String(n + 1); else delete document.documentElement.dataset.split;
+  // Side by side, the first pane names its session too, like the others.
+  const t = $('sessTitle'); if (t && !PANE) { t.classList.toggle('sr-only', !n); t.classList.toggle('pane-title', !!n); }
+  const box = $('splitSlots'); if (!box || PANE) return;
+  // One hole per pane, in order; kept, not rebuilt, so a pane does not flicker.
+  [...box.children].forEach((c) => { if (!SPLIT.panes.includes(c.dataset.sid)) c.remove(); });
+  SPLIT.panes.forEach((sid, i) => {
+    let c = [...box.children].find((x) => x.dataset.sid === sid);
+    if (!c) { c = el('div', 'split-slot', '<span class="split-wait">Opening\u2026</span>'); c.dataset.sid = sid; }
+    if (box.children[i] !== c) box.insertBefore(c, box.children[i] || null);
+    c.dataset.i = String(i);
+  });
+  placeSplit();
+}
+function placeSplit(){
+  if (PANE || !window.voxai.split) return;
+  const rects = {};
+  for (const c of document.querySelectorAll('#splitSlots .split-slot')) {
+    const r = c.getBoundingClientRect();
+    rects[c.dataset.sid] = { x: r.left + c.clientLeft, y: r.top + c.clientTop, width: c.clientWidth, height: c.clientHeight };
+  }
+  window.voxai.split.place(rects);
+}
+if (window.voxai.split) {
+  const applySplit = (st) => {
+    const before = SPLIT.panes;
+    SPLIT = st && Array.isArray(st.panes) ? st : { panes: [], max: 4 };
+    // Back from a pane: what this page kept of it is out of date (what was typed and
+    // answered there was drawn there), so it opens fresh from its file next time.
+    if (!PANE) for (const sid of before) if (!SPLIT.panes.includes(sid) && sid !== activeId) viewStore.delete(sid);
+    paintSplit();
+    if (!PANE) renderSessionList();
+  };
+  window.voxai.split.onState(applySplit);
+  window.voxai.split.state().then(applySplit).catch(() => {});
+  if (!PANE) {
+    const kick = () => requestAnimationFrame(placeSplit);
+    window.addEventListener('resize', kick);
+    try { new ResizeObserver(kick).observe($('screen-work')); } catch {}
+  }
+  if (PANE) {
+    const t = $('sessTitle'); if (t) { t.classList.remove('sr-only'); t.classList.add('pane-title'); }
+    $('btnPaneClose').onclick = () => window.voxai.split.remove(PANE);
+    window.voxai.split.onFlash(() => { document.body.classList.remove('pane-flash'); void document.body.offsetWidth; document.body.classList.add('pane-flash'); });
+  }
+  // Which pane has the keyboard.
+  const focusMark = () => document.documentElement.classList.toggle('has-focus', document.hasFocus());
+  window.addEventListener('focus', focusMark); window.addEventListener('blur', focusMark); focusMark();
+  // Dragging a session over the chat: where it opens, or why it cannot.
+  const work = $('screen-work');
+  const zone = el('div', 'split-drop', '<div class="sd-box"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="12" y1="4" x2="12" y2="20"/></svg><b></b><span></span></div>');
+  work.appendChild(zone);
+  let depth = 0;
+  const isSess = (e) => !!(e.dataTransfer && [...e.dataTransfer.types].includes(SESS_MIME));
+  const showZone = () => {
+    const why = splitWhyNot(DRAG_SID);
+    zone.classList.toggle('no', !!why);
+    zone.querySelector('b').textContent = why || 'Open side by side';
+    zone.querySelector('span').textContent = why ? '' : (SPLIT.panes.length + 2) + ' of ' + SPLIT.max + ' \u00b7 the preview stays off';
+    zone.classList.add('on');
+  };
+  const hideZone = () => { depth = 0; zone.classList.remove('on'); };
+  work.addEventListener('dragenter', (e) => { if (!isSess(e)) return; depth++; showZone(); });
+  work.addEventListener('dragover', (e) => { if (!isSess(e) || splitWhyNot(DRAG_SID)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+  work.addEventListener('dragleave', (e) => { if (!isSess(e)) return; if (--depth <= 0) hideZone(); });
+  work.addEventListener('drop', (e) => { if (!isSess(e)) return; e.preventDefault(); hideZone(); const sid = e.dataTransfer.getData(SESS_MIME); DRAG_SID = null; if (sid) openBeside(sid); });
+  document.addEventListener('dragend', () => { DRAG_SID = null; hideZone(); });
+}
+// A question answered in another pane: this page stops asking it.
+if (window.voxai.onInputDone) window.voxai.onInputDone(({ inputId }) => {
+  for (const v of viewStore.values()) {
+    if (v.askEl && v.askEl.dataset.inputId === inputId) { settleAsk(v, v.askEl, null); setActivity(v, 'Working'); if (v === actView()) updateSendState(); }
+  }
+});
+// A notification's Open: that session.
+if (window.voxai.onOpenSession) window.voxai.onOpenSession((sid) => { if (sid) openSession(sid).catch(() => {}); });
 
 // Where an answer goes: to the run that asked, or -- for a question the app closed on --
 // into the session, which then carries on from it.
@@ -5042,6 +5227,7 @@ function prefillAdvanced(){
   // (the switch, picker and percentages are painted from these values below)
   // web search
   if ($('fWebSearch')) $('fWebSearch').value = s.webSearchEnabled === false ? 'off' : 'on';
+  NT_TOGS.forEach(([id, key]) => { const b = $(id); if (b) b.setAttribute('aria-checked', String(!!s[key])); });
   if ($('fWebEngine')) $('fWebEngine').value = s.webSearchEngine || 'exa';
   if ($('fWebResults')) $('fWebResults').value = String(s.webSearchMaxResults || 5);
   syncSetControls();
@@ -5112,6 +5298,7 @@ async function saveSettingsNow(withKeys){
   if ($('fSubMaxTurns').value) patch.subagentMaxTurns = String(Math.round(Number($('fSubMaxTurns').value)));
   if ($('fSubTimeout').value) patch.subagentTimeoutMs = String(Math.round(Number($('fSubTimeout').value) * 1000));
   patch.webSearchEnabled = $('fWebSearch').value !== 'off';
+  NT_TOGS.forEach(([id, key]) => { const b = $(id); if (b) patch[key] = b.getAttribute('aria-checked') === 'true'; });
   patch.webSearchEngine = $('fWebEngine').value;
   if ($('fWebResults').value) patch.webSearchMaxResults = String(Math.min(10, Math.max(1, Math.round(Number($('fWebResults').value) || 5))));
   try {
@@ -5168,6 +5355,7 @@ $('btnSave').onclick = () => saveSettingsNow(true);
       };
     });
   });
+  NT_TOGS.forEach(([id]) => { const b = $(id); if (b) b.onclick = () => { b.setAttribute('aria-checked', String(b.getAttribute('aria-checked') !== 'true')); queueSettingsSave(); }; });
   $('wsToggle').onclick = () => { $('fWebSearch').value = $('fWebSearch').value === 'off' ? 'on' : 'off'; syncSetControls(); queueSettingsSave(); };
   $('wsEngine').querySelectorAll('button').forEach((b) => { b.onclick = () => { $('fWebEngine').value = b.dataset.v; syncSetControls(); queueSettingsSave(); }; });
   $('budgetPresets').querySelectorAll('button').forEach((b) => { b.onclick = () => { $('fRunBudget').value = b.dataset.v; syncSetControls(); queueSettingsSave(); }; });
@@ -5525,6 +5713,7 @@ async function handleSessMenuAct(act){
   const s = menuTarget; menuTarget = null; hideSessMenu();
   try {
     if (act === 'open') { openSession(s.id); return; }
+    if (act === 'split') { openBeside(s.id); return; }
     if (act === 'reveal') { await window.voxai.sessionsReveal(s.id); return; }
     if (act === 'delete') { await deleteSessions([s.id]); return; }
     if (act === 'select') { toggleSel(s.id, true); return; }
@@ -6311,6 +6500,7 @@ async function copyText(text){
   } catch { return false; }
 }
 function stepSession(dir){
+  if (PANE) return;
   const rows = [...document.querySelectorAll('.sess[data-sid]')].filter((r) => r.offsetParent !== null);
   if (!rows.length) return;
   const i = rows.findIndex((r) => r.dataset.sid === activeId);
@@ -6430,6 +6620,7 @@ function paintQDock(){
  */
 function askPanel(v, event){
   const box = el('div', 'ask qa');
+  box.dataset.inputId = event.inputId || '';
   box.setAttribute('role', 'group');
   box.setAttribute('aria-label', 'The agent is asking');
   const confirm = event.kind === 'confirm' && !(Array.isArray(event.questions) && event.questions.length);
@@ -6656,6 +6847,8 @@ function addCodeCopy(root){
   $('keyState').textContent = S.hasOpenRouterKey?('key stored ('+S.keyStore+') - leave blank to keep'):'not set';
   $('mgmtKeyState').textContent = S.hasManagementKey?('mgmt key stored ('+S.mkeyStore+') - leave blank to keep'):'not set — account balance hidden';
   $('sessSub').textContent=S.workingDir;
+  // The folder in the header opens in File Explorer: this session's, or the one a new session starts in.
+  $('whDir').onclick = () => { window.voxai.sessionsReveal(activeId || null).catch(() => {}); };
   initModelPicker();
   wireChip('chipReason', renderReasonMenu);
   wireChip('chipAccess', renderAccessMenu);
@@ -6668,6 +6861,7 @@ function addCodeCopy(root){
   // A reloaded window: a session still running -- one waiting on you first -- opens
   // again, instead of the start screen with the run and its question out of sight.
   // Failing that, one the app closed on while it was asking you something.
+  if (PANE) { await openSession(PANE); updateSendState(); return; }
   try {
     const ids = await window.voxai.agentLiveSessions();
     const asked = (SESS_ITEMS.find((s) => s.waiting) || {}).id;
@@ -6738,7 +6932,7 @@ if (window.voxai && window.voxai.updates) {
   window.voxai.updates.state().then((st) => { UPD = st || UPD; paintUpdate(); }).catch(() => {});
 }
 </script>
-<div id="sessMenu" style="display:none;position:fixed;z-index:99;min-width:160px;background:var(--panel2);border:1px solid var(--edge2);border-radius:8px;padding:4px;box-shadow:0 10px 34px rgba(0,0,0,.55)"><button data-act="open">Open</button><button data-act="rename">Rename…</button><button data-act="export">Export JSONL</button><button data-act="delete">Delete</button><button data-act="select">Select</button><button data-act="reveal">Open folder</button></div>
+<div id="sessMenu" style="display:none;position:fixed;z-index:99;min-width:160px;background:var(--panel2);border:1px solid var(--edge2);border-radius:8px;padding:4px;box-shadow:0 10px 34px rgba(0,0,0,.55)"><button data-act="open">Open</button><button data-act="split">Open side by side</button><button data-act="rename">Rename…</button><button data-act="export">Export JSONL</button><button data-act="delete">Delete</button><button data-act="select">Select</button><button data-act="reveal">Open folder</button></div>
 <div id="projMenu" style="display:none;position:fixed;z-index:99;min-width:200px;background:var(--panel2);border:1px solid var(--edge2);border-radius:8px;padding:4px;box-shadow:0 10px 34px rgba(0,0,0,.55)"><button data-pact="select">Select all sessions here</button><button data-pact="delete">Delete all sessions here…</button></div>
 </body>
 </html>

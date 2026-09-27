@@ -1375,7 +1375,7 @@ async function drain(gen) {
     check('the mark follows the question as it opens and closes', HTML.includes("if (waitWas !== waitNow) { clearTimeout(setActivity._t); setActivity._t = setTimeout(renderSessionList, 0); }"), 'stale mark');
     check('two monitors side by side stay readable (fit 2560 x 1600, not 1280 wide)', AG.includes('const scale = Math.min(1, 2560 / width, 1600 / height);') && !AG.includes('img.resize({ width: 1280'), 'squeezed to 1280 x 360');
     const CU = read('src/backend/cu/index.js');
-    check('a closed preview is said at once, not waited on for ten seconds', MAIN.includes('onAttachAtlas: () => { try { return atlasOpen && browserV') && CU.includes("if (!wc) throw new Error('Nothing is open in the preview"), 'waits 10 s');
+    check('a closed preview is said at once, not waited on for ten seconds', MAIN.includes('onAttachAtlas: () => { try { return (atlasOpen || (split && split.active())) && browserV') && CU.includes("if (!wc) throw new Error('Nothing is open in the preview"), 'waits 10 s');
     // One window, drawn by itself, whatever covers it.
     const NAT = read('src/backend/cu/native.js'), TIX = read('src/backend/tools/index.js');
     check('a window is captured by itself (PrintWindow), not copied off the screen', NAT.includes('$printed = [CU32]::PrintWindow($h, $hdc, 2)') && NAT.includes('$bmp = $full.Clone('), 'covered parts show');
@@ -2037,6 +2037,116 @@ async function drain(gen) {
     const MAIN = read('src/main/main.js');
     check('main records each run and sends it; a reopened session draws it where the run ended', MAIN.includes("event: { type: 'run_summary', ...took } });") && MAIN.includes('runLog: sess.runLog || [],')
       && HTML.includes("if (event.type === 'run_summary') {") && HTML.includes('const took = runs.filter((r) => r && r.at === i && Number(r.ms) >= 1000).pop();'), 'wiring');
+  }
+
+  // ------------------------------------------------------------------ [NT]
+  console.log('\n[NT] a session that needs you: Windows notification, taskbar badge and flash, tray');
+  {
+    // Electron stand-in for this block only.
+    const shown = [];
+    const fakeElectron = {
+      Tray: class { constructor() {} setToolTip() {} setContextMenu() {} on() {} setImage() {} destroy() {} },
+      Menu: { buildFromTemplate: () => ({}) },
+      Notification: class { static isSupported() { return true; } constructor(o) { this.o = o; shown.push(o); } show() {} close() { this.closed = true; } },
+      nativeImage: { createFromPath: () => ({ isEmpty: () => true }), createFromDataURL: () => ({ isEmpty: () => false }), createFromBitmap: () => ({}) },
+    };
+    const elecPath = require.resolve('electron', { paths: [ROOT] });
+    const before = require.cache[elecPath];
+    require.cache[elecPath] = { id: elecPath, filename: elecPath, loaded: true, exports: fakeElectron };
+    const attnPath = path.join(ROOT, 'src/main/attention.js');
+    delete require.cache[attnPath];
+    const { createAttention } = require(attnPath);
+    const handlers = {};
+    const flashes = [];
+    let focused = false;
+    const fakeWin = { isDestroyed: () => false, isVisible: () => true, isMinimized: () => false, isFocused: () => focused, flashFrame: (f) => flashes.push(f), setOverlayIcon() {}, on() {} };
+    const pendingPerms = new Map([['p1', { msg: { permId: 'p1', sessionId: 's1', kind: 'shell', target: 'npm install three' }, resolve() {} }]]);
+    const pendingInputs = new Map();
+    const answered = [];
+    const A = createAttention({ app: { on: (ev, fn) => { handlers[ev] = fn; }, isPackaged: true, setAsDefaultProtocolClient() {} }, getWindow: () => fakeWin,
+      getSettings: () => ({ notifyToast: true, notifyTaskbar: true }), pendingPerms, pendingInputs, live: new Map([['s1', { workdir: 'C:/Users/me/3D Game Project' }]]),
+      renderer: () => null, answerPerm: (id, allowed) => answered.push([id, allowed]), openSession: () => {} });
+    await A.tick();
+    const xmlT = shown[0] && shown[0].toastXml || '';
+    check('away from VoxAI: a notification names the project and what it asks, with Allow once, Deny and Open', /<text>3D Game Project needs you<\/text><text>Run: npm install three<\/text>/.test(xmlT)
+      && /content="Allow once"/.test(xmlT) && /content="Deny"/.test(xmlT) && /content="Open"/.test(xmlT), xmlT.slice(0, 300));
+    check('and the taskbar button flashes', flashes[0] === true, flashes);
+    const secret = (/&amp;k=([0-9a-f]+)/.exec(xmlT) || [])[1];
+    A.handleLink('voxai-coder://perm?id=p1&a=allow&k=wrongsecret');
+    check('a link without that notification\'s secret answers nothing', answered.length === 0, answered);
+    A.handleLink(`voxai-coder://perm?id=p1&a=allow&k=${secret}`);
+    check('its Allow once answers the approval', answered.length === 1 && answered[0][0] === 'p1' && answered[0][1] === true, answered);
+    focused = true;
+    pendingPerms.set('p2', { msg: { permId: 'p2', sessionId: 's1', kind: 'shell', target: 'dir' }, resolve() {} });
+    await A.tick();
+    check('looking at VoxAI: no notification and no flash', shown.length === 1 && flashes.length === 1, { shown: shown.length, flashes });
+    focused = false;
+    await A.tick();
+    check('still waiting when you switch away: announced then, once', shown.length === 2 && /<text>Run: dir<\/text>/.test(shown[1].toastXml), shown.length);
+    await A.tick();
+    check('and not again on the next tick', shown.length === 2, shown.length);
+    handlers['will-quit'] && handlers['will-quit']();
+    if (before) require.cache[elecPath] = before; else delete require.cache[elecPath];
+    delete require.cache[attnPath];
+    const MAIN = read('src/main/main.js');
+    const HTMLn = read('src/renderer/index.html');
+    check('settings: notification and badge on, tray off, by default; a Notifications page has the four switches', MAIN.includes('notifyToast: raw.notifyToast !== false,') && MAIN.includes('trayOnClose: raw.trayOnClose === true,')
+      && ['ntToast', 'ntTaskbar', 'ntTrayMin', 'ntTrayClose'].every((id) => HTMLn.includes(`id="${id}"`)), 'settings');
+    check('a notification\'s Allow / Deny stays in the background; its Open brings the session', MAIN.includes("if (link && attention && attention.handleLink(link) && !/^voxai-coder:\\/\\/open/i.test(link)) return;")
+      && HTMLn.includes("if (window.voxai.onPermDone) window.voxai.onPermDone(") && HTMLn.includes("if (window.voxai.onOpenSession) window.voxai.onOpenSession("), 'wiring');
+  }
+
+  // ------------------------------------------------------------------ [SP]
+  console.log('\n[SP] sessions side by side: up to four panes, no preview while split');
+  {
+    const { createSplit } = require(path.join(ROOT, 'src/main/split.js'));
+    const sent = [];
+    const mkWc = (name) => ({ name, destroyed: false, isDestroyed() { return this.destroyed; }, send: (ch, d) => sent.push([name, ch, d]), loadFile() {}, focus() {}, close() { this.destroyed = true; } });
+    class FakeView { constructor() { this.webContents = mkWc('pane' + (FakeView.n = (FakeView.n || 0) + 1)); this.visible = true; } setVisible(v) { this.visible = v; } setBounds(b) { this.bounds = b; } setBackgroundColor() {} }
+    const children = [];
+    const rootV = { addChildView: (v) => children.push(v), removeChildView: (v) => children.splice(children.indexOf(v), 1) };
+    const first = mkWc('first');
+    let changes = 0;
+    const S = createSplit({ rootV, WebContentsView: FakeView, prefs: {}, pageFile: 'index.html', guard() {}, first: () => first, onChange: () => changes++ });
+    const r1 = S.add('s1'), r2 = S.add('s2'), r3 = S.add('s3'), r4 = S.add('s4');
+    check('three panes beside the first open; a fifth session does not', r1.ok && r2.ok && r3.ok && !r4.ok && /up to 4/.test(r4.error) && S.sids().join() === 's1,s2,s3', { r4, sids: S.sids() });
+    check('the same session twice, or a made-up id, does not open', !S.add('s1').ok && !S.add('../x').ok, S.sids());
+    check('each change tells the first page and every pane', sent.filter(([n, ch]) => ch === 'split:state' && n === 'first').length === 3 && sent.some(([n, ch]) => n !== 'first' && ch === 'split:state') && changes === 3, sent.length);
+    const p1 = children[0];
+    check('a pane stays hidden until the first page says where it goes', p1.visible === false, p1.visible);
+    S.place({ s1: { x: 700, y: 0, width: 600, height: 800 }, s2: { x: 1, y: 1, width: 10, height: 10 } });
+    check('then sits in the measured hole; a hole too small hides it', p1.visible === true && p1.bounds.x === 700 && p1.bounds.width === 600 && children[1].visible === false, { b: p1.bounds });
+    check('a pane knows its session from its page', S.paneOf(children[2].webContents) === 's3' && S.paneOf(first) === null, 'paneOf');
+    S.remove('s2');
+    check('closing a pane closes its page and the rest move up', S.sids().join() === 's1,s3' && children.length === 2 && S.contents().length === 2, S.sids());
+    const MAIN = read('src/main/main.js');
+    const HTMLs = read('src/renderer/index.html');
+    check('what happens in a session reaches every pane; an answer in one clears the others', (MAIN.match(/allRenderers\(\)/g) || []).length >= 12
+      && MAIN.includes("allRenderers().send('agent:perm-done', { permId, allowed: !!allowed })") && MAIN.includes("allRenderers().send('agent:input-done', { inputId })")
+      && HTMLs.includes('if (window.voxai.onInputDone) window.voxai.onInputDone('), 'wiring');
+    check('side by side the preview never opens: the agent\'s page loads under the window\'s own page', MAIN.includes('  if (split && split.active()) {\n    const ok0 = previewableUrl(')
+      && MAIN.includes("if (split && split.active()) return { ok: false, error: 'the preview is off while sessions are side by side' };")
+      && MAIN.includes('browserUnder(sideBySide);') && MAIN.includes('(atlasOpen || (split && split.active()))')
+      && HTMLs.includes("  if (splitOn()) { toast('The preview is off while sessions are side by side.'); return; }"), 'preview');
+    check('layouts: 2 columns, 3 = one left and two stacked, 4 = two by two', HTMLs.includes('html[data-split="3"] .split-slot[data-i="1"]{grid-column:3;grid-row:2;')
+      && HTMLs.includes('html[data-split="4"] .split-slot[data-i="1"]{grid-column:2;grid-row:2;') && HTMLs.includes('html[data-split="4"] .work{grid-row:1}'), 'css');
+    check('a session is dragged from the list (or "Open side by side"), and a pane keeps to its own', HTMLs.includes('b.draggable = true;') && HTMLs.includes('<button data-act="split">Open side by side</button>')
+      && HTMLs.includes("  if (!PANE && SPLIT.panes.includes(id)) { window.voxai.split.focus(id); return; }") && HTMLs.includes("async function newSession(dir){\n  if (PANE) return;"), 'page');
+    check('another session\'s usage does not paint this header', HTMLs.includes('if (v.tokens && v === actView()) updateSessStats(v);'), 'stats');
+  }
+
+  // ------------------------------------------------------------------ [WD]
+  console.log('\n[WD] the session folder in the header opens in File Explorer; a path as a url opens that file');
+  {
+    const HTMLw = read('src/renderer/index.html');
+    const MAINw = read('src/main/main.js');
+    check('the header path is a button with a folder mark, and says what it does', /<button type="button" class="wh-dir" id="whDir" title="Open this folder in File Explorer"><svg[^>]*>.*?<\/svg><span class="sub" id="sessSub"><\/span>/.test(HTMLw)
+      && HTMLw.includes("$('whDir').onclick = () => { window.voxai.sessionsReveal(activeId || null)"), 'whDir');
+    check('with no session it opens the folder a new one starts in', MAINw.includes("if (!id) { const d = String(getSettings(false).workingDir || '').trim();"), 'reveal');
+    const CU = read('src/backend/cu/index.js');
+    const re = /^[a-z][\w+.-]*:(\/\/|[^\\/])/i;
+    check('"index.html" or C:\\\\x\\\\a.html as a url is a file; http://, about:blank and localhost:3000 are not', !re.test('index.html') && !re.test('C:\\x\\a.html') && !re.test('C:/x/a.html')
+      && re.test('http://a') && re.test('about:blank') && re.test('localhost:3000') && CU.includes(String(re)), 'regex');
   }
 
   try { fs.rmSync(WD, { recursive: true, force: true }); } catch {}

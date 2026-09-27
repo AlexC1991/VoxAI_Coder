@@ -534,7 +534,7 @@ function loadWith(file, stubs) {
     check('the session title stays as a heading for screen readers', HTML.includes('<h1 class="sr-only" id="sessTitle">'), 'removed');
     check('header stats are one pill with a detail card', HTML.includes('id="statPill"') && HTML.includes('class="stat-card"') && /\.workstats:hover \.stat-card,\.workhead \.workstats:focus \.stat-card\{display:flex\}/.test(HTML), 'five loose stats');
     check('the pill can be reached by keyboard', HTML.includes('id="statPill" tabindex="0"'), 'mouse only');
-    check('the branch sits in the header', /<div class="workhead">[\s\S]{0,300}id="cbBranch"/.test(HTML), 'elsewhere');
+    check('the branch sits in the header', /<div class="workhead">[\s\S]{0,1500}id="cbBranch"/.test(HTML), 'elsewhere');
     check("summarise doesn't reuse the refresh icon", code.includes("btnCompact: 'compress'"), 'same arrow as refresh');
 
     // sidebar

@@ -46,7 +46,14 @@ if (!app.requestSingleInstanceLock()) {
   app.quit();
   return;
 }
-app.on('second-instance', () => {
+// Windows shows a notification only for a known app id: the installer's shortcut carries
+// build.appId; a dev copy uses electron.exe's own path.
+if (process.platform === 'win32') app.setAppUserModelId(app.isPackaged ? 'ai.vox.coder' : process.execPath);
+let attention = null;   // tray, badge, notifications (attention.js), made when the app is ready
+app.on('second-instance', (_e, argv) => {
+  // A notification's Allow / Deny answers without bringing the window forward; Open does.
+  const link = (argv || []).find((a) => /^voxai-coder:\/\//i.test(String(a)));
+  if (link && attention && attention.handleLink(link) && !/^voxai-coder:\/\/open/i.test(link)) return;
   const w = win();
   if (!w) return;
   if (w.isMinimized()) w.restore();
@@ -120,6 +127,11 @@ function getSettings(redacted = true) {
     subagentTimeoutMs: String(subagentTimeoutToMs(raw.subagentTimeoutMs || process.env.VOX_SUBAGENT_TIMEOUT_MS)),
     // Web search. Stored values are checked, so a hand-edited file cannot select an
     // engine OpenRouter does not have or ask for a result count it bills extra for.
+    // When a session needs you and VoxAI is not in front (attention.js).
+    notifyToast: raw.notifyToast !== false,
+    notifyTaskbar: raw.notifyTaskbar !== false,
+    trayOnMinimize: raw.trayOnMinimize === true,
+    trayOnClose: raw.trayOnClose === true,
     webSearchEnabled: raw.webSearchEnabled !== false && raw.webSearchEnabled !== 'false',
     webSearchEngine: ['exa', 'parallel', 'perplexity'].includes(raw.webSearchEngine) ? raw.webSearchEngine : 'exa',
     webSearchMaxResults: Math.min(10, Math.max(1, Math.round(Number(raw.webSearchMaxResults) || 5))),
@@ -253,6 +265,13 @@ function win() { return (mainWindow && !mainWindow.isDestroyed()) ? mainWindow :
 function chatWebContents() {
   return (chatV && chatV.webContents) || (win() && win().webContents);
 }
+// What happens in a session goes to every page that may show it: the window's own and
+// each split pane (split.js). Each keeps its sessions up to date; the one showing it draws it.
+let split = null;
+function allRenderers() {
+  const list = [chatWebContents(), ...(split ? split.contents() : [])].filter((c) => c && !c.isDestroyed());
+  return { send: (ch, data) => { for (const c of list) { try { c.send(ch, data); } catch { /* closing */ } } } };
+}
 
 // File menu -> the window (New Session, Open Folder). It lived inside the startup
 // function, out of reach of the menu built in createWindow, so the menu items and
@@ -286,6 +305,7 @@ function createWindow() {
   };
   w.on('maximize', reportState);
   w.on('unmaximize', reportState);
+  if (attention) attention.wireWindow(w);
   // Native application menu (File / View / Help) — Alt reveals it on Windows
   const template = [
     { label: 'File', submenu: [
@@ -456,6 +476,12 @@ function attachSplitViews(w) {
   rootV.addChildView(chatV, 0);
   rootV.addChildView(browserV, 1);
   w.setContentView(rootV);
+  // Split panes: more copies of this page, one session each, over the preview (which shuts).
+  split = require('./split').createSplit({
+    rootV, WebContentsView, prefs: chatPrefs, guard: guardTrustedView, first: () => chatWebContents(),
+    pageFile: path.join(__dirname, '..', 'renderer', 'index.html'),
+    onChange: () => { if (split.active() && atlasOpen) atlasClose(); else layoutAtlas(); },
+  });
 
   chatV.webContents.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   guardTrustedView(chatV.webContents);
@@ -582,6 +608,14 @@ const PREVIEW_SCROLLBAR_CSS = [
 // The renderer measures its own DOM and reports it; main just honours it.
 let previewRect = null;
 
+// The browser view's place in the stack: above the window's page (the preview) or below it
+// (side by side, where it keeps painting for the agent's tools but is never seen).
+let browserBelow = false;
+function browserUnder(below) {
+  if (!rootV || !browserV || browserBelow === below) return;
+  try { rootV.removeChildView(browserV); rootV.addChildView(browserV, below ? 0 : 1); browserBelow = below; } catch { /* stays where it was */ }
+}
+
 function layoutAtlas() {
   try {
     if (!rootV || !chatV) return;
@@ -603,7 +637,15 @@ function layoutAtlas() {
     // the view into a measured hole gives real chrome around real web content.
     chatV.setBounds({ x: 0, y: 0, width: W, height: H });
 
-    if (atlasOpen && previewRect && previewRect.width > 20 && previewRect.height > 20) {
+    const sideBySide = !!(split && split.active());
+    browserUnder(sideBySide);
+    if (sideBySide) {
+      // Side by side the preview does not show, but the agent's browser tools need a page that
+      // paints: a hidden view captures blank, and one laid out past the window's edge never
+      // draws a frame. So it sits UNDER the window's own page, the size a preview would be.
+      browserV.setBounds({ x: 0, y: 0, width: Math.max(320, Math.round(W / 2)), height: H });
+      browserV.setVisible(true);
+    } else if (atlasOpen && previewRect && previewRect.width > 20 && previewRect.height > 20) {
       const r = previewRect;
       browserV.setBounds({
         x: Math.max(0, Math.round(r.x)),
@@ -628,6 +670,12 @@ function atlasSetBounds(frac) {
 }
 
 function atlasOpenUrl(url, workdir) {
+  // Side by side, the page loads where the agent's browser tools can use it, but does not open.
+  if (split && split.active()) {
+    const ok0 = previewableUrl(url, workdir || getSettings(false).workingDir);
+    if (ok0) { try { browserV.webContents.loadURL(ok0); } catch {} }
+    return;
+  }
   atlasOpen = true;
   atlasFrac = 0.5;
   const ok = previewableUrl(url, workdir || getSettings(false).workingDir);
@@ -687,6 +735,12 @@ app.whenReady().then(() => {
     layoutAtlas();
   });
   ipcMain.handle('preview:state', () => previewState());
+  // Split panes (split.js). The window's own page lays them out; a pane can close itself.
+  ipcMain.handle('split:add', (_e, sid) => (split ? split.add(sid) : { ok: false, error: 'not ready' }));
+  ipcMain.handle('split:remove', (e, sid) => !!(split && split.remove(sid || split.paneOf(e.sender))));
+  ipcMain.handle('split:state', () => (split ? split.state() : { panes: [], max: 4 }));
+  ipcMain.handle('split:focus', (_e, sid) => !!(split && split.focus(sid)));
+  ipcMain.on('split:place', (e, rects) => { if (split && e.sender === chatWebContents()) split.place(rects); });
   ipcMain.on('preview:back', () => { try { browserV && browserV.webContents.goBack(); } catch {} });
   ipcMain.on('preview:forward', () => { try { browserV && browserV.webContents.goForward(); } catch {} });
   ipcMain.on('preview:reload', () => { try { browserV && browserV.webContents.reload(); } catch {} });
@@ -696,6 +750,7 @@ app.whenReady().then(() => {
     try {
       const url = arg && typeof arg === 'object' ? arg.url : arg;
       const wd = (arg && typeof arg === 'object' && arg.workdir) || getSettings(false).workingDir;
+      if (split && split.active()) return;
       atlasOpen = true; setTimeout(broadcastPreviewState, 0);
       const ok = previewableUrl(url, wd);
       if (ok) browserV.webContents.loadURL(ok);
@@ -787,6 +842,7 @@ app.whenReady().then(() => {
     for (const [k, p] of pendingInputs) if (p.sessionId === id) { pendingInputs.delete(k); try { p.resolve({ answer: null, cancelled: true }); } catch {} }
     for (const [k, p] of pendingPerms) if (p.msg && p.msg.sessionId === id) { pendingPerms.delete(k); try { p.resolve(false, false); } catch {} }
     live.delete(id);
+    if (split) split.remove(id);
     try { require('../backend/cu/desktop').forget(id); } catch { /* no desktop control here */ }
     // Its sub-agents' sessions go with it: they stayed behind, unlisted, for good.
     let subs = 0;
@@ -843,6 +899,8 @@ app.whenReady().then(() => {
     return true;
   });
   ipcMain.handle('sessions:reveal', async (_e, id) => {
+    // No session yet: the folder a new one starts in (the header shows it).
+    if (!id) { const d = String(getSettings(false).workingDir || '').trim(); if (d && fs.existsSync(d)) { try { await shell.openPath(d); } catch {} } return true; }
     const sess = await getLive(id);
     if (sess && sess.workdir) {
       const { shell } = require('electron');
@@ -903,7 +961,7 @@ app.whenReady().then(() => {
         for (const [k, pp] of pendingPerms) if (pp.runKey === panelKey) { pendingPerms.delete(k); try { pp.resolve(false, false); } catch {} }
         try { const ru = sub._runUsage; if (ru) { store.recordUsage(sub, ru); delete sub._runUsage; } } catch {}
         try { await store.saveSession(userData(), sub); } catch {}
-        const c = chatWebContents(); c && c.send('subagents:changed', { id: sub.id });
+        const c = allRenderers(); c && c.send('subagents:changed', { id: sub.id });
       }
     })();
     return { id: sub.id, model: sub.model, workdir: sub.workdir };
@@ -981,7 +1039,7 @@ app.whenReady().then(() => {
           resolve(v);
         },
       });
-      const c0 = chatWebContents(); c0 && c0.send('agent:permission', msg);
+      const c0 = allRenderers(); c0 && c0.send('agent:permission', msg);
     });
   }
 
@@ -1016,7 +1074,7 @@ app.whenReady().then(() => {
       // Through the agent-event channel the thread already draws. It was sent on its own
       // 'agent:user_input' channel that nothing listened to, so the agent's questions
       // never appeared and the run sat waiting ten minutes for an answer. Found in a live run.
-      const c1 = chatWebContents();
+      const c1 = allRenderers();
       c1 && c1.send('agent:event', { sessionId, runKey, event });
     });
 
@@ -1044,14 +1102,14 @@ app.whenReady().then(() => {
           reasoningSpec: modelReasoning(sess.model || s.openrouterModel),
           subagentModel: s.subagentModel, subagentMaxTurns: s.subagentMaxTurns, subagentTimeoutMs: s.subagentTimeoutMs, mcpServers: readSettingsFile().mcpServers || {},
           webSearch: { enabled: s.webSearchEnabled, engine: s.webSearchEngine, maxResults: s.webSearchMaxResults },
-          onLiveEvent: (le) => { const c = chatWebContents(); c && c.send('agent:event', { sessionId, runKey, event: le }); },
+          onLiveEvent: (le) => { const c = allRenderers(); c && c.send('agent:event', { sessionId, runKey, event: le }); },
           userData: userData(), live,
           onOpenUrl: (url) => { try { atlasOpenUrl(url); } catch {} },
           // Only while the preview is open: closed, it is hidden and blank, and a
           // screenshot of it waited ten seconds for a frame that never came.
-          onAttachAtlas: () => { try { return atlasOpen && browserV && browserV.webContents ? browserV.webContents : null; } catch { return null; } },
+          onAttachAtlas: () => { try { return (atlasOpen || (split && split.active())) && browserV && browserV.webContents ? browserV.webContents : null; } catch { return null; } },
         })) {
-          const c = chatWebContents(); c && c.send('agent:event', { sessionId, runKey, event: ev });
+          const c = allRenderers(); c && c.send('agent:event', { sessionId, runKey, event: ev });
           // Persist in-flight messages incrementally (debounced) so nothing is
           // lost if the app is closed or crashes before the run finishes.
           // A run that stopped at a limit or failed: remember where, so reopening the
@@ -1072,7 +1130,7 @@ app.whenReady().then(() => {
           if (ev.type === 'done' || ev.type === 'error' || ev.type === 'cancelled' || ev.type === 'limit_reached' || ev.type === 'budget_reached') { runEnd = ev.type; break; }
         }
       } catch (err) {
-        const c1 = chatWebContents(); c1 && c1.send('agent:event', { sessionId, runKey, event: { type: 'error', message: err.message } });
+        const c1 = allRenderers(); c1 && c1.send('agent:event', { sessionId, runKey, event: { type: 'error', message: err.message } });
       } finally {
         controllers.delete(runKey);
         // A run that ended (Stop, an error) takes its open questions and approvals with
@@ -1098,7 +1156,7 @@ app.whenReady().then(() => {
           const took = { at: sess.messages.length, ms: Date.now() - runT0, cost: runCost, tokens: runTokens, end: runEnd };
           const log = sess.runLog || (sess.runLog = []);
           log.push(took); if (log.length > 300) log.splice(0, log.length - 300);
-          const c3 = chatWebContents(); c3 && c3.send('agent:event', { sessionId, runKey, event: { type: 'run_summary', ...took } });
+          const c3 = allRenderers(); c3 && c3.send('agent:event', { sessionId, runKey, event: { type: 'run_summary', ...took } });
         }
         try { await store.saveSession(userData(), sess); } catch { /* disk full? surface next time */ }
         if (sess.goal && sess.goal.status === 'active' && !store.isDeleted(sess)) goalStep(sessionId, runEnd, { tools: runTools, cost: runCost }).catch(() => {});
@@ -1112,7 +1170,7 @@ app.whenReady().then(() => {
   const goalView = (g) => (g ? { condition: g.condition, status: g.status, paused: !!g.paused, pausedReason: g.pausedReason || '',
     runs: g.runs, spent: g.spent, last: g.checks && g.checks.length ? g.checks[g.checks.length - 1] : null } : null);
   const goalEvent = (sessionId, g, event) => {
-    const c = chatWebContents();
+    const c = allRenderers();
     c && c.send('agent:event', { sessionId, runKey: 'goal', event: { type: 'goal', ...event, goal: goalView(g) } });
   };
   async function goalStep(sessionId, end, run) {
@@ -1169,7 +1227,7 @@ app.whenReady().then(() => {
   const loops = new Map();   // sessionId -> { task, ms, runs, timer, nextAt, fails }
   const loopView = (l) => (l ? { task: l.task, ms: l.ms, every: commands.every(l.ms), runs: l.runs, nextAt: l.nextAt } : null);
   const loopEvent = (sessionId, event) => {
-    const c = chatWebContents();
+    const c = allRenderers();
     c && c.send('agent:event', { sessionId, runKey: 'loop', event: { type: 'loop', ...event, loop: loopView(loops.get(sessionId)) } });
   };
   function stopLoop(sessionId, why) {
@@ -1256,14 +1314,14 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('agent:permission', (_e, { permId, allowed, always }) => {
     const p = pendingPerms.get(permId);
-    if (p) { pendingPerms.delete(permId); p.resolve(!!allowed, !!always); return true; }
+    if (p) { pendingPerms.delete(permId); p.resolve(!!allowed, !!always); allRenderers().send('agent:perm-done', { permId, allowed: !!allowed }); return true; }
     return false;
   });
   // ask_user / ask_confirm round-trip (model pauses and asks the user)
   ipcMain.handle('agent:user-input-answer', (_e, { inputId, answer, cancelled }) => {
     const p = pendingInputs.get(inputId);
     // Skipping a question is not an answer of "": it says the user chose not to decide.
-    if (p) { pendingInputs.delete(inputId); p.resolve(cancelled ? { answer: null, cancelled: true } : { answer: answer || '', cancelled: false }); return true; }
+    if (p) { pendingInputs.delete(inputId); p.resolve(cancelled ? { answer: null, cancelled: true } : { answer: answer || '', cancelled: false }); allRenderers().send('agent:input-done', { inputId }); return true; }
     return false;
   });
   // manual compact (Compass-like button): force-compact the active session now
@@ -1272,7 +1330,7 @@ app.whenReady().then(() => {
     const sess = await getLive(sessionId);
     const comp = compactSession(sess, { force: true, systemPrompt: 'You are Vox, the coding agent.' });
     try { await store.saveSession(userData(), sess); } catch {}
-    const c = chatWebContents();
+    const c = allRenderers();
     if (comp.compacted) c && c.send('agent:event', { sessionId, runKey: 'manual', event: {
       type: 'compacted', dropped: comp.dropped, keptRecent: comp.keptRecent,
       estimatedBefore: comp.estimatedBefore, estimatedAfter: comp.estimatedAfter,
@@ -1643,6 +1701,7 @@ ipcMain.handle('openrouter:generations', async (_e, { limit = 40, cursor } = {})
     // folder entirely, failed containment, and the preview opened to nothing —
     // half the window went black with no explanation.
     const root = workdir || getSettings(false).workingDir;
+    if (split && split.active()) return { ok: false, error: 'the preview is off while sessions are side by side' };
     const ok = previewableUrl(url, root);
     if (!ok) {
       return { ok: false, error: 'refused: ' + url + ' is not inside ' + root };
@@ -1662,6 +1721,21 @@ ipcMain.handle('openrouter:generations', async (_e, { limit = 40, cursor } = {})
   });
 
 
+  try {
+    attention = require('./attention').createAttention({
+      app, getWindow: () => win(), getSettings: () => getSettings(false), pendingPerms, pendingInputs, live,
+      renderer: () => chatWebContents(),
+      // Answered from a notification: the same as the box's Allow / Deny, and the box is told.
+      answerPerm: (permId, allowed) => {
+        const p = pendingPerms.get(permId);
+        if (!p) return;
+        pendingPerms.delete(permId); p.resolve(!!allowed, false);
+        const c = allRenderers(); c && c.send('agent:perm-done', { permId, allowed: !!allowed });
+      },
+      openSession: (sid) => { const c = chatWebContents(); c && c.send('vox:open-session', sid); },
+    });
+    attention.registerProtocol();
+  } catch (e) { try { console.error('attention failed:', e && e.message); } catch {} }
   try { createWindow(); } catch (e) { try { console.error('createWindow failed:', e && e.message); } catch {} }
   app.on('activate', () => { try { if (BrowserWindow.getAllWindows().length === 0) createWindow(); } catch (e) {} });
 

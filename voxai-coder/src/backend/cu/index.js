@@ -203,6 +203,15 @@ function makeComputerUseTool(opts) {
           args = { ...args, backend: 'browser', url: 'file:///' + abs.replace(/^\/+/, '') };
         }
       }
+      // A path given as the url ("index.html", "dist\\app.html"): that file in the project,
+      // when it is there. It went to the browser as-is and landed on about:blank, and the
+      // agent then started a web server to show one static page. Found in a live run.
+      if (name === 'cu_launch' && args.url && args.backend !== 'native' && !/^[a-z][\w+.-]*:(\/\/|[^\\/])/i.test(String(args.url))) {
+        try {
+          const abs = require('path').resolve((ctx && ctx.workdir) || process.cwd(), String(args.url));
+          if (require('fs').statSync(abs).isFile()) args = { ...args, backend: 'browser', url: 'file:///' + abs.replace(/\\/g, '/').replace(/^\/+/, '') };
+        } catch { /* not a file here: left as it was */ }
+      }
       if (name === 'cu_launch') {
         // An empty data: URL loads a blank page and reported ok:true -- a success
         // for showing nothing.
