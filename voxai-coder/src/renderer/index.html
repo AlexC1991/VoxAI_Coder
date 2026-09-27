@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-9sn5UmkPnRLEZ7qTPXerigggFYPFpwaYBU+vt7AjOdQ='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-NBwu9BBO85bryBs3V3tDxZoFtmj1a19+4oWCxHajsQc='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1218,7 +1218,7 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
     <section class="set-page" data-set="subs" hidden>
       <header class="set-top"><h3>Sub-agents</h3><p>Workers the agent can hand self-contained jobs to. They report back and share the run’s spending limit.</p></header>
       <div class="set-scroll">
-        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Model</div><div class="set-desc">A cheaper model makes fan-outs cheaper. Leave empty to use the session’s model.</div></div><div class="set-ctl"><input id="fSubModel" class="txt" placeholder="Same as the session" autocomplete="off" aria-label="Sub-agent model"></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Eyes for models that cannot see</div><div class="set-desc">When the session’s model cannot read images, this model looks at each screenshot and describes it, problems included. Empty turns it off.</div></div><div class="set-ctl"><input id="fVisionHelper" class="txt" placeholder="Off" autocomplete="off" aria-label="Model that describes screenshots"></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Auto’s checker</div><div class="set-desc">In Auto, this model decides whether each action needs your say. It is a short yes or no, so a cheap model is plenty. Empty uses the session’s model.</div></div><div class="set-ctl"><input id="fAutoCheck" class="txt" placeholder="Session’s model" autocomplete="off" aria-label="Model for Auto’s checks"></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Turns before answering</div><div class="set-desc">How many tool steps a worker may take before it must report.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease turns before answering">−</button><input id="fSubMaxTurns" type="number" min="1" max="100" step="5" placeholder="25" aria-label="turns before answering"><span class="num-u">turns</span><button type="button" class="num-b" data-num="1" aria-label="Increase turns before answering">+</button></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Time limit</div><div class="set-desc">A worker still running after this is stopped and returns what it has.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease time limit">−</button><input id="fSubTimeout" type="number" min="10" max="3600" step="30" placeholder="300" aria-label="time limit"><span class="num-u">sec</span><button type="button" class="num-b" data-num="1" aria-label="Increase time limit">+</button></div></div></div></div>
+        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Model</div><div class="set-desc">A cheaper model makes fan-outs cheaper. Leave empty to use the session’s model.</div></div><div class="set-ctl"><input id="fSubModel" class="txt" placeholder="Same as the session" autocomplete="off" aria-label="Sub-agent model"></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Eyes for models that cannot see</div><div class="set-desc">When the session’s model cannot read images, this model looks at each screenshot and describes it, problems included. Empty turns it off.</div></div><div class="set-ctl"><input id="fVisionHelper" class="txt" placeholder="Off" autocomplete="off" aria-label="Model that describes screenshots"></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Auto’s checker</div><div class="set-desc">In Auto, this model decides whether each action needs your say. It is a short yes or no, so a cheap model is plenty. Empty uses the session’s model.</div></div><div class="set-ctl"><input id="fAutoCheck" class="txt" placeholder="Session’s model" autocomplete="off" aria-label="Model for Auto’s checks"></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Keep Claude’s cache for an hour</div><div class="set-desc">Claude models keep the conversation cached for 5 minutes, so stepping away means the next message pays to cache it all again. An hour costs more to write (2× input instead of 1.25×) but survives a break. Worth it if you often pause mid-session.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="fCacheHour" role="switch" aria-checked="false" aria-label="Keep Claude’s cache for an hour"></button></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Turns before answering</div><div class="set-desc">How many tool steps a worker may take before it must report.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease turns before answering">−</button><input id="fSubMaxTurns" type="number" min="1" max="100" step="5" placeholder="25" aria-label="turns before answering"><span class="num-u">turns</span><button type="button" class="num-b" data-num="1" aria-label="Increase turns before answering">+</button></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Time limit</div><div class="set-desc">A worker still running after this is stopped and returns what it has.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease time limit">−</button><input id="fSubTimeout" type="number" min="10" max="3600" step="30" placeholder="300" aria-label="time limit"><span class="num-u">sec</span><button type="button" class="num-b" data-num="1" aria-label="Increase time limit">+</button></div></div></div></div>
       </div>
     </section>
 
@@ -1689,9 +1689,10 @@ function cacheNote(v){
   const item = (SESS_ITEMS || []).find((s) => s.id === v.id) || {};
   const upd = typeof item.updatedAt === 'number' ? item.updatedAt : Date.parse(item.updatedAt || '');
   const at = v.lastCallAt || (Number.isFinite(upd) ? upd : 0);
-  if (!at || Date.now() - at < CACHE_TTL_MS) return null;
+  const hour = !!(S && S.claudeCacheHour) && /anthropic|claude/i.test(id);
+  if (!at || Date.now() - at < (hour ? 60 * 60 * 1000 : CACHE_TTL_MS)) return null;
   const m = modelEntry(id) || {};
-  const wc = m.cacheWriteCents != null ? Number(m.cacheWriteCents) : (m.promptCents != null ? Number(m.promptCents) * 1.25 : null);
+  const wc = hour && m.promptCents != null ? Number(m.promptCents) * 2 : m.cacheWriteCents != null ? Number(m.cacheWriteCents) : (m.promptCents != null ? Number(m.promptCents) * 1.25 : null);
   if (wc == null) return null;
   const cost = tokens * wc / 100;
   if (cost < 0.05) return null;
@@ -1699,7 +1700,7 @@ function cacheNote(v){
   const waiting = v.busy;
   return {
     text: 'Cache expired \u00b7 ' + (waiting ? 'carrying on' : 'your next message') + ' re-caches ' + k + ' tokens (~$' + cost.toFixed(2) + ')',
-    title: 'This model keeps the conversation cached for 5 minutes, and it has been longer. The next turn pays to cache all of it again (' + k + ' tokens at the cache-write price), then turns are cheap again. Summarising first makes that smaller.',
+    title: 'This model keeps the conversation cached for ' + (hour ? 'an hour' : '5 minutes') + ', and it has been longer. The next turn pays to cache all of it again (' + k + ' tokens at the cache-write price), then turns are cheap again. Summarising first makes that smaller.',
   };
 }
 // Five minutes pass with nothing happening: the shelf has to notice by itself.
@@ -4806,7 +4807,7 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
 }
 window.voxai.onAgentEvent(onAgentEvt);
 // Settings > Notifications: switch id -> setting.
-const NT_TOGS = [['ntToast', 'notifyToast'], ['ntNative', 'notifyNative'], ['ntTaskbar', 'notifyTaskbar'], ['ntTrayMin', 'trayOnMinimize'], ['ntTrayClose', 'trayOnClose']];
+const NT_TOGS = [['ntToast', 'notifyToast'], ['ntNative', 'notifyNative'], ['fCacheHour', 'claudeCacheHour'], ['ntTaskbar', 'notifyTaskbar'], ['ntTrayMin', 'trayOnMinimize'], ['ntTrayClose', 'trayOnClose']];
 // An approval answered from a Windows notification: the box stops asking.
 if (window.voxai.onPermDone) window.voxai.onPermDone(({ permId, allowed }) => {
   for (const v of viewStore.values()) {
@@ -7016,6 +7017,12 @@ function addCodeCopy(root){
   // again, instead of the start screen with the run and its question out of sight.
   // Failing that, one the app closed on while it was asking you something.
   if (PANE) { await openSession(PANE); updateSendState(); return; }
+  // The layout from last time: the main pane's session and the ones beside it (main.js saveSplitLayout).
+  try {
+    const L = S.splitLayout, have = (sid) => !!sid && SESS_ITEMS.some((s) => s.id === sid);
+    if (L && have(L.main)) await openSession(L.main);
+    if (L && Array.isArray(L.panes) && window.voxai.split) for (const sid of L.panes.slice(0, 3)) if (have(sid) && sid !== activeId) await window.voxai.split.add(sid);
+  } catch { /* start plain */ }
   try {
     const ids = await window.voxai.agentLiveSessions();
     const asked = (SESS_ITEMS.find((s) => s.waiting) || {}).id;

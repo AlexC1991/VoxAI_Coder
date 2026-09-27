@@ -119,6 +119,10 @@ function getSettings(redacted = true) {
     visionHelperModel: typeof raw.visionHelperModel === 'string' ? raw.visionHelperModel : 'deepseek/deepseek-v4.1-flash',
     // Auto's check of each action: a short yes/no, on a cheap model. '' = the session's own model.
     autoCheckModel: typeof raw.autoCheckModel === 'string' ? raw.autoCheckModel : 'deepseek/deepseek-v4.1-flash',
+    // Claude keeps the conversation cached for an hour instead of five minutes (writes cost more).
+    claudeCacheHour: raw.claudeCacheHour === true,
+    splitLayout: raw.splitLayout && typeof raw.splitLayout === 'object' ? raw.splitLayout : null,
+    trayHintShown: raw.trayHintShown === true,
     // Per-project: has the user said "always show previews here"? Claude Code saves
     // the equivalent choice into .claude/launch.json; this is the same idea, kept in
     // settings so it survives without writing into the user's repo.
@@ -267,6 +271,17 @@ function win() { return (mainWindow && !mainWindow.isDestroyed()) ? mainWindow :
 // but message sends must target chatV.webContents.
 function chatWebContents() {
   return (chatV && chatV.webContents) || (win() && win().webContents);
+}
+// The sessions on screen -- the main pane's and any side by side -- so the next start puts
+// them back (renderer: restoreLayout). Written only when it changes.
+let splitSaved = '';
+function saveSplitLayout() {
+  if (!split) return;
+  const layout = { main: split.mainSession() || '', panes: split.sids() };
+  const key = JSON.stringify(layout);
+  if (key === splitSaved) return;
+  splitSaved = key;
+  try { const raw = readSettingsFile(); raw.splitLayout = layout; writeSettingsFile(raw); } catch { /* next change tries again */ }
 }
 // What happens in a session goes to every page that may show it: the window's own and
 // each split pane (split.js). Each keeps its sessions up to date; the one showing it draws it.
@@ -483,7 +498,7 @@ function attachSplitViews(w) {
   split = require('./split').createSplit({
     rootV, WebContentsView, prefs: chatPrefs, guard: guardTrustedView, first: () => chatWebContents(),
     pageFile: path.join(__dirname, '..', 'renderer', 'index.html'),
-    onChange: () => { if (split.active() && atlasOpen) atlasClose(); else layoutAtlas(); },
+    onChange: () => { if (split.active() && atlasOpen) atlasClose(); else layoutAtlas(); saveSplitLayout(); },
   });
 
   chatV.webContents.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
@@ -742,7 +757,7 @@ app.whenReady().then(() => {
   ipcMain.handle('split:add', (_e, a) => (split ? split.add(a && typeof a === 'object' ? a.sid : a, a && a.at) : { ok: false, error: 'not ready' }));
   ipcMain.handle('split:swap', (_e, { at, sid } = {}) => (split ? split.swap(at, sid) : { ok: false, error: 'not ready' }));
   ipcMain.on('split:hold', (e, on) => { if (split && e.sender === chatWebContents()) split.hold(!!on); });
-  ipcMain.on('split:main', (e, sid) => { if (split && e.sender === chatWebContents()) split.setMain(sid); });
+  ipcMain.on('split:main', (e, sid) => { if (split && e.sender === chatWebContents()) { split.setMain(sid); saveSplitLayout(); } });
   ipcMain.handle('split:remove', (e, sid) => !!(split && split.remove(sid || split.paneOf(e.sender))));
   ipcMain.handle('split:state', () => (split ? split.state() : { panes: [], max: 4 }));
   ipcMain.handle('split:focus', (_e, sid) => !!(split && split.focus(sid)));
@@ -1107,6 +1122,8 @@ app.whenReady().then(() => {
           visionHelper: s.visionHelperModel || '',
           // Auto's yes/no on each action, on a cheap model (Settings > Permissions).
           checkModel: s.autoCheckModel || '',
+          checkReasoningSpec: s.autoCheckModel ? modelReasoning(s.autoCheckModel) : undefined,
+          cacheTtl: s.claudeCacheHour ? '1h' : '',
           // Which thinking levels this model takes, so the chip's choice means something.
           reasoningSpec: modelReasoning(sess.model || s.openrouterModel),
           subagentModel: s.subagentModel, subagentMaxTurns: s.subagentMaxTurns, subagentTimeoutMs: s.subagentTimeoutMs, mcpServers: readSettingsFile().mcpServers || {},
@@ -1157,7 +1174,7 @@ app.whenReady().then(() => {
           runCost = (ru && Number(ru.cost)) || 0;
           runTokens = ru ? (Number(ru.input) || 0) + (Number(ru.output) || 0) : 0;
           // Where it went: fresh input, cached, cache writes, output, and the extras (costs.js).
-          if (ru && runCost > 0) { const mid = sess.model || getSettings(false).openrouterModel; runParts = require('../backend/costs').breakdown(ru, require('../backend/costs').pricesOf(modelCapCache.byId.get(mid), mid)); }
+          if (ru && runCost > 0) { const mid = sess.model || getSettings(false).openrouterModel; runParts = require('../backend/costs').breakdown(ru, require('../backend/costs').pricesOf(modelCapCache.byId.get(mid), mid, { hour: getSettings(false).claudeCacheHour })); }
           if (ru && (ru.input || ru.output || ru.cost)) store.recordUsage(sess, ru);
           delete sess._runUsage;
         } catch { /* ledger write is best-effort */ }
@@ -1737,7 +1754,7 @@ ipcMain.handle('openrouter:generations', async (_e, { limit = 40, cursor } = {})
 
   try {
     attention = require('./attention').createAttention({
-      app, getWindow: () => win(), getSettings: () => getSettings(false), pendingPerms, pendingInputs, live,
+      app, getWindow: () => win(), getSettings: () => getSettings(false), saveSetting: (k, v) => saveSettings({ [k]: v }), pendingPerms, pendingInputs, live,
       renderer: () => chatWebContents(),
       // Answered from a notification: the same as the box's Allow / Deny, and the box is told.
       answerPerm: (permId, allowed, always) => {

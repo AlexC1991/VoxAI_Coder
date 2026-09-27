@@ -101,6 +101,8 @@ async function chatCompletions(opts) {
     apiKey, host = DEFAULT_HOST, model, messages, tools,
     reasoningEffort = 'default', reasoningSpec, maxTokens = 16384, temperature,
     signal, onEvent, providerSort = null, sessionId = null,
+    // '1h': Claude keeps the cache for an hour (writes cost 2x input instead of 1.25x).
+    cacheTtl = '',
   } = opts;
   if (!apiKey) throw new Error('voxai: OpenRouter API key missing');
   if (!model) throw new Error('voxai: model id missing');
@@ -111,7 +113,7 @@ async function chatCompletions(opts) {
     // the first difference. applyCacheBreakpoints marks the stable head so the
     // system prompt + tool schemas (~4.5k tokens here) are read from cache instead
     // of re-billed every turn. No-op on providers that cache automatically.
-    messages: applyCacheBreakpoints(messages, model),
+    messages: applyCacheBreakpoints(messages, model, cacheTtl),
     stream: true,
     max_tokens: maxTokens,
     // usage accounting (token counts, cost, prompt_tokens_details.cached_tokens) is
@@ -198,20 +200,21 @@ const MAX_BREAKPOINTS = 2;
 // tokens depending on model); chars/4 is the usual estimate.
 const MIN_CACHEABLE_CHARS = 4096;
 
-function markPart(content) {
+function markPart(content, ttl) {
+  const cc = ttl === '1h' ? { type: 'ephemeral', ttl: '1h' } : { type: 'ephemeral' };
   // cache_control rides on a content PART, so a string body must become an array.
   if (typeof content === 'string') {
-    return [{ type: 'text', text: content, cache_control: { type: 'ephemeral' } }];
+    return [{ type: 'text', text: content, cache_control: cc }];
   }
   if (Array.isArray(content) && content.length) {
     const out = content.map((p) => (typeof p === 'string' ? { type: 'text', text: p } : { ...p }));
-    out[out.length - 1] = { ...out[out.length - 1], cache_control: { type: 'ephemeral' } };
+    out[out.length - 1] = { ...out[out.length - 1], cache_control: cc };
     return out;
   }
   return content;
 }
 
-function applyCacheBreakpoints(messages, model) {
+function applyCacheBreakpoints(messages, model, ttl) {
   if (!Array.isArray(messages) || !messages.length) return messages;
   if (cacheMode(model) !== 'explicit') return messages;
   if (process.env.VOX_DISABLE_CACHE) return messages;
@@ -227,7 +230,7 @@ function applyCacheBreakpoints(messages, model) {
   // 1. the system message — the stable head, shared by every turn of every run
   const sysIdx = out.findIndex((m) => m.role === 'system');
   if (sysIdx !== -1) {
-    out[sysIdx].content = markPart(out[sysIdx].content);
+    out[sysIdx].content = markPart(out[sysIdx].content, ttl);
     used += 1;
   }
 
@@ -240,7 +243,7 @@ function applyCacheBreakpoints(messages, model) {
     if (m.role === 'system') break;
     if (m.role === 'assistant' && Array.isArray(m.tool_calls) && m.tool_calls.length) continue;
     if (!m.content) continue;
-    m.content = markPart(m.content);
+    m.content = markPart(m.content, ttl);
     used += 1;
     break;
   }

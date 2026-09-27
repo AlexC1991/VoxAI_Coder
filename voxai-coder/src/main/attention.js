@@ -45,7 +45,7 @@ function dotted(img) {
   return nativeImage.createFromBitmap(buf, { width: size, height: size });
 }
 
-function createAttention({ app, getWindow, getSettings, pendingPerms, pendingInputs, live, renderer, answerPerm, answerInput, openSession }) {
+function createAttention({ app, getWindow, getSettings, saveSetting, pendingPerms, pendingInputs, live, renderer, answerPerm, answerInput, openSession }) {
   const iconFile = path.join(__dirname, '..', '..', 'resources', 'icon.png');
   const appIcon = nativeImage.createFromPath(iconFile);
   const dotIcon = appIcon.isEmpty() ? appIcon : dotted(appIcon);
@@ -84,16 +84,27 @@ function createAttention({ app, getWindow, getSettings, pendingPerms, pendingInp
   }
 
   /** Minimize / close to the tray, when you ask for it. Called once the window exists. */
+  // The first time it hides, say where it went: Windows 11 puts a new tray icon behind the ^
+  // by the clock, and the app looked like it had closed.
+  function toTray(w) {
+    w.hide();
+    if (getSettings().trayHintShown || !tray) return;
+    try {
+      tray.displayBalloon({ iconType: 'info', title: 'VoxAI Coder is still running',
+        content: 'It is in the system tray. If you cannot see its icon, click the ^ by the clock. Click the icon to open it; right-click it to quit.' });
+    } catch { /* no balloons here */ }
+    try { saveSetting && saveSetting('trayHintShown', true); } catch { /* shown again next time */ }
+  }
   function wireWindow(w) {
     w.on('minimize', (e) => {
       if (!getSettings().trayOnMinimize) return;
       syncTray(); if (!tray) return;
-      e.preventDefault(); w.hide();
+      e.preventDefault(); toTray(w);
     });
     w.on('close', (e) => {
       if (quitting || !getSettings().trayOnClose) return;
       syncTray(); if (!tray) return;
-      e.preventDefault(); w.hide();
+      e.preventDefault(); toTray(w);
     });
     w.on('focus', () => { try { w.flashFrame(false); } catch { /* gone */ } });
   }

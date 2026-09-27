@@ -12,8 +12,9 @@
  * $ per token for a catalogue entry (cents x100 per token, as main.js stores it). The
  * cache prices fall back to the usual ratios when the catalogue does not list them:
  * reads at a tenth of input, writes at input (x1.25 where writes are billed, Anthropic).
+ * With the hour-long Claude cache (opts.hour) writes cost twice the input price.
  */
-function pricesOf(cap, model) {
+function pricesOf(cap, model, opts = {}) {
   const c = (v) => (v != null && Number.isFinite(Number(v)) ? Number(v) / 100 : null);
   const inp = c(cap && cap.promptCents);
   const out = c(cap && cap.completionCents);
@@ -23,7 +24,7 @@ function pricesOf(cap, model) {
     in: inp,
     out,
     read: c(cap.cacheReadCents) != null ? c(cap.cacheReadCents) : inp * 0.1,
-    write: c(cap.cacheWriteCents) != null ? c(cap.cacheWriteCents) : inp * (explicit ? 1.25 : 1),
+    write: explicit && opts.hour ? inp * 2 : (c(cap.cacheWriteCents) != null ? c(cap.cacheWriteCents) : inp * (explicit ? 1.25 : 1)),
   };
 }
 

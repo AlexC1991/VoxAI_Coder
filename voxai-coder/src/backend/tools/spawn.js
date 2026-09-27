@@ -207,6 +207,8 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
         priceOut: agentOpts.priceOut || 0,
         visionHelper: agentOpts.visionHelper || '',
         checkModel: agentOpts.checkModel || '',
+        checkReasoningSpec: agentOpts.checkReasoningSpec,
+        cacheTtl: agentOpts.cacheTtl || '',
         checkpointFrom: agentOpts.checkpointSession || null,
         contextLimit: agentOpts.contextLimit,
         compactThreshold: agentOpts.compactThreshold,

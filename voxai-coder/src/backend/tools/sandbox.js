@@ -139,6 +139,123 @@ function isReadOnlyCommand(cmd) {
   });
 }
 
+/**
+ * Does a command point outside the project, or at something secret? Absolute paths not
+ * under the project folder, climbing out with ..\, home and profile folders, and variables
+ * that expand to places. "Only looking" read C:\Users\...\.ssh\id_rsa without a word
+ * (found by scripts/auto-battery.js).
+ */
+const SECRET_PATH = /(\.ssh\b|id_rsa|id_ed25519|id_ecdsa|\.aws\b|\.azure\b|\.gnupg|\.kube\b|\.docker[\\/]config|\.npmrc|\.pypirc|\.netrc|\.git-credentials|credentials\.json|voxai-settings|update-key\.pem|Login Data|Cookies|wallet\.dat|\.kdbx)/i;
+function touchesOutside(cmd, workdir) {
+  const s = String(cmd || '');
+  if (SECRET_PATH.test(s)) return true;
+  if (/(^|[\s"'=])(~[\\/]|\.\.[\\/]|\.\.$)|%(USERPROFILE|APPDATA|LOCALAPPDATA|HOMEPATH|HOMEDRIVE|PROGRAMDATA|SYSTEMROOT|WINDIR|TEMP|TMP)%|\$env:|\$HOME\b|\\\\[\w.-]+\\/i.test(s)) return true;
+  const root = String(workdir || '').replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase();
+  const abs = s.match(/\b[a-z]:[\\/][^\s"'&|;<>]*/gi) || [];
+  return abs.some((p) => {
+    const q = p.replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase();
+    return !root || !(q === root || q.startsWith(root + '\\'));
+  });
+}
+
+/**
+ * Ordinary work in the project, allowed in Auto without a check: installing the project's
+ * packages, its scripts, running its files, building with its toolchain, local git, making
+ * and moving things inside it, and trying the local server. Every piece of a chain must be
+ * one of these (or only looking); nothing may point outside the project (touchesOutside);
+ * redirection only into a project file. Anything else goes to the check -- which is not a
+ * no, only a second look. The check asked about `python app.py` and `git stash`, and the
+ * user: "auto still asking me for CMD commands that isn't bad".
+ */
+const PROJECT_CMDS = [
+  /^(npm|pnpm|yarn)(\.cmd)?\s+(install|i|ci|add|remove|rm|uninstall|update|up|run|run-script|start|test|t|build|dev|rebuild|dedupe|prune|init|create|audit\s+fix)\b(?!.*\s(-g|--global|--location[= ]global)\b)/i,
+  /^(npm|pnpm|yarn)(\.cmd)?\s+(test|start|install|i|ci)$/i,
+  /^node(\.exe)?\s+(--[\w-]+\s+)*(?!-)[\w.\/\\-]+\.(m?js|cjs|ts)\b/i,
+  /^(python3?|py)(\.exe)?\s+((-m\s+(venv|pip\s+install|pytest|unittest|http\.server)\b)|(?!-)[\w.\/\\-]+\.py\b)/i,
+  /^(\.?venv|env)[\\/](Scripts|bin)[\\/](python3?|pip3?)(\.exe)?\s/i,
+  /^pip3?(\.exe)?\s+install\b/i,
+  /^(mkdir|md)\s/i,
+  /^cd(\s+\/d)?\s/i,
+  /^git\s+(init|add|commit|checkout\s+-b|checkout\s+(?!-)[\w\/.-]+$|switch|stash(\s+(push|pop|apply|list))?|fetch|pull|merge\s+(?!-)[\w\/.-]+$|tag\s+(?!-d)|branch\s+(?!-D|-d|--delete)[\w\/.-]+$|mv)\b/i,
+  /^dotnet\s+(build|run|test|restore|new|add|watch)\b/i,
+  /^cargo\s+(build|run|test|check|fmt|clippy|add|new|init)\b/i,
+  /^go\s+(build|run|test|vet|fmt|mod\s+(tidy|init|download)|get)\b/i,
+  /^(copy|xcopy|robocopy|move|ren|rename)\s/i,
+  /^(timeout\s+\/t\s+\d+|ping\s+-n\s+\d+\s+127\.0\.0\.1)\b/i,
+  // The project's own scripts, by a path inside it.
+  /^(bash|sh)(\.exe)?\s+(?!-)[\w.\/\\-]+\.sh\b/i,
+  /^(powershell|pwsh)(\.exe)?\s+(-NoProfile\s+|-ExecutionPolicy\s+Bypass\s+|-ep\s+bypass\s+)*-File\s+"?(?![a-z]:|[\\/]|\.\.)[\w.\/\\ -]+\.ps1"?(\s|$)/i,
+  /^(cmd(\.exe)?\s+\/c\s+)?"?(\.\\)?(?![a-z]:|[\\/]|\.\.)[\w.\/\\-]+\.(bat|cmd)"?(\s|$)/i,
+  // One project file by name (no wildcards, not the whole tree).
+  /^(del|erase)\s+(\/[fq]\s+)*(?!.*[*?])(?!.*\s\/s\b)[\w.\/\\ -]+$/i,
+  // Build output, installed packages and caches: made again by the next build or install.
+  /^(rd|rmdir)\s+(\/[sq]\s+)*"?(\.\\)?(dist|build|out|node_modules|\.next|\.nuxt|\.cache|\.parcel-cache|\.vite|coverage|__pycache__|\.pytest_cache|target|bin|obj)"?$/i,
+];
+function isProjectCommand(cmd, workdir) {
+  const s = String(cmd || '').trim();
+  if (!s || touchesOutside(s, workdir)) return false;
+  // Quieting output is not writing: 2>NUL, >/dev/null, 2>&1.
+  let q = s.replace(/\s*\d?>\s*(nul|\/dev\/null)(?=\s|$|[&|;])/gi, ' ').replace(/\s*2>&1/g, ' ');
+  // Into a project file is fine (echo PORT=3000> .env); anywhere else, the check decides.
+  q = q.replace(/\s*\d?>>?\s*("?)([^\s"&|;<>]+)\1/g, (m, _q, target) => (/^[a-z]:|^[\\/]|\.\./i.test(target) ? m : ' '));
+  if (/[<>`]|\$\(|%[^%\s]+%|\^/.test(q)) return false;
+  const parts = q.split(/&&|\|\||;|\||&/).map((p) => p.trim()).filter(Boolean);
+  if (!parts.length) return false;
+  return parts.every((p) => {
+    if (isReadOnlyCommand(p)) return true;
+    if (PROJECT_CMDS.some((re) => re.test(p))) return true;
+    // Trying the project's own local server.
+    if (/^(curl|wget)(\.exe)?\s/i.test(p) || /^start\s+https?:/i.test(p) || /^powershell(\.exe)?\s+(-\w+\s+)*-Command\s+"?Invoke-WebRequest\s/i.test(p)) {
+      const urls = p.match(/https?:\/\/[^\s"']+|(?<=\s)(localhost|127\.0\.0\.1)(:\d+)?[^\s"']*/gi) || [];
+      return urls.length > 0 && urls.every((u) => /^(https?:\/\/)?(localhost|127\.0\.0\.1|\[::1\])(:\d+)?(\/|$)/i.test(u)) && !/\s(-T|--upload-file|-o|--output|-O)\b/.test(p);
+    }
+    return false;
+  });
+}
+
+/**
+ * Always the user's call in Auto, whatever the check would say: the kinds of command whose
+ * harm is known. The check (a cheap model with no thinking) passed a global npm install,
+ * winget, and copying VoxAI's own settings (the API key) into the project, now and then --
+ * a rule never does. Returns why, said to the user, or ''.
+ */
+const RISKY = [
+  [/\b(npm|pnpm|yarn)(\.cmd)?\s+(publish|unpublish|login|adduser|logout|token|owner|access|deprecate)\b/i, 'it publishes or signs in to a package registry'],
+  [/\b(npm|pnpm)(\.cmd)?\s+.*(\s-g\b|--global\b|--location[= ]global)|\byarn\s+global\b/i, 'it installs outside the project, for the whole machine'],
+  [/\b(winget|choco|chocolatey|scoop|msiexec)(\.exe)?\s+(install|uninstall|upgrade|\/i|\/x)/i, 'it installs or removes software on the machine'],
+  [/\bpip3?(\.exe)?\s+(install|uninstall)\b.*\s--user\b|\bpip3?\s+uninstall\b/i, 'it changes Python packages outside the project'],
+  [/\bgit\s+(push|reset\s+--hard|clean\s+-[a-z]*[fx]|filter-branch|filter-repo|rebase\b|update-ref\s+-d)|\bgit\s+(config\s+(--global|--system)|remote\s+(add|set-url|remove))/i, 'it changes git history, remotes or your global git settings, or pushes code out'],
+  [/\bgh\s+(repo|release|pr|issue|gist|secret|api)\b|\bglab\s|\bcbx\s+(submit|release|delete|mark)\b|\bscp\s|\brsync\s.*:|\bsftp\s|\bftp\s/i, 'it sends code or data to an outside service'],
+  [/\b(curl|wget)(\.exe)?\s[^|]*(\s-F\b|--form\b|\s-T\b|--upload-file|--data-binary\s+@|\s-d\s+@)/i, 'it uploads a file'],
+  [/\|\s*(sh|bash|zsh|iex|invoke-expression|powershell|pwsh|cmd)(\.exe)?\b|\biex\s*\(|invoke-expression/i, 'it downloads and runs a script'],
+  [/\b(setx|reg(\.exe)?\s+(add|delete|import)|schtasks|sc(\.exe)?\s+(create|config|delete|stop|start)|net\s+(user|localgroup|share|stop|start)|netsh\b|bcdedit|set-executionpolicy|new-service|set-service|icacls|takeown|attrib\s+.*\+s)/i, 'it changes system settings, services, accounts or permissions'],
+  [/\b(shutdown|restart-computer|stop-computer|format(\.com)?\s+[a-z]:|diskpart|cipher\s+\/w)\b/i, 'it restarts the PC or wipes a drive'],
+  [/\b(del|erase|rd|rmdir|remove-item|rm)\b[^&|;]*(\s\/s\b|\s-r|\s-recurse)[^&|;]*(\*|\s\.(\s|$)|\s\.\\?\*)/i, 'it deletes everything in the folder'],
+];
+// Folders a build or an install makes again: deleting them loses nothing.
+const DISPOSABLE = /^\.?\\?(dist|build|out|node_modules|\.next|\.nuxt|\.cache|\.parcel-cache|\.vite|coverage|__pycache__|\.pytest_cache|target|bin|obj|\.turbo|\.svelte-kit|tmp|temp)[\\/]?$/i;
+function riskyCommand(cmd, workdir) {
+  const s = String(cmd || '');
+  if (SECRET_PATH.test(s)) return 'it touches a key, token or credentials file';
+  for (const [re, why] of RISKY) if (re.test(s)) return why;
+  // Throwing away work the user has not committed.
+  if (/\bgit\s+(checkout\s+(-f\b|--\s)|checkout\s+\.\s*($|[&|;])|restore\b|stash\s+(drop|clear)\b|branch\s+-D\b)/i.test(s)) return 'it throws away work that is not committed';
+  // A whole folder that is not build output, or many files at once.
+  for (const part of s.split(/&&|\|\||;|\||&/)) {
+    const p = part.trim();
+    const m = /^(rd|rmdir|remove-item|rm|del|erase)(\.exe)?\s+(.*)$/i.exec(p);
+    if (!m) continue;
+    const words = m[3].split(/\s+/).filter(Boolean);
+    const recursive = words.some((w) => /^(\/s|-r|-rf|-fr|-recurse|--recursive)$/i.test(w));
+    const targets = words.filter((w) => !/^[\/-]/.test(w)).map((w) => w.replace(/^["']|["']$/g, ''));
+    if (targets.some((t) => /[*?]/.test(t))) return 'it deletes many files at once';
+    if (recursive && targets.some((t) => !DISPOSABLE.test(t))) return 'it deletes a whole folder';
+  }
+  // Deleting or overwriting outside the project.
+  if (/\b(del|erase|rd|rmdir|remove-item|rm|move|ren|copy|xcopy|robocopy)\b/i.test(s) && touchesOutside(s, workdir)) return 'it deletes or changes files outside the project folder';
+  return '';
+}
+
 function checkToolAllowed(toolName, access, extra) {
   const lvl = levelIndex(access);
   // `extra` carries the call's arguments so a folded tool is judged on the
@@ -201,4 +318,4 @@ function makeSandboxTool({ getAccess }) {
   };
 }
 
-module.exports = { checkToolAllowed, checkShellCommand, worktreeIsolationInfo, makeSandboxTool, ACCESS_LEVELS, ACCESS_LABELS, normalizeAccess, labelFor, isReadOnlyCommand };
+module.exports = { checkToolAllowed, checkShellCommand, worktreeIsolationInfo, makeSandboxTool, ACCESS_LEVELS, ACCESS_LABELS, normalizeAccess, labelFor, isReadOnlyCommand, isProjectCommand, touchesOutside, SECRET_PATH, riskyCommand };

@@ -100,7 +100,7 @@ function createSplit({ rootV, WebContentsView, prefs, pageFile, guard, first, on
   const paneOf = (wc) => { const p = panes.find((x) => x.view.webContents === wc); return p ? p.sid : null; };
   const contents = () => panes.map((p) => p.view.webContents).filter((wc) => wc && !wc.isDestroyed());
 
-  return { add, swap, remove, place, hold, setMain, focus, state, sids, active, paneOf, contents, MAX_PANES };
+  return { add, swap, remove, place, hold, setMain, mainSession: () => mainSid, focus, state, sids, active, paneOf, contents, MAX_PANES };
 }
 
 module.exports = { createSplit, MAX_PANES };
