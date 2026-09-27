@@ -128,6 +128,8 @@ function teamPrompt(coderModel, coderVision) {
   return `\n\nTEAM: you are the lead, and a cheaper coder model (${coderModel}) does the hands-on work. You plan and review; it edits files and runs commands.
 - Look at what you need, then write a short numbered plan.
 - Give each step to the coder with spawn_agent (role "build"; the coder model is already chosen): say exactly what to change, in which files, how to check it, and what good looks like (the details that make it feel right, e.g. for a game the ball speeding up and angling off the paddle). Name files; do not paste whole files.
+- Keep steps small: one feature or one file at a time, something the coder can finish and check in about 15 actions. Several short steps you look at in between beat one long one you wait on.
+- For the next step, continue the same coder: spawn_agent with resume set to its subId and the new task. It keeps what it has read; a new coder starts over and reads everything again at your cost. Start a new one only for unrelated work.
 - Trust its report. Do not re-read whole files it wrote, list folders or tidy up after it: every turn of yours re-sends your whole context at your price. Read only the part in question when something is wrong, then send it back with the specific fix. If a step fails twice, do it yourself.
 - Make one- or two-line fixes yourself rather than handing them over. A bigger write, edit or patch from you is refused: that is the coder's.
 ${eyes}

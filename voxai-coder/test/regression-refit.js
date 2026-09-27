@@ -2413,6 +2413,9 @@ async function drain(gen) {
       clearInterval(tk); global.fetch = fetch0; if (was === undefined) delete process.env.VOX_STREAM_IDLE_MS; else process.env.VOX_STREAM_IDLE_MS = was;
       check('a request that only gets keep-alives ends as a retryable stall instead of waiting for ever (a coder sat on "Thinking" for 8+ minutes)', e && e !== 'hung' && e.retryable === true && /stopped responding/.test(e.message), e && e.message || e);
     }
+    check('Team works in small steps with the same coder (one step ran 170 messages; each new coder re-read the whole game), and a stuck coder asks',
+      /Keep steps small: one feature or one file at a time/.test(T.teamPrompt('x/y')) && /continue the same coder: spawn_agent with resume set to its subId/.test(T.teamPrompt('x/y'))
+      && /stop and '\s*\+ 'report back with your question instead of guessing/.test(SPw) && A.includes('defaultSubMaxTurns: coderModel ? Math.max(30, Number(subagentMaxTurns) || 0) : subagentMaxTurns,'), 'steps');
     const TP = T.teamPrompt('x/y');
     check('the planner trusts the coder\'s report and finishes: no re-reading whole files, listing or tidying, one look, no extra notes (its turns were most of Team\'s cost)',
       /Trust its report\. Do not re-read whole files it wrote, list folders or tidy up after it/.test(TP) && /Use one look of your own at the end, then finish/.test(TP)

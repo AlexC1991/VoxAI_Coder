@@ -940,7 +940,8 @@ async function* runAgent(opts) {
       agentOpts: { apiKey, host, model, reasoningEffort, reasoningSpec, access, sessionId: session.id, signal, isSubAgent, workdir: session.workdir, visionHelper, checkModel, checkReasoningSpec, cacheTtl, askPermission, checkpointSession: session,
         // Team: the coder is the default worker, with room for a real step (a build and its check).
         defaultSubModel: coderModel || subagentModel,
-        defaultSubMaxTurns: coderModel ? Math.max(40, Number(subagentMaxTurns) || 0) : subagentMaxTurns,
+        // Team steps are small (team.js): a coder that ran 170 messages on one step left the planner waiting.
+        defaultSubMaxTurns: coderModel ? Math.max(30, Number(subagentMaxTurns) || 0) : subagentMaxTurns,
         defaultSubTimeoutMs: coderModel ? Math.max(15 * 60 * 1000, Number(subagentTimeoutMs) || 0) : subagentTimeoutMs,
         // Sub-agents spend the PARENT's remaining allowance, never a fresh one.
         // Rebuilt each turn so a fan-out later in the run sees the depleted figure.
