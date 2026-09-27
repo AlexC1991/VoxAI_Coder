@@ -389,7 +389,7 @@ async function drain(gen) {
     const MAIN = read('src/main/main.js');
     check('questions go out on the channel the thread listens to', MAIN.includes("const event = { type: 'user_input', inputId,") && MAIN.includes("c1 && c1.send('agent:event', { sessionId, runKey, event });") && !MAIN.includes("c1.send('agent:user_input'"), 'unheard channel');
     const HTML = read('src/renderer/index.html');
-    check('an answered question stays as one line with the answer', HTML.includes("line.lastChild.textContent = label ? 'You chose: ' + label : 'No answer';"), 'vanishes');
+    check('an answered question stays as one line with the answer', HTML.includes('settleAsk(v, box, record(lines));') && HTML.includes("lines = [[steps[0].question, 'You chose: ' + clean(shown)]];"), 'vanishes');
   }
 
   // ------------------------------------------------------------------ [CM]
@@ -428,7 +428,9 @@ async function drain(gen) {
     check('an edit becomes a line diff', ops === ' -+ +', ops);
     check('rows are drawn closed', /const out = el\('div', 'tr-card'\); out\.hidden = true;/.test(HTML), 'open');
     check('a result never opens its row', !/setToolResult[\s\S]{0,1600}classList\.toggle\('open', !ok\)/.test(HTML) && !/out\.hidden = false/.test(HTML), 'opens itself');
-    check('a finished step closes, failures too', HTML.includes('if (card.running === false && card.setOpen) card.setOpen(false);'), 'failed step stays open');
+    // The user: no drop-down over the work -- each action its own line ("Ran ...", "Created ...").
+    check('steps have no header and never fold: every action is its own line', HTML.includes('.run > .runhead{display:none}')
+      && !HTML.includes('if (card.running === false && card.setOpen) card.setOpen(false);'), 'folds');
     check('the row answers the real record, not a copy', HTML.includes('v.latestTool = rec || null;'), 'copy');
     const sumSrc = /function stepSummary\(counts, stats\)\{[\s\S]*?\n\}/.exec(HTML);
     const stepSummary = sumSrc && new vm.Script('(' + sumSrc[0] + ')').runInNewContext({});
@@ -876,14 +878,14 @@ async function drain(gen) {
       const r3 = await ask.run({ questions: [{ question: 'Colour?', options: ['red', 'green'] }] }, actx);
       check('typing your own answer works', r3.answers['Colour?'] === 'blue please' && r3.answer === 'blue please', r3);
       const H = read('src/renderer/index.html');
-      check('the card offers Other on every question', H.includes("const oc = addCard(q.options.length ? 'Other…' : 'Type your answer'"), 'no Other');
-      check('keys: 1-9 pick, Enter submits, Esc skips', H.includes("if (/^[1-9]$/.test(e.key) && !e.ctrlKey && !e.altKey && !isField(e.target))") && H.includes("if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); finish(null, true); return; }"), 'no keys');
+      check('the card offers Other on every question', H.includes("ot.appendChild(el('span', 'qa-l', s.options.length ? 'Something else…' : 'Type your answer'));"), 'no Other');
+      check('keys: 1-9 pick, Enter submits, Esc skips', H.includes("if (/^[1-9]$/.test(e.key) && !e.ctrlKey && !e.altKey && !isField(e.target)) {") && H.includes("if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); finish(true); return; }"), 'no keys');
       check('the message box answers a waiting question', H.includes('if (v.pendingAsk) {\n    v.pendingAsk.answerTyped(text);'), 'queued instead');
       check('a run that ends first leaves no live card', H.includes('if (v.pendingAsk) v.pendingAsk.expire();'), 'clickable');
       check('Esc skips the question rather than stopping the run', H.includes('|| !!(v && v.pendingAsk) ||'), 'stops the run');
       // The confirmation card: Esc stopped the whole run, and typed text was queued
       // behind the run waiting for it.
-      check('a confirmation waits like a question: Esc dismisses, typing answers', H.includes("box, kind: event.kind === 'confirm' ? 'confirm' : 'ask',") && H.includes("if (e.key === 'Escape' && !(isField(e.target) && e.target.value)) { e.preventDefault(); e.stopImmediatePropagation(); cancel.click(); }"), 'stops the run');
+      check('a confirmation waits like a question: Esc dismisses, typing answers', H.includes("box, kind: confirm ? 'confirm' : 'ask',") && H.includes("if (confirm) { finish(false, text); return; }"), 'stops the run');
       let cAsked = null;
       const cctx = { ...actx, userInput: async (q) => { cAsked = q; return { answer: 'no, call it store-hours.txt instead', cancelled: false }; } };
       const conf = buildTools(cctx).ALL.find((t) => t.def.function.name === 'ask_confirm');
@@ -891,7 +893,7 @@ async function drain(gen) {
       check('declining in your own words reaches the agent', cr.confirmed === false && cr.note === 'no, call it store-hours.txt instead', cr);
       const cy = await conf.run({ message: 'Rename it?' }, { ...cctx, userInput: async () => ({ answer: 'yes', cancelled: false }) });
       check('"yes" confirms', cy.confirmed === true && !cy.note, cy);
-      check('several questions answered in one sentence are labelled as such', H.includes("esc(qs.length === 1 ? qs[0].question : qs.length + ' questions')") && H.includes("if (o.note) return { html: esc(trunc(String(o.note), 60)) };"), 'first question only');
+      check('several questions answered in one sentence are labelled as such', H.includes("steps.length === 1 ? steps[0].question : steps.length + ' questions'") && H.includes("if (o.note) return { html: esc(trunc(String(o.note), 60)) };"), 'first question only');
       check('the model is told when to ask, and when not to', read('src/backend/agent.js').includes('ask with ask_user before building rather than guessing: put up to 4 related questions in one call'), 'not told');
     }
     // 0.2.37: the Memory page back, Esc to stop, a Content-Security-Policy, Copy on code
@@ -1844,6 +1846,144 @@ async function drain(gen) {
     check('so in Auto it goes through without asking', askedC.length === 0, askedC);
     check('and the Auto check is told which processes are the session\'s own', AGK.includes('Processes this session started itself (ending these by pid is its own business)'), 'auto check');
     check('the session keeps the refusal', sess._refusedKills && sess._refusedKills.has('pid:987650') && AGK.includes('const again = keys.filter((k) => refused.has(k));'), sess._refusedKills && [...sess._refusedKills]);
+  }
+
+  // ------------------------------------------------------------------ [EY]
+  console.log('\n[EY] a model that cannot see says where its screenshots go');
+  {
+    const HTML = read('src/renderer/index.html');
+    const src = /function screenshotNote\(id\)\{[\s\S]*?\n\}/.exec(HTML);
+    check('there is one place that words it', !!src, 'no screenshotNote');
+    const models = {
+      'text/only': { id: 'text/only', vision: false },
+      'sees/images': { id: 'sees/images', vision: true },
+      'deepseek/deepseek-v4.1-flash': { id: 'deepseek/deepseek-v4.1-flash', vision: true, name: 'DeepSeek: V4.1 Flash' },
+    };
+    const make = (helper) => vm.runInNewContext(`(() => { ${src[0]}; return screenshotNote; })()`, {
+      S: { visionHelperModel: helper }, activeModel: () => 'text/only',
+      modelEntry: (id) => models[id] || null, describeModel: (m) => ({ name: m.id === 'deepseek/deepseek-v4.1-flash' ? 'DeepSeek V4.1 Flash' : m.id }),
+    });
+    const on = make('deepseek/deepseek-v4.1-flash')('text/only');
+    check('text-only model: "can\'t see screenshots, routed to" the image model, by name', on && /^Can’t see screenshots — they’re routed to DeepSeek V4\.1 Flash, an image model, which describes them for this model\.$/.test(on.text)
+      && on.short === 'Can’t see screenshots — routed to DeepSeek V4.1 Flash', on);
+    check('a model that can see says nothing', make('deepseek/deepseek-v4.1-flash')('sees/images') === null, 'sees');
+    const off = make('')('text/only');
+    check('describing turned off says so', off && /describing them is turned off in Settings/.test(off.text), off);
+    check('it shows above the box, and when the model is picked', HTML.includes('id="shEyes"') && HTML.includes("const eyes = $('shEyes'), en = screenshotNote();")
+      && HTML.includes('  const en = screenshotNote(id);\n  if (en) toast(en.text);'), 'places');
+    check('the picker footer is one fixed line with the model\'s full name, nothing else', HTML.includes('<span class="pk-foot" id="modelMenuFoot" aria-live="polite"><span class="fid" id="pkId"></span></span>')
+      && HTML.includes("$('pkId').textContent = id ? ((m && m.name) || id) : '';") && HTML.includes('.pk-foot{display:flex;align-items:center;border-top:1px solid var(--edge);padding:0 12px;height:30px;')
+      && !HTML.includes('pkFacts') && !HTML.includes('function modelFacts('), 'footer');
+  }
+
+  // ------------------------------------------------------------------ [SC]
+  console.log('\n[SC] slash commands: /review /init /rewind /loop, and the "/" menu');
+  {
+    const C = require(path.join(ROOT, 'src/backend/commands.js'));
+    check('the four commands parse, and anything else is not one', C.parseCommand('/review auth code').name === 'review' && C.parseCommand('/review auth code').rest === 'auth code'
+      && C.parseCommand('/init').name === 'init' && C.parseCommand('/rewind').name === 'rewind' && C.parseCommand('/loop 5m check').name === 'loop'
+      && C.parseCommand('/nope') === null && C.parseCommand('review') === null, 'parse');
+    const L = C.parseLoop('5m check the build');
+    check('/loop reads its interval (a minute to a day) and defaults to 10 min', L.ms === 300000 && L.task === 'check the build' && C.parseLoop('check it').ms === 600000
+      && C.parseLoop('10s x').ms === 60000 && C.parseLoop('every 2 hours, tidy up').ms === 7200000 && C.parseLoop('every 2 hours, tidy up').task === 'tidy up'
+      && C.parseLoop('stop').stop === true && C.every(300000) === '5 min', [L, C.parseLoop('10s x')]);
+    const rv = C.reviewPrompt('error handling');
+    check('/review asks for a review of the uncommitted diff and says not to change anything', /^\[VOX CMD\] \/review error handling\n/.test(rv) && /git status and git diff/.test(rv) && /do not change any files/.test(rv), rv.slice(0, 80));
+    check('/init asks for AGENTS.md with checked commands', /^\[VOX CMD\] \/init\n/.test(C.initPrompt()) && /write AGENTS\.md in its root/.test(C.initPrompt()) && /checked by running the quick ones/.test(C.initPrompt()), 'init');
+
+    // Checkpoints: a run edits one file and creates another; /rewind puts it back.
+    const CP = require(path.join(ROOT, 'src/backend/tools/checkpoints.js'));
+    const UD = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-cp-'));
+    const PD = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-cpp-'));
+    fs.writeFileSync(path.join(PD, 'app.js'), 'old\n');
+    const sess = { id: 'cp-s', workdir: PD };
+    CP.startRun(sess);
+    await CP.before(UD, sess, CP.pathsOf('edit', { path: 'app.js' }));
+    await CP.before(UD, sess, CP.pathsOf('write', { path: 'new/extra.js' }));
+    await CP.before(UD, sess, CP.pathsOf('edit', { path: 'app.js' }));   // second change to the same file: kept once
+    await CP.before(UD, sess, CP.pathsOf('write', { path: '../outside.js' }));   // outside the project: ignored
+    fs.writeFileSync(path.join(PD, 'app.js'), 'new\n');
+    fs.mkdirSync(path.join(PD, 'new'), { recursive: true });
+    fs.writeFileSync(path.join(PD, 'new/extra.js'), 'made by the run\n');
+    const trashed = [];
+    const r = await CP.rewind(UD, 'cp-s', async (f) => { trashed.push(f); fs.rmSync(f, { force: true }); });
+    check('/rewind puts a changed file back and takes away one the run made', r.ok && fs.readFileSync(path.join(PD, 'app.js'), 'utf8') === 'old\n' && !fs.existsSync(path.join(PD, 'new/extra.js'))
+      && r.restored.join() === 'app.js' && r.removed.join() === 'new/extra.js' && trashed.length === 1, r);
+    const again = await CP.rewind(UD, 'cp-s', null);
+    check('and it is used up: /rewind again says there is nothing more', again.ok === false && /nothing to rewind/.test(again.error), again);
+    check('fs move and remove are recorded too', CP.pathsOf('fs', { action: 'move', source: 'a', destination: 'b' }).join() === 'a,b' && CP.pathsOf('fs', { action: 'remove', path: 'c' }).join() === 'c'
+      && CP.pathsOf('read', { path: 'x' }).length === 0, 'paths');
+    try { fs.rmSync(UD, { recursive: true, force: true }); fs.rmSync(PD, { recursive: true, force: true }); } catch {}
+    const AGS = read('src/backend/agent.js');
+    check('every run is checkpointed before its file changes', AGS.includes('checkpoints.startRun(session);') && AGS.includes('await checkpoints.before(userData, session, checkpoints.pathsOf(tc.name, args));'), 'agent');
+    check('AGENTS.md (else CLAUDE.md) is read into every session', AGS.includes("for (const name of ['AGENTS.md', 'CLAUDE.md'])") && AGS.includes('[PROJECT NOTES] from ${name} in the project folder'), 'notes');
+
+    const MAIN = read('src/main/main.js');
+    check('/review runs read-only: ask-first, and only the looking tools plus the shell', MAIN.includes("access: readOnly ? 'ask' : s.access")
+      && MAIN.includes("...(readOnly ? { allowTools: require('../backend/tools/spawn').READ_TOOLS.concat(['shell']) } : {}),")
+      && MAIN.includes("? { sessionId, text: commands.reviewPrompt(cmd.rest), readOnly: true }"), 'review');
+    check('/rewind tells the agent its last changes are gone', MAIN.includes("'[VOX REWIND] The user rewound the file changes of your last run. '"), 'rewind note');
+    check('/loop skips a turn while busy, and stops after three failed starts', MAIN.includes("loopEvent(sessionId, { phase: 'skipped', reason: 'still busy from before' })") && MAIN.includes('if (l.fails >= 3) stopLoop('), 'loop');
+
+    const HTML = read('src/renderer/index.html');
+    const pageNames = [...HTML.matchAll(/\{ name: '([a-z]+)', args: /g)].map((m) => m[1]);
+    check('the "/" menu lists the same commands as the backend', JSON.stringify(pageNames.slice(0, 5)) === JSON.stringify(C.COMMANDS.map((c) => c.name)), pageNames);
+    check('the menu opens on "/", and arrows, Tab, Enter and Esc work it before the box sends', HTML.includes('id="slashMenu"') && HTML.includes("$('prompt').addEventListener('input', paintSlashMenu);")
+      && HTML.includes("e.preventDefault(); e.stopImmediatePropagation();\n    pickSlash(c);") && /\}, true\);\n\n\/\*\* \/review \/init \/rewind \/loop/.test(HTML), 'menu');
+    check('reopened, a command shows as typed, not the instructions behind it', HTML.includes("addUser(first.split('\\n')[0].replace(/^\\[VOX CMD\\] /, ''));"), 'reload');
+    check('Clear goal and Stop loop buttons work', HTML.includes("$('shGoalClear').onclick = async () => {") && HTML.includes("$('shLoopStop').onclick = async () => {"), 'buttons');
+  }
+
+  // ------------------------------------------------------------------ [QD]
+  console.log('\n[QD] the agent\'s questions pop up on the input bar, not in the thread');
+  {
+    const HTML = read('src/renderer/index.html');
+    check('it sits inside the input box, at the top, like an approval', /<div class="box" id="cmpBox">\n[^\n]*\n\s*<div class="qdock" id="qDock" hidden[^>]*><\/div>/.test(HTML) && HTML.includes("const box = el('div', 'ask qa');"), 'markup');
+    check('every kind of question goes into it (one renderer), none into the thread', (HTML.match(/    mountAsk\(v, box\);\n/g) || []).length === 1 && HTML.includes('const box = askPanel(v, event);')
+      && !HTML.includes('function askCard(') && !HTML.includes('rq.appendChild(box)'), 'mount');
+    check('answered or expired, it leaves the box and its one-line record goes into the thread', (HTML.match(/settleAsk\(v, box, record\(/g) || []).length === 2 && !/box\.replaceWith\(/.test(HTML)
+      && HTML.includes('if (rec && v.root) { (v.curRun && v.curRun.body || v.root).appendChild(rec);'), 'settle');
+    check('one question at a time: a pick moves to the next, the last one sends', HTML.includes('picks[i] = new Set([value]); typed[i] = \'\';\n    next();')
+      && HTML.includes("if (cur < steps.length - 1) { cur += 1; otherOpen = false; paint(); }\n    else finish(false);") && HTML.includes("h.appendChild(el('span', '', (cur + 1) + ' of ' + steps.length));"), 'stepper');
+    check('choose-any questions have Next, and Back goes to the one before', HTML.includes("const go = el('button', 'b pri', cur < steps.length - 1 ? 'Next' : 'Send');") && HTML.includes("const back = el('button', 'b lnk', '← Back');"), 'next/back');
+    check('typing in the box answers the question on screen, then moves on', HTML.includes("typed[cur] = String(text || ''); picks[cur] = steps[cur].multi ? picks[cur] : new Set();\n      next();"), 'typed');
+    check('each session keeps its own, and the dock follows the session on screen', HTML.includes('const v = actView(), box = v && v.askEl;') && HTML.includes("  paintQDock();\n  const any = [...$('shelf').children]"), 'switch');
+  }
+
+  // ------------------------------------------------------------------ [RW]
+  console.log('\n[RW] /rewind takes workers\' changes too; the plan is closed before finishing; quieter chips');
+  {
+    const CP = require(path.join(ROOT, 'src/backend/tools/checkpoints.js'));
+    const UD = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-cpw-'));
+    const PD = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-cpwp-'));
+    fs.writeFileSync(path.join(PD, 'a.js'), 'parent-old\n');
+    fs.writeFileSync(path.join(PD, 'b.js'), 'worker-old\n');
+    const parent = { id: 'rw-parent', workdir: PD };
+    CP.startRun(parent);
+    const worker = { id: 'rw-worker', workdir: PD, _checkpoint: parent._checkpoint };   // what runAgent does for a worker
+    await CP.before(UD, parent, ['a.js']);
+    await CP.before(UD, worker, ['b.js']);
+    fs.writeFileSync(path.join(PD, 'a.js'), 'parent-new\n');
+    fs.writeFileSync(path.join(PD, 'b.js'), 'worker-new\n');
+    const r = await CP.rewind(UD, 'rw-parent', null);
+    check('one /rewind undoes what the run and its worker changed', r.ok && fs.readFileSync(path.join(PD, 'a.js'), 'utf8') === 'parent-old\n' && fs.readFileSync(path.join(PD, 'b.js'), 'utf8') === 'worker-old\n'
+      && r.restored.length === 2 && !fs.existsSync(CP.dirOf(UD, 'rw-worker')), r);
+    try { fs.rmSync(UD, { recursive: true, force: true }); fs.rmSync(PD, { recursive: true, force: true }); } catch {}
+    const AGR = read('src/backend/agent.js');
+    check('a worker in the same folder shares its parent\'s checkpoint; in a worktree it keeps its own', AGR.includes('if (checkpointFrom && checkpointFrom._checkpoint && checkpointFrom.workdir === session.workdir) session._checkpoint = checkpointFrom._checkpoint;')
+      && read('src/backend/tools/spawn.js').includes('checkpointFrom: agentOpts.checkpointSession || null,'), 'wiring');
+
+    // The plan: finishing with open steps asks once to close it, then finishes.
+    const bodies = [];
+    fakeOpenRouter((n, b) => { bodies.push(b); return n === 1 ? call('p1', 'todo', { items: ['one', 'two', 'three'], done: [0] }) : say(n === 2 ? 'All done.' : 'Marked two done; three was not needed.'); });
+    const sessP = { id: 'plan-close', workdir: WD, messages: [] };
+    const ev = await drain(runAgent({ session: sessP, userText: 'go', apiKey: 'k', model: 'm', access: 'full', askPermission: async () => true, maxTurns: 6 }));
+    const note = bodies[2] && bodies[2].messages.find((m) => m.role === 'user' && /^\[VOX PLAN\]/.test(String(m.content)));
+    check('finishing with open plan steps: asked once to close the plan, then it finishes', note && /2 open steps \("two", "three"\)/.test(note.content) && ev[ev.length - 1].type === 'done'
+      && bodies.length === 3 && ev.some((e) => e.code === 'plan-close'), { bodies: bodies.length, note: note && note.content, last: ev[ev.length - 1] });
+    const HTMLr = read('src/renderer/index.html');
+    check('the reminder is quiet in the thread and on reopening', HTMLr.includes("} else if (event.type === 'warning' && event.code === 'plan-close') {") && HTMLr.includes("if (/^\\[VOX PLAN\\]/.test(first)) { finalizeRunCard(); continue; }"), 'noisy');
+    check('the file or command on an action line is toned like inline code', HTMLr.includes('.tr-chip{font:12.5px "Sometype Mono",monospace;color:var(--mut);background:rgba(127,127,127,.12);border:0;'), 'chip');
   }
 
   try { fs.rmSync(WD, { recursive: true, force: true }); } catch {}

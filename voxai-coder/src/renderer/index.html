@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-NJ+zliRo6YENf5ep5GzYussVx0GQ+RdgvZQTbmTrdXI='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-439TA6yAwllixwYdsTksXHmaWU6AoajZsDmLKWVk72o='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -279,7 +279,10 @@ tests"). Scroll the row instead of breaking words:
 .md p{margin:.5em 0}
 .md h1,.md h2,.md h3,.md h4{font-weight:700;margin:.7em 0 .35em;color:var(--ink)}
 .md h1{font-size:19px}.md h2{font-size:17px}.md h3{font-size:15.5px}.md h4{font-size:14px}
-.md code{font-family:"Sometype Mono",monospace;font-size:13px;background:var(--deep);border:1px solid var(--edge);border-radius:4px;padding:1px 5px;color:var(--gold)}
+/* Inline code reads as part of the sentence: the text's own colour in the code font, on a
+   faint tint. It was a dark box with gold text, so every name and value in an answer
+   stood out like a warning. */
+.md code{font-family:"Sometype Mono",monospace;font-size:.92em;background:rgba(127,127,127,.14);border:0;border-radius:4px;padding:.05em .35em;color:inherit}
 .md pre{font-family:"Sometype Mono",monospace;font-size:13px;background:var(--deep);border:1px solid var(--edge);border-radius:8px;padding:10px 12px;overflow:auto;color:var(--mut);white-space:pre;line-height:1.6;margin:.5em 0}
 /* The Copy button sits on a frame around the block, which does not scroll: inside the
    pre it slid away with the code on a long line. */
@@ -317,15 +320,15 @@ tests"). Scroll the row instead of breaking words:
    radius -- a hairline in the gutter and dimmed italic text. It used to be the same
    object as the sub-agent card (1px border, 8px radius, --panel fill, chevron,
    title, right-aligned status), which said the two were the same kind of thing. */
-.think{display:grid;grid-template-columns:9px minmax(0,1fr);margin:7px 0}
-.think-rail{grid-column:1;grid-row:1 / -1;border-left:2px solid var(--gold);border-radius:2px;animation:railPulse 2.2s ease-in-out infinite}
-.think.sealed .think-rail{border-left-color:var(--goldedge);animation:none}
-.think-head{grid-column:2;display:flex;align-items:center;gap:7px;padding:0 0 0 12px;font-size:11.5px;color:var(--faint);cursor:pointer}
+/* No rail beside it: a coloured line down the thread read as a box around the work. */
+.think{display:grid;grid-template-columns:minmax(0,1fr);margin:7px 0}
+.think-rail{display:none}
+.think-head{grid-column:1;display:flex;align-items:center;gap:7px;padding:0;font-size:11.5px;color:var(--faint);cursor:pointer}
 .think-head:hover{color:var(--dim);background:transparent}
 .think-chev{color:var(--faint);font-size:9px}
 .think-title{font-family:"Sometype Mono",monospace;letter-spacing:.02em}
 .think.sealed .think-title{color:var(--faint)}
-.think-body{grid-column:2;padding:4px 0 2px 12px;font-size:13.5px;font-style:italic;line-height:1.7;color:var(--dim);white-space:pre-wrap;max-width:66ch;max-height:340px;overflow:auto}
+.think-body{grid-column:1;padding:4px 0 2px 0;font-size:13.5px;font-style:italic;line-height:1.7;color:var(--dim);white-space:pre-wrap;max-width:66ch;max-height:340px;overflow:auto}
 @keyframes railPulse{0%,100%{opacity:.5}50%{opacity:1}}
 .mini.ic,.pp-btn.ic,.pp-toggle.ic{display:inline-flex;align-items:center;justify-content:center}
 /* The browser view is composited OVER this element, so the body is just a measured
@@ -472,6 +475,24 @@ tests"). Scroll the row instead of breaking words:
 .user-q .uq-head{display:flex;align-items:center;gap:8px;font-family:"Sometype Mono",monospace;font-size:10.5px;letter-spacing:.12em;color:var(--gold);text-transform:uppercase}
 .user-q .uq-head::after{content:"waiting for you";margin-left:auto;letter-spacing:.06em;text-transform:none;color:var(--faint);font-size:11px;padding-left:14px;background:radial-gradient(circle at 4px 50%,var(--gold) 0 3px,transparent 3.5px) no-repeat;animation:uqWait 1.6s ease-in-out infinite}
 @keyframes uqWait{0%,100%{opacity:1}50%{opacity:.45}}
+.qdock{border-bottom:1px solid var(--edge);max-height:55vh;overflow-y:auto;animation:qdIn .16s ease-out}
+.qdock[hidden]{display:none}
+.qa .ask-h b{color:var(--gold)}
+.qa .qa-multi{font-size:12px;color:var(--faint)}
+.qa-q{font-size:14.5px;font-weight:700;color:var(--ink);line-height:1.45}
+.qa-list{display:flex;flex-direction:column;gap:2px;margin:0 -6px}
+.qa-opt{display:flex;align-items:flex-start;gap:10px;width:100%;text-align:left;background:transparent;border:1px solid transparent;border-radius:9px;padding:7px 8px;color:var(--ink);cursor:pointer;font:inherit}
+.qa-opt:hover{background:var(--hover,rgba(127,127,127,.12))}
+.qa-opt.on{background:var(--hover,rgba(127,127,127,.12));border-color:var(--edge2)}
+.qa-opt kbd{flex:none;min-width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;border:1px solid var(--edge2);border-radius:5px;font:11px "Sometype Mono",monospace;color:var(--sub);margin-top:1px}
+.qa-opt.on kbd{border-color:var(--gold);color:var(--gold)}
+.qa-t{display:flex;flex-direction:column;gap:1px;min-width:0}
+.qa-l{font-size:13.5px;font-weight:600}
+.qa-d{font-size:12.5px;color:var(--sub);line-height:1.4}
+.qa-other{width:100%;box-sizing:border-box;border:1px solid var(--edge2);border-radius:8px;background:var(--bg);color:var(--ink);padding:8px 10px;font:13.5px Chivo,sans-serif}
+.qa-hint{font:11.5px "Sometype Mono",monospace;color:var(--faint)}
+.qa-sp{flex:1}
+@keyframes qdIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
 .user-q .uq-question{font-size:14.5px;color:var(--ink);line-height:1.5;font-weight:700}
 .user-q .uq-sec{display:flex;flex-direction:column;gap:8px}
 .user-q .uq-sec + .uq-sec{padding-top:12px;border-top:1px solid var(--edge)}
@@ -573,6 +594,9 @@ tests"). Scroll the row instead of breaking words:
 .run{display:flex;flex-direction:column;animation:runIn .22s ease}
 .runhead{display:flex;align-items:center;gap:9px;min-height:28px;padding:2px 8px;margin:0 -8px;border-radius:7px;font-size:13.5px;color:var(--mut);cursor:pointer;user-select:none;min-width:0}
 .runhead:hover{background:var(--panel2)}
+/* The user: no "Changed 1 file >" drop-down over the work -- show each action as its own
+   line in the thread, "Ran ...", "Created ...", as the rows inside it always were. */
+.run > .runhead{display:none}
 /* The chevron follows the words, like a row's -- not a gutter that makes a section. */
 .runhead .modelabel{order:0}.runhead .runmeta{order:1}.runhead .chev{order:2}.runhead .rundelta{order:3}
 .runhead:hover .modelabel{color:var(--ink)}
@@ -606,7 +630,9 @@ tests"). Scroll the row instead of breaking words:
 .tr-verb{flex:none;white-space:nowrap}
 .toolrow.running .tr-verb{color:var(--mut)}
 .tr-chips{display:flex;align-items:center;gap:5px;min-width:0;flex:0 1 auto;overflow:hidden}
-.tr-chip{font:12.5px "Sometype Mono",monospace;color:var(--ink);background:var(--sel);border:1px solid var(--edge2);border-radius:6px;padding:1px 7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:100%;flex:0 1 auto}
+/* The file or command on an action line, toned like inline code in answers: the code
+   font on a faint tint, no box edge. */
+.tr-chip{font:12.5px "Sometype Mono",monospace;color:var(--mut);background:rgba(127,127,127,.12);border:0;border-radius:4px;padding:.05em .4em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:100%;flex:0 1 auto}
 .tr-more{font:12px "Sometype Mono",monospace;color:var(--sub);flex:none}
 .tr-sp{flex:1;min-width:8px}
 .tr-meta{flex:none;font:12px "Sometype Mono",monospace;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%}
@@ -704,6 +730,18 @@ tests"). Scroll the row instead of breaking words:
 .sh-work[hidden],.sh-warn[hidden],.sh-steer[hidden]{display:none}
 .sh-goal{display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 100%;color:var(--accent,#7aa2ff)}
 .sh-goal[hidden]{display:none}
+.sh-loop #shLoopTxt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;color:var(--fg,inherit)}
+.slash-menu{display:flex;flex-direction:column;gap:1px;padding:5px;border:1px solid var(--edge2);border-radius:12px;background:var(--panel);box-shadow:0 8px 24px rgba(0,0,0,.25)}
+.slash-menu[hidden]{display:none}
+.slash-item{display:flex;align-items:baseline;gap:10px;padding:7px 10px;border-radius:8px;cursor:pointer;font-size:13px}
+.slash-item b{font-family:ui-monospace,Consolas,monospace;font-weight:600;color:var(--ink)}
+.slash-item i{font-style:normal;font-family:ui-monospace,Consolas,monospace;font-size:12px;color:var(--sub)}
+.slash-item span{margin-left:auto;color:var(--sub);font-size:12px;text-align:right}
+.slash-item.on{background:var(--hover,rgba(127,127,127,.14))}
+.sh-eyes{display:flex;align-items:center;gap:6px;min-width:0;flex:1 1 100%;color:var(--mute,#8a93a6);font-size:12px}
+.sh-eyes[hidden]{display:none}
+.sh-eyes #shEyesTxt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.sh-eyes-ic{font-size:12px;line-height:1}
 .sh-goal #shGoalTxt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;color:var(--fg,inherit)}
 .sh-goal-ic{font-size:14px;line-height:1}
 .sh-work{color:var(--mut)}
@@ -775,7 +813,7 @@ tests"). Scroll the row instead of breaking words:
 .ask-acts{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
 .ask:focus{outline:none}
 .ask-note{font-size:12.5px;color:var(--gold)}
-.uq-done{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;font-size:13px;color:var(--sub);padding-left:12px;border-left:2px solid var(--goldedge)}
+.uq-done{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;font-size:13px;color:var(--sub)}
 .uq-done .uq-q{color:var(--mut)}
 .uq-done .uq-a{color:var(--ink)}
 .ask-note[hidden]{display:none}
@@ -841,9 +879,10 @@ tests"). Scroll the row instead of breaking words:
 .mp-back i{font-style:normal;color:var(--sub);font-weight:400;font-size:16px;line-height:1}
 .mp-sep{height:1px;background:var(--edge);margin:4px 4px}
 .mp-empty{padding:26px 10px;text-align:center;font-size:13px;color:var(--sub)}
-.pk-foot{display:flex;flex-direction:column;gap:1px;border-top:1px solid var(--edge);padding:7px 12px 8px;min-height:44px;flex:none}
-.pk-foot .fid{font:11.5px "Sometype Mono",monospace;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.pk-foot .facts{font-size:11.5px;color:var(--sub)}
+/* One fixed line: the model's full name. Two lines of facts made it grow as you moved
+   through the list, and the rows jumped under the pointer. */
+.pk-foot{display:flex;align-items:center;border-top:1px solid var(--edge);padding:0 12px;height:30px;flex:none;min-width:0}
+.pk-foot .fid{font-size:12px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
 .op-note{border-top:1px solid var(--edge);padding:7px 10px 8px;font-size:12px;line-height:1.4;color:var(--sub)}
 .op-none{padding:10px 10px 12px;font-size:12.5px;color:var(--sub);line-height:1.5}
 
@@ -934,10 +973,15 @@ tests"). Scroll the row instead of breaking words:
           <button class="pt-tab" id="planHead" type="button" aria-expanded="false" aria-controls="planList"><svg class="pt-ring" viewBox="0 0 20 20" width="14" height="14" aria-hidden="true"><circle class="trk" cx="10" cy="10" r="7"></circle><circle class="arc" id="planArc" cx="10" cy="10" r="7" stroke-dasharray="43.98" stroke-dashoffset="43.98" transform="rotate(-90 10 10)"></circle></svg><span class="pt-count" id="planCount"></span><span class="pt-now" id="planNow"></span><span class="pt-chev" aria-hidden="true">▴</span></button>
         </div>
 <div class="box" id="cmpBox">
+          <!-- the agent's question: at the top of the box, one at a time (askPanel) -->
+          <div class="qdock" id="qDock" hidden role="region" aria-label="The agent is asking"></div>
           <!-- queued messages: open on top of the box, with grip, Steer, Edit and remove -->
           <div class="qrows" id="qrows" hidden></div>
           <!-- the shelf: ONE line holding what matters most right now -->
+          <div class="slash-menu" id="slashMenu" hidden role="listbox" aria-label="Commands"></div>
           <div class="shelf" id="shelf" hidden>
+            <span class="sh-goal sh-loop" id="shLoop" hidden><span class="sh-goal-ic" aria-hidden="true">↻</span><span id="shLoopTxt"></span><button class="sh-lnk" id="shLoopStop" type="button">Stop loop</button></span>
+            <span class="sh-eyes" id="shEyes" hidden><span class="sh-eyes-ic" aria-hidden="true">◐</span><span id="shEyesTxt"></span></span>
             <span class="sh-goal" id="shGoal" hidden><span class="sh-goal-ic" aria-hidden="true">◎</span><span id="shGoalTxt"></span><button class="sh-lnk" id="shGoalClear" type="button">Clear goal</button></span>
             <span class="sh-work" id="shWork" hidden><span class="spin"></span><span id="shWorkTxt">Working</span><span class="tm" id="shWorkTm"></span></span>
             <span class="sh-warn" id="shWarn" hidden><span id="shWarnTxt"></span><button class="sh-lnk" id="shCompact" type="button">Summarise now</button></span>
@@ -976,7 +1020,7 @@ tests"). Scroll the row instead of breaking words:
               <span class="menu pk" id="menuModel">
                 <label class="pk-search"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><line x1="20" y1="20" x2="16" y2="16"></line></svg><input id="modelSearch" placeholder="Search models" autocomplete="off" aria-label="Search models"></label>
                 <span class="pk-body" id="modelMenuList"></span>
-                <span class="pk-foot" id="modelMenuFoot" aria-live="polite"><span class="fid" id="pkId"></span><span class="facts" id="pkFacts"></span></span>
+                <span class="pk-foot" id="modelMenuFoot" aria-live="polite"><span class="fid" id="pkId"></span></span>
               </span></span>
             <span class="chip" id="chipReason"><svg class="gl" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M4 12h3l2-5 3 10 2-5h6"></path></svg><b id="chipReasonVal">Model default</b><svg class="cv" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg><span class="menu op" id="menuReason"></span></span>
             <span class="chip" id="chipAccess"><svg class="gl" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="5" y="11" width="14" height="9" rx="2"></rect><path d="M8 11V8a4 4 0 0 1 8 0v3"></path></svg><b id="chipAccessVal">Ask first</b><svg class="cv" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"></polyline></svg><span class="menu op" id="menuAccess"></span></span>
@@ -1572,6 +1616,11 @@ function paintShelf(){
       if (img.fix) { fx.textContent = 'Use ' + describeModel(img.fix).name; fx.title = img.fix.id + ' \u00b7 ' + modelPrice(img.fix) + ' per 1M'; fx.onclick = async () => { await setModel(img.fix.id); paintShelf(); }; }
     }
   }
+  // The model cannot see screenshots: say where they go, while it is the one selected.
+  const eyes = $('shEyes'), en = screenshotNote();
+  if (eyes) { eyes.hidden = !en || !!img; if (en) { $('shEyesTxt').textContent = en.text; eyes.title = en.text; } }
+  const lb = $('shLoop'), lp = v && v.loop;
+  if (lb) { lb.hidden = !lp; if (lp) { $('shLoopTxt').textContent = 'Every ' + lp.every + ': ' + lp.task + '  \u00b7  ' + lp.runs + ' run' + (lp.runs === 1 ? '' : 's'); $('shLoopTxt').title = lp.task; } }
   const gb = $('shGoal'), g = v && v.goal;
   if (gb) {
     const on = !!(g && g.status === 'active');
@@ -1585,6 +1634,7 @@ function paintShelf(){
   }
   const w = v ? contextWarning(v.ctxFill) : '';
   if (warn) { warn.hidden = steering || busy || !w || !!img; $('shWarnTxt').textContent = w; }
+  paintQDock();
   const any = [...$('shelf').children].some((c) => !c.hidden && !c.classList.contains('sh-sp'));
   $('shelf').hidden = !any;
   paintPlanTray();
@@ -1607,6 +1657,21 @@ function suggestVisionModel(id){
   const pool = same.length ? same : ok;
   return pool.slice().sort((a, b) => price(a) - price(b))[0] || null;
 }
+/**
+ * A model that cannot read images, said plainly: what happens to screenshots for it.
+ * Null for a model that can see (or is not in the catalogue). With the describing
+ * turned off (Settings, Eyes for models that cannot see), it says so instead.
+ */
+function screenshotNote(id){
+  const m = modelEntry(id || activeModel());
+  if (!m || m.vision !== false) return null;
+  const helper = String((S && S.visionHelperModel) || '').trim();
+  if (!helper) return { short: 'Can\u2019t see screenshots', text: 'Can\u2019t see screenshots \u2014 describing them is turned off in Settings, so it works from page text only.' };
+  const hm = modelEntry(helper);
+  const hn = hm ? describeModel(hm).name : helper;
+  return { short: 'Can\u2019t see screenshots \u2014 routed to ' + hn, text: 'Can\u2019t see screenshots \u2014 they\u2019re routed to ' + hn + ', an image model, which describes them for this model.' };
+}
+
 /** Images attached, and the model cannot see them: say so now, not after Send. */
 function imageProblem(){
   let pending = [];
@@ -2548,15 +2613,6 @@ function cuShot(title, dataUrl){
   wrap.appendChild(img);
   return wrap;
 }
-/** Move a short piece of narration into the step as one of its lines. */
-function foldNarration(card, node){
-  if (!card || !node) return;
-  node.classList.remove('md', 'live');
-  node.classList.add('say');
-  card.body.appendChild(node);
-}
-// Narration longer than this stays in the thread as a paragraph: it is explanation, not a caption.
-const SAY_MAX = 280;
 function ensureRunCard(){ const v = RT(); if(!v) return null; if(!v.curRun) return startRunCard(); return v.curRun; }
 /* ---- a step's actions ----------------------------------------------------------
  * Each action is one quiet row, the way the Claude desktop app draws them: an icon for
@@ -3312,9 +3368,8 @@ function paintLabel(card){
   const sm = stepSummary(card.counts, card.stats);
   if (!card.running) card.label.textContent = sm.head;
   paintMeta(card);
-  // Finished steps fold away, failures included: the header already says "1 failed",
-  // and opening a step is the reader's call, not the app's.
-  if (card.running === false && card.setOpen) card.setOpen(false);
+  // A finished step stays open, with no header: each action is its own line in the
+  // thread ("Ran ...", "Created ..."). It used to fold shut under "Changed 1 file >".
 }
 function finalizeRunCard(){
   const v = RT();
@@ -3620,7 +3675,7 @@ function fmtPrice(cents){
 }
 
 async function loadModels(){
-  const facts = $('pkFacts');
+  const facts = $('pkId');
   if (!S || !S.hasOpenRouterKey) { if (facts) facts.textContent = 'Add your OpenRouter key in Settings'; return; }
   try {
     const r = await window.voxai.openrouterModels();
@@ -3707,14 +3762,6 @@ function modelPrice(m){
   if (!Number(m.promptCents) && !Number(m.completionCents)) return 'free';
   return per1M(m.promptCents) + ' \u00b7 ' + per1M(m.completionCents);
 }
-function modelFacts(m){
-  if (!m) return 'Not in the OpenRouter catalogue right now';
-  const bits = [];
-  if (m.context) bits.push((m.context >= 1e6 ? (Math.round(m.context / 1e4) / 100) + 'M' : Math.round(m.context / 1000) + 'k') + ' context');
-  bits.push(m.tools === false ? 'no tools \u2014 can\u2019t edit files' : 'tools');
-  if (m.vision === true) bits.push('reads images'); else if (m.vision === false) bits.push('text only');
-  return bits.join(' \u00b7 ');
-}
 let RECENT_MODELS = [];
 let MODEL_SLUG_PROV = null;   // vendor slug in the id -> the provider name the catalogue uses
 function learnProviders(models){
@@ -3730,8 +3777,9 @@ let PK_VIEW = 'home';
 let PK_BROWSE = null;   // ids in the everyday list, worked out once per catalogue load
 function pkFoot(id){
   const m = modelEntry(id);
-  $('pkId').textContent = id || '';
-  $('pkFacts').textContent = id ? modelFacts(m) : '';
+  // Just the model's full name (its id on hover): nothing that can wrap and move the list.
+  $('pkId').textContent = id ? ((m && m.name) || id) : '';
+  $('pkId').title = id || '';
 }
 function renderModelMenu(){
   const box = $('modelMenuList'); if (!box) return;
@@ -3839,6 +3887,8 @@ async function setModel(id){
   refreshChips();
   pkFoot(id);
   paintShelf();
+  const en = screenshotNote(id);
+  if (en) toast(en.text);
 }
 
 function initModelPicker(){
@@ -3949,6 +3999,18 @@ async function openSession(id){
         // user "saying" a wall of recap text or "sending" screenshots they never took.
         const first = typeof m.content === 'string' ? m.content
           : ((m.content || []).find((p) => p && p.type === 'text') || {}).text || '';
+        if (/^\[VOX CMD\] /.test(first)) {
+          finalizeRunCard();
+          endOfRun(mi, before);
+          addUser(first.split('\n')[0].replace(/^\[VOX CMD\] /, ''));
+          continue;
+        }
+        if (/^\[VOX REWIND\]/.test(first)) {
+          finalizeRunCard();
+          v.root.appendChild(el('div', 'fold', 'the last run\u2019s file changes were rewound'));
+          continue;
+        }
+        if (/^\[VOX PLAN\]/.test(first)) { finalizeRunCard(); continue; }
         if (/^\[VOX CUTOFF\]/.test(first)) {
           finalizeRunCard();
           v.root.appendChild(el('div', 'fold', 'reply cut off at the output limit — carried on in smaller steps'));
@@ -3999,8 +4061,7 @@ async function openSession(id){
         const results = resultsAfter(mi);
         if (!calls.length) { finalizeRunCard(); if (text.trim()) addMsg(text); continue; }
         if (text.trim()) {
-          if (text.trim().length <= SAY_MAX) { const say = el('div', 'md'); say.innerHTML = renderVTE(text); foldNarration(ensureRunCard(), say); }
-          else { finalizeRunCard(); addMsg(text); }
+          finalizeRunCard(); addMsg(text);
         }
         for (const tc of calls) {
           const fn = tc && tc.function || {};
@@ -4056,6 +4117,8 @@ async function openSession(id){
   refreshCtx();
   if (typeof DIFF_OPEN !== 'undefined' && DIFF_OPEN) refreshDiff();
   syncLive(v, full);
+  Promise.all([window.voxai.goalGet(v.id).catch(() => null), window.voxai.loopGet(v.id).catch(() => null)])
+    .then(([g, l]) => { v.goal = g && g.status === 'active' ? g : v.goal; v.loop = l || null; if (v === actView()) paintShelf(); });
 
   // Per-session state that was living at module scope and therefore following you
   // from one session to the next: the preview's back/forward history, and anything
@@ -4286,6 +4349,7 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
   T = v;
   if (event.type === 'user_input' && event.inputId) (v.shownInputs || (v.shownInputs = new Set())).add(event.inputId);
   if (event.type === 'goal') { onGoalEvent(v, event); T = null; return; }
+  if (event.type === 'loop') { onLoopEvent(v, event); T = null; return; }
   // A finished run takes its approval, if one was still showing, with it.
   if (['done', 'error', 'cancelled', 'limit_reached', 'budget_reached'].includes(event.type) && v.perm) {
     clearTimeout(v.perm.timer); v.perm = null; v.permQueue = []; if (sid === activeId) paintAsk();
@@ -4344,15 +4408,15 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
   } else if (event.type === 'tool_start') {
 
     clearTimeout(v.statusTimer);
-    // Whatever was said just before a tool call was narration. Short, it becomes a line
-    // of the step; long, it stays in the thread and the next tools start a new step.
+    // What the agent wrote before a tool call stays in the thread, as it was written, and
+    // the tools after it start a new step below it. Short text used to be moved into the
+    // step, which then folded away -- the answer you had just read vanished into a box.
     const narr = v.curStream;
     finalizeStream();
     clearStatus();
     sealThinking(v);
     const said = narr ? (narr.textContent || '').trim() : '';
-    if (said && said.length <= SAY_MAX) foldNarration(ensureRunCard(), narr);
-    else if (said) finalizeRunCard();
+    if (said) finalizeRunCard();
     const rec = addToolRow(event.name, event.args || {});
     v.latestTool = rec || null;
     // Its workers report here, even after it returns (a background fan-out).
@@ -4545,91 +4609,13 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
     if (sid === activeId) { $('runDot').style.display = 'none'; updateSendState(); paintShelf(); }
     refreshSessionList(); refreshUsage();
     drainQueue(sid);
-  } else if (event.type === 'user_input' && Array.isArray(event.questions) && event.questions.length) {
-    finalizeStream(); finalizeRunCard();
-    const box = askCard(v, event);
-    setActivity(v, 'Waiting for your answer');
-    if (v === actView()) updateSendState();
-    const rq = RR(); if (rq) { rq.appendChild(box); followThread(); }
   } else if (event.type === 'user_input') {
     finalizeStream(); finalizeRunCard();
-    // Codex/Claude-style: the model asks the user a question with options.
-    const box = el('div', 'user-q');
-    const head = el('div', 'uq-head');
-    head.appendChild(document.createTextNode('\u2734 ' + (event.kind === 'confirm' ? 'Confirmation needed' : 'Question')));
-    box.appendChild(head);
-    const q = el('div', 'uq-question', esc(event.question || ''));
-    box.appendChild(q);
-    if (event.options && event.options.length) {
-      const opts = el('div', 'uq-options');
-      let n = 0;
-      for (const o of event.options) {
-        const b = el('button', 'uq-opt' + (o.value === 'yes' ? ' uq-ok' : o.value === 'no' ? ' uq-no' : ''), esc(o.label));
-        b.dataset.v = String(o.value || o.label || '');
-        b.onclick = () => { try { answerInput(event, b.dataset.v); } catch {} box.style.display = 'none'; };
-        opts.appendChild(b); n++;
-      }
-      box.appendChild(opts);
-    } else {
-      const inp = document.createElement('input');
-      inp.style.cssText = 'flex:1;border:1px solid var(--edge2);border-radius:7px;background:var(--deep);color:var(--ink);padding:7px 10px;font-family:Chivo,sans-serif;font-size:13.5px';
-      inp.id = 'uqText';
-      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { try { answerInput(event, inp.value); } catch {} box.style.display = 'none'; } });
-      const send = el('button', 'uq-opt', 'Send');
-      send.onclick = () => { try { answerInput(event, inp.value); } catch {} box.style.display = 'none'; };
-      const row = el('div', 'uq-options'); row.appendChild(inp); row.appendChild(send);
-      box.appendChild(row);
-    }
-    const cancel = el('button', 'uq-cancel', 'Dismiss (no answer)');
-    cancel.onclick = () => { try { answerInput(event, ''); } catch {} box.style.display = 'none'; };
-    box.appendChild(cancel);
-    // Once answered, the question stays in the thread as one line with the answer,
-    // instead of vanishing and leaving no trace of what was decided.
-    const settle = (label) => {
-      const line = el('div', 'uq-done');
-      line.innerHTML = '<span class="uq-q"></span><span class="uq-a"></span>';
-      line.firstChild.textContent = event.question || '';
-      line.lastChild.textContent = label ? 'You chose: ' + label : 'No answer';
-      box.replaceWith(line);
-      setActivity(v, 'Working');
-    };
-    box.addEventListener('click', (e) => {
-      const b = e.target.closest && e.target.closest('button'); if (!b) return;
-      const inp = box.querySelector('#uqText');
-      settle(b.classList.contains('uq-cancel') ? '' : (b.dataset.v !== undefined && !inp ? b.textContent : (inp ? inp.value : b.textContent)));
-    }, true);
-    const uqIn = box.querySelector('#uqText');
-    if (uqIn) uqIn.addEventListener('keydown', (e) => { if (e.key === 'Enter') settle(uqIn.value); }, true);
-    // It waits like a question. Esc dismisses it -- it used to stop the whole run -- and
-    // the message box answers it: "yes" confirms, "no" declines, anything else declines
-    // with your words passed on ("no, call it open-hours.txt"). Found in a live run.
-    const onKeyC = (e) => {
-      if (!box.isConnected || v !== actView()) return;
-      if (e.key === 'Escape' && !(isField(e.target) && e.target.value)) { e.preventDefault(); e.stopImmediatePropagation(); cancel.click(); }
-    };
-    document.addEventListener('keydown', onKeyC, true);
-    const endWait = () => { if (v.pendingAsk && v.pendingAsk.box === box) v.pendingAsk = null; document.removeEventListener('keydown', onKeyC, true); if (v === actView()) updateSendState(); };
-    box.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('button')) endWait(); });
-    v.pendingAsk = {
-      box, kind: event.kind === 'confirm' ? 'confirm' : 'ask',
-      answerTyped: (text) => {
-        const t = String(text).trim();
-        const yes = /^(y|yes|yeah|yep|ok|okay|confirm|go( ahead)?|do it|proceed|sure)\b/i.test(t);
-        const no = /^(n|no|nope|deny|stop|cancel)\b/i.test(t) && t.split(/\s+/).length <= 2;
-        const val = event.kind === 'confirm' ? (yes ? 'yes' : no ? 'no' : t) : t;
-        try { answerInput(event, val); } catch {}
-        settle(t); endWait();
-      },
-      expire: () => {
-        const line = el('div', 'uq-done');
-        line.appendChild(el('span', 'uq-q', esc(event.question || '')));
-        line.appendChild(el('span', 'uq-a', 'Not answered — the run ended'));
-        box.replaceWith(line); endWait();
-      },
-    };
+    // In the input box, one question at a time (askPanel).
+    const box = askPanel(v, event);
     setActivity(v, 'Waiting for your answer');
     if (v === actView()) updateSendState();
-    const rq = RR(); if (rq) { rq.appendChild(box); followThread(); }
+    mountAsk(v, box);
   } else if (event.type === 'warning' && event.code === 'cache-miss') {
     if (!v._cacheNoted) {
       v._cacheNoted = true;
@@ -4637,6 +4623,9 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
       line.title = event.message || '';
       const r = RR(); if (r) { r.appendChild(line); followThread(); }
     }
+  } else if (event.type === 'warning' && event.code === 'plan-close') {
+    // The finishing plan reminder: routine, not news. The plan tab shows the result.
+    setActivity(v, 'Closing the plan');
   } else if (event.type === 'warning' && event.code === 'retrying') {
     // A busy provider or a rate limit: the run waits and tries again by itself.
     setActivity(v, 'Trying again');
@@ -5718,6 +5707,125 @@ function stopCurrent(){
   updateSendState();
 }
 
+// Slash commands (backend/commands.js holds the same list and the words sent to the agent).
+const SLASH_CMDS = [
+  { name: 'goal', args: '<what done means>', about: 'Keep working until a separate check says it is done' },
+  { name: 'review', args: '[what to focus on]', about: 'Review the changes not committed yet; nothing is edited' },
+  { name: 'init', args: '', about: 'Study the project and write AGENTS.md, which every session reads' },
+  { name: 'rewind', args: '', about: 'Undo the file changes from the agent\u2019s last run' },
+  { name: 'loop', args: '[5m] <task> \u00b7 stop', about: 'Run a task again every so often while the app is open' },
+];
+let SLASH_SEL = 0;
+/** The "/" menu: open while the box holds only "/" and the start of a command name. */
+function paintSlashMenu(){
+  const box = $('slashMenu'), t = ($('prompt').value || '');
+  const m = /^\/([a-z]*)$/i.exec(t);
+  const hits = m ? SLASH_CMDS.filter((c) => c.name.startsWith(m[1].toLowerCase())) : [];
+  box.hidden = !hits.length;
+  if (!hits.length) return;
+  SLASH_SEL = Math.min(SLASH_SEL, hits.length - 1);
+  box.innerHTML = '';
+  hits.forEach((c, i) => {
+    const r = el('div', 'slash-item' + (i === SLASH_SEL ? ' on' : ''));
+    r.setAttribute('role', 'option');
+    r.innerHTML = '<b>/' + esc(c.name) + '</b>' + (c.args ? '<i>' + esc(c.args) + '</i>' : '') + '<span>' + esc(c.about) + '</span>';
+    r.onmousedown = (e) => { e.preventDefault(); pickSlash(c); };
+    box.appendChild(r);
+  });
+}
+function pickSlash(c){
+  const pr = $('prompt');
+  pr.value = '/' + c.name + (c.args ? ' ' : '');
+  $('slashMenu').hidden = true;
+  pr.focus(); pr.setSelectionRange(pr.value.length, pr.value.length);
+  pr.dispatchEvent(new Event('input', { bubbles: true }));
+  // A command with nothing to add runs as soon as it is picked with Enter; the rest wait for their words.
+}
+$('prompt').addEventListener('input', paintSlashMenu);
+$('prompt').addEventListener('keydown', (e) => {
+  const box = $('slashMenu');
+  if (box.hidden) return;
+  const items = [...box.querySelectorAll('.slash-item')];
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault(); e.stopImmediatePropagation();
+    SLASH_SEL = (SLASH_SEL + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length;
+    paintSlashMenu();
+  } else if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+    const m = /^\/([a-z]*)$/i.exec($('prompt').value || '');
+    const hits = m ? SLASH_CMDS.filter((c) => c.name.startsWith(m[1].toLowerCase())) : [];
+    const c = hits[SLASH_SEL];
+    if (!c) return;
+    // Enter on a command that is typed in full and takes nothing: send it.
+    if (e.key === 'Enter' && !c.args && m[1].toLowerCase() === c.name) { box.hidden = true; return; }
+    e.preventDefault(); e.stopImmediatePropagation();
+    pickSlash(c);
+  } else if (e.key === 'Escape') {
+    e.preventDefault(); e.stopImmediatePropagation();
+    box.hidden = true;
+  }
+}, true);
+
+/** /review /init /rewind /loop: the main process runs them (agent:command). */
+async function slashCommand(v, text){
+  const pr = $('prompt');
+  const say = (tone, title, body) => { T = v; const r = RR(); if (r) { r.appendChild(noticeRow({ tone, icon: tone === 'bad' ? 'alert' : 'info', title, text: body })); followThread(); } T = null; };
+  const isStop = /^\/loop\s+(stop|off|clear|cancel|end|none)\s*$/i.test(text);
+  if (v.busy && !isStop) { toast('Stop the current run first, or wait for it to finish.'); return; }
+  pr.value = ''; pr.dispatchEvent(new Event('input', { bubbles: true }));
+  try {
+    const id = await ensureSession();
+    const r = await window.voxai.agentCommand(id, text);
+    if (r.kind === 'rewind') {
+      if (!r.ok) { say('info', 'Nothing to rewind', r.error || ''); return; }
+      const bits = [];
+      if (r.restored.length) bits.push('put back: ' + r.restored.join(', '));
+      if (r.removed.length) bits.push('removed (made by that run): ' + r.removed.join(', '));
+      if (r.unchanged.length) bits.push(r.unchanged.length + ' already as before');
+      if (r.skipped.length) bits.push('left alone: ' + r.skipped.join(', '));
+      if (r.failed.length) bits.push('could not undo: ' + r.failed.join(', '));
+      say(r.failed.length ? 'warn' : 'good', 'Rewound the last run\u2019s file changes', (bits.join('. ') || 'Nothing had changed.') + '. Changes made by shell commands are not undone.' + (r.left ? ' /rewind again goes one run further back.' : ''));
+      try { refreshCtx(); } catch {}
+      return;
+    }
+    if (r.kind === 'loop') { v.loop = null; paintShelf(); say('info', r.stopped ? 'Loop stopped' : 'No loop running', ''); return; }
+    // A run: drawn and followed like a message you sent.
+    T = v; addUser(text); T = null;
+    v.busy = true; v.runT0 = Date.now(); v.activity = 'Thinking'; v.stopRequested = false;
+    if (r.runKey) v.runKeys.add(r.runKey);
+    if (r.loop) v.loop = r.loop;
+    $('runDot').style.display = 'block'; updateSendState(); refreshSessionList(); paintShelf();
+  } catch (e) {
+    pr.value = text; pr.dispatchEvent(new Event('input', { bubbles: true }));
+    say('bad', 'Couldn\u2019t run ' + text.split(/\s/)[0], tidyPaths(ipcMessage(e)));
+  }
+}
+
+// The bar buttons. Clear goal was drawn in 0.2.51 but never wired: clicking it did nothing.
+$('shGoalClear').onclick = async () => {
+  const v = actView(); if (!v) return;
+  try { v.goal = await window.voxai.goalClear(v.id); } catch {}
+  v.goalChecking = false; paintShelf();
+  T = v; const r = RR(); if (r) { r.appendChild(noticeRow({ tone: 'info', icon: 'info', title: 'Goal cleared', text: 'It will not start any more runs. A run going now carries on until it stops.' })); followThread(); } T = null;
+};
+$('shLoopStop').onclick = async () => {
+  const v = actView(); if (!v) return;
+  try { await window.voxai.loopStop(v.id); } catch {}
+  v.loop = null; paintShelf();
+};
+
+/** The loop's turns, sent by main.js. */
+function onLoopEvent(v, ev){
+  v.loop = ev.phase === 'stopped' ? null : (ev.loop || v.loop);
+  if (ev.phase === 'run' && ev.runKey) {
+    finalizeRunCard();
+    v.runKeys.add(ev.runKey); v.busy = true; v.runT0 = Date.now(); v.activity = 'Working'; v.stopRequested = false;
+  }
+  if (ev.phase === 'stopped' && ev.reason && ev.reason !== 'you stopped it') {
+    const r = RR(); if (r) { r.appendChild(noticeRow({ tone: 'warn', icon: 'info', title: 'Loop stopped', text: ev.reason.charAt(0).toUpperCase() + ev.reason.slice(1) + '.' })); followThread(); }
+  }
+  if (v === actView()) { $('runDot').style.display = v.busy ? 'block' : 'none'; updateSendState(); paintShelf(); }
+}
+
 /** /goal typed in the box: set one and start, show the one there is, or clear it. */
 async function goalCommand(v, text){
   $('prompt').value = ''; $('prompt').dispatchEvent(new Event('input', { bubbles: true }));
@@ -5797,6 +5905,7 @@ async function send(){
   const text = $('prompt').value.trim();
   // /goal <condition> | /goal (show) | /goal clear -- see backend/goal.js
   if (/^\/goal(\s|$)/i.test(text) && !v.pendingAsk) { await goalCommand(v, text); return; }
+  if (/^\/(review|init|rewind|loop)(\s|$)/i.test(text) && !v.pendingAsk) { $('slashMenu').hidden = true; await slashCommand(v, text); return; }
   // An empty box with messages waiting (after a Stop): send the next one.
   if (!text && !v.busy && v.queue && v.queue.length) { drainQueue(v.id, true); return; }
   if (!text) return;
@@ -6266,166 +6375,222 @@ document.addEventListener('paste', (e) => {
  * question with one pick answers on the click; otherwise pick, then Submit. Keys: 1-9
  * pick, Enter submits, Esc skips; typing in the message box answers too.
  */
-function askCard(v, event){
-  const qs = event.questions;
-  const box = el('div', 'user-q ask2');
+/**
+ * The agent's question pops up on the input bar (#qDock), where you answer it -- not
+ * in the middle of the thread, where it scrolled away. Each session keeps its own; the
+ * dock shows the one for the session on screen.
+ */
+function mountAsk(v, box){
+  v.askEl = box;
+  paintQDock();
+}
+/** Answered or expired: out of the dock, and its one-line record into the thread. */
+function settleAsk(v, box, rec){
+  if (v.askEl === box) v.askEl = null;
+  if (box.isConnected) box.remove();
+  if (rec && v.root) { (v.curRun && v.curRun.body || v.root).appendChild(rec); if (v === actView()) followThread(); }
+  paintQDock();
+}
+function paintQDock(){
+  const d = $('qDock'); if (!d) return;
+  const v = actView(), box = v && v.askEl;
+  if (!box) { d.hidden = true; d.innerHTML = ''; return; }
+  if (box.parentNode !== d) { d.innerHTML = ''; d.appendChild(box); }
+  d.hidden = false;
+}
+
+/**
+ * The agent's question, in the input box like an approval: ONE question at a time.
+ * Picking an answer moves to the next; picking on the last one sends them all. A
+ * "choose any" question has Next instead. Back goes to the one before; Skip lets the
+ * agent decide; typing in the message box answers the question on screen.
+ *
+ * Every shape the agent asks in comes through here: ask_user with questions, a single
+ * question with options or free text, and ask_confirm (Confirm / Deny).
+ * It used to be a card in the thread with every question at once.
+ */
+function askPanel(v, event){
+  const box = el('div', 'ask qa');
   box.setAttribute('role', 'group');
   box.setAttribute('aria-label', 'The agent is asking');
-  const head = el('div', 'uq-head');
-  head.textContent = '✴ ' + (qs.length === 1 ? 'Question' : qs.length + ' questions');
-  box.appendChild(head);
-  const picks = qs.map(() => new Set());   // chosen labels per question
-  const others = qs.map(() => '');         // typed "Other" per question
-  const secs = [];
-  let current = 0;
-  const instant = qs.length === 1 && !qs[0].multiSelect;
+  const confirm = event.kind === 'confirm' && !(Array.isArray(event.questions) && event.questions.length);
+  const multiQ = Array.isArray(event.questions) && event.questions.length;
+  // One shape for all: steps of { header, question, options: [{ label, desc, value }], multi }.
+  const steps = multiQ
+    ? event.questions.map((q) => ({ header: q.header || '', question: q.question, multi: !!q.multiSelect,
+        options: (q.options || []).map((o) => ({ label: o.label, desc: o.description || '', value: o.label })) }))
+    : [{ header: confirm ? 'Confirm' : 'Question', question: event.question || '', multi: false,
+        options: confirm ? [] : (event.options || []).map((o) => ({ label: o.label, desc: '', value: String(o.value != null ? o.value : o.label) })) }];
+  const picks = steps.map(() => new Set());    // chosen values per step
+  const typed = steps.map(() => '');           // "Other" per step
+  let cur = 0;
   let done = false;
-  const answered = (i) => picks[i].size > 0 || !!others[i].trim();
-  const submitBtn = el('button', 'uq-submit', 'Submit');
-  submitBtn.type = 'button';
-  const refresh = () => {
-    secs.forEach((s, i) => {
-      s.cards.forEach((c) => {
-        const on = c.dataset.other ? s.otherOpen : picks[i].has(c.dataset.label);
-        c.classList.toggle('on', !!on);
-        c.setAttribute('aria-checked', String(!!on));
-      });
-      s.sec.classList.toggle('current', i === current && !instant);
-    });
-    submitBtn.disabled = !qs.every((_, i) => answered(i));
+  let otherOpen = false;
+  const clean = (s) => String(s || '').replace(/\s*\(Recommended\)\s*$/i, '');
+
+  const record = (lines) => {
+    const rec = el('div', 'uq-done ask2-done');
+    for (const [q, a] of lines) {
+      const line = el('div', 'uq-line');
+      line.appendChild(el('span', 'uq-q', esc(q)));
+      line.appendChild(el('span', 'uq-a', esc(a)));
+      rec.appendChild(line);
+    }
+    return rec;
   };
-  const finish = (payload, cancelled) => {
+  const finish = (cancelled, typedOnly) => {
     if (done) return; done = true;
     v.pendingAsk = null;
-    try { answerInput(event, cancelled ? null : payload, cancelled); } catch {}
-    const rec = el('div', 'uq-done ask2-done');
-    if (cancelled) { rec.appendChild(el('span', 'uq-q', esc(qs.length === 1 ? qs[0].question : qs.length + ' questions'))); rec.appendChild(el('span', 'uq-a', 'Skipped')); }
-    // Typed in the message box: with several questions it answers all of them, so
-    // it is not labelled with the first one alone.
-    else if (typeof payload === 'string') { rec.appendChild(el('span', 'uq-q', esc(qs.length === 1 ? qs[0].question : qs.length + ' questions'))); rec.appendChild(el('span', 'uq-a', esc(payload))); }
-    else qs.forEach((q) => {
-      const a = payload.answers[q.question];
-      const line = el('div', 'uq-line');
-      line.appendChild(el('span', 'uq-q', esc(q.header || q.question)));
-      // "(Recommended)" was the agent's note to you, not part of your answer.
-      const shown = (Array.isArray(a) ? a : [a]).filter(Boolean).map((x) => String(x).replace(/\s*\(Recommended\)\s*$/i, ''));
-      line.appendChild(el('span', 'uq-a', esc(shown.join(', ') || '—')));
-      rec.appendChild(line);
-    });
-    box.replaceWith(rec);
     document.removeEventListener('keydown', onKey, true);
+    let lines;
+    if (cancelled) {
+      try { answerInput(event, multiQ ? null : '', multiQ ? true : undefined); } catch {}
+      lines = [[steps.length === 1 ? steps[0].question : steps.length + ' questions', confirm ? 'No answer' : 'Skipped']];
+    } else if (confirm) {
+      const t = String(typedOnly || '').trim();
+      const yes = /^(y|yes|yeah|yep|ok|okay|confirm|go( ahead)?|do it|proceed|sure)\b/i.test(t);
+      const no = /^(n|no|nope|deny|stop|cancel)\b/i.test(t) && t.split(/\s+/).length <= 2;
+      try { answerInput(event, yes ? 'yes' : no ? 'no' : t); } catch {}
+      lines = [[steps[0].question, 'You chose: ' + (yes ? 'Confirm' : no ? 'Deny' : t)]];
+    } else if (multiQ) {
+      const answers = {};
+      steps.forEach((s, i) => {
+        const chosen = [...picks[i]];
+        if (typed[i].trim()) chosen.push(typed[i].trim());
+        answers[event.questions[i].question] = s.multi ? chosen : (typed[i].trim() || chosen[0] || '');
+      });
+      try { answerInput(event, { answers }); } catch {}
+      lines = steps.map((s, i) => {
+        const a = answers[event.questions[i].question];
+        return [s.header || s.question, (Array.isArray(a) ? a : [a]).filter(Boolean).map(clean).join(', ') || '—'];
+      });
+    } else {
+      const a = typed[0].trim() || [...picks[0]][0] || '';
+      try { answerInput(event, a); } catch {}
+      const shown = (steps[0].options.find((o) => o.value === a) || {}).label || a;
+      lines = [[steps[0].question, 'You chose: ' + clean(shown)]];
+    }
+    settleAsk(v, box, record(lines));
     setActivity(v, 'Working');
     updateSendState();
   };
-  const collect = () => {
-    const answers = {};
-    qs.forEach((q, i) => {
-      const chosen = [...picks[i]];
-      const typed = others[i].trim();
-      if (typed) chosen.push(typed);
-      answers[q.question] = q.multiSelect ? chosen : (typed || chosen[0] || '');
-    });
-    return { answers };
+  const answered = (i) => picks[i].size > 0 || !!typed[i].trim();
+  const next = () => {
+    if (cur < steps.length - 1) { cur += 1; otherOpen = false; paint(); }
+    else finish(false);
   };
-  const submit = () => { if (!submitBtn.disabled) finish(collect(), false); };
-  const choose = (i, label) => {
-    const q = qs[i];
-    current = i;
-    if (q.multiSelect) { if (picks[i].has(label)) picks[i].delete(label); else picks[i].add(label); }
-    else { picks[i] = new Set([label]); others[i] = ''; secs[i].otherOpen = false; secs[i].otherIn.value = ''; secs[i].otherIn.hidden = true; }
-    refresh();
-    if (instant) { submit(); return; }
-    // A single-pick question is done once picked: move on to the next one.
-    if (!q.multiSelect) { const n = qs.findIndex((_, k) => !answered(k)); if (n !== -1) { current = n; refresh(); } }
+  const choose = (i, value) => {
+    const s = steps[i];
+    if (s.multi) { if (picks[i].has(value)) picks[i].delete(value); else picks[i].add(value); paint(); return; }
+    picks[i] = new Set([value]); typed[i] = '';
+    next();
   };
-  qs.forEach((q, i) => {
-    const sec = el('div', 'uq-sec');
-    const top = el('div', 'uq-top');
-    if (q.header) top.appendChild(el('span', 'uq-hdr', esc(q.header)));
-    if (q.multiSelect) top.appendChild(el('span', 'uq-multi', 'choose any'));
-    if (top.children.length) sec.appendChild(top);
-    sec.appendChild(el('div', 'uq-question', esc(q.question)));
-    const list = el('div', 'uq-list');
-    list.setAttribute('role', q.multiSelect ? 'group' : 'radiogroup');
-    const cards = [];
-    const addCard = (label, desc, n, isOther) => {
-      const c = el('button', 'uq-card');
-      c.type = 'button';
-      c.setAttribute('role', q.multiSelect ? 'checkbox' : 'radio');
-      if (isOther) c.dataset.other = '1'; else c.dataset.label = label;
-      c.appendChild(el('span', 'uq-k', String(n)));
-      const t = el('span', 'uq-t');
-      t.appendChild(el('span', 'uq-l', esc(label)));
-      if (desc) t.appendChild(el('span', 'uq-desc', esc(desc)));
-      c.appendChild(t);
-      list.appendChild(c); cards.push(c);
-      return c;
-    };
-    q.options.forEach((o, k) => {
-      const c = addCard(o.label, o.description, k + 1, false);
-      c.onclick = () => choose(i, o.label);
+
+  const paint = () => {
+    const s = steps[cur];
+    box.innerHTML = '';
+    const h = el('div', 'ask-h');
+    h.appendChild(el('b', '', esc(confirm ? 'Confirm' : (s.header || 'Question'))));
+    if (steps.length > 1) h.appendChild(el('span', '', (cur + 1) + ' of ' + steps.length));
+    if (s.multi) h.appendChild(el('span', 'qa-multi', 'choose any'));
+    box.appendChild(h);
+    box.appendChild(el('div', 'qa-q', esc(s.question)));
+    const acts = el('div', 'ask-acts');
+    if (confirm) {
+      const ok = el('button', 'b pri', 'Confirm'); ok.type = 'button'; ok.onclick = () => finish(false, 'yes');
+      const no = el('button', 'b', 'Deny'); no.type = 'button'; no.onclick = () => finish(false, 'no');
+      const dis = el('button', 'b lnk', 'Dismiss'); dis.type = 'button'; dis.onclick = () => finish(true);
+      acts.appendChild(dis); acts.appendChild(el('span', 'qa-sp')); acts.appendChild(no); acts.appendChild(ok);
+      box.appendChild(acts);
+      return;
+    }
+    const list = el('div', 'qa-list');
+    list.setAttribute('role', s.multi ? 'group' : 'radiogroup');
+    s.options.forEach((o, k) => {
+      const r = el('button', 'qa-opt' + (picks[cur].has(o.value) ? ' on' : ''));
+      r.type = 'button';
+      r.setAttribute('role', s.multi ? 'checkbox' : 'radio');
+      r.setAttribute('aria-checked', String(picks[cur].has(o.value)));
+      r.appendChild(el('kbd', '', String(k + 1)));
+      const t = el('span', 'qa-t');
+      t.appendChild(el('span', 'qa-l', esc(o.label)));
+      if (o.desc) t.appendChild(el('span', 'qa-d', esc(o.desc)));
+      r.appendChild(t);
+      r.onclick = () => choose(cur, o.value);
+      list.appendChild(r);
     });
-    const oc = addCard(q.options.length ? 'Other…' : 'Type your answer', q.options.length ? 'Type your own answer' : '', q.options.length + 1, true);
-    const otherIn = document.createElement('input');
-    otherIn.className = 'uq-other-in';
-    otherIn.placeholder = 'Your answer';
-    otherIn.setAttribute('aria-label', 'Your own answer to: ' + q.question);
-    otherIn.hidden = true;
-    const s = { sec, cards, otherIn, otherOpen: false };
-    oc.onclick = () => {
-      current = i;
-      if (!q.multiSelect) picks[i].clear();
-      s.otherOpen = true; otherIn.hidden = false; otherIn.focus(); refresh();
-    };
-    otherIn.addEventListener('input', () => { others[i] = otherIn.value; refresh(); });
-    otherIn.addEventListener('keydown', (e) => {
-      e.stopPropagation();
-      if (e.key === 'Enter') { e.preventDefault(); if (instant) { if (otherIn.value.trim()) finish(collect(), false); } else submit(); }
-      else if (e.key === 'Escape') { e.preventDefault(); otherIn.blur(); }
-    });
-    sec.appendChild(list); sec.appendChild(otherIn);
-    sec.addEventListener('focusin', () => { current = i; refresh(); });
-    box.appendChild(sec);
-    if (!q.options.length) { s.otherOpen = true; otherIn.hidden = false; }
-    secs.push(s);
-  });
-  const foot = el('div', 'uq-foot');
-  const skip = el('button', 'uq-skip', 'Skip');
-  skip.type = 'button';
-  skip.title = 'Let the agent decide (Esc)';
-  skip.onclick = () => finish(null, true);
-  foot.appendChild(el('span', 'uq-hint', instant ? 'Pick one, or type in the message box · 1–' + (qs[0].options.length + 1) + ' to choose' : 'Enter to submit · Esc to skip'));
-  foot.appendChild(skip);
-  if (!instant || !qs[0].options.length) { submitBtn.onclick = submit; foot.appendChild(submitBtn); }
-  box.appendChild(foot);
-  // Keys while the card waits: 1-9 pick in the current question, Enter submits, Esc skips.
+    // Your own words: a row that opens a field (straight away when there are no options).
+    const n = s.options.length + 1;
+    const or = el('button', 'qa-opt qa-other-row' + (otherOpen || typed[cur] ? ' on' : ''));
+    or.type = 'button';
+    or.appendChild(el('kbd', '', String(n)));
+    const ot = el('span', 'qa-t'); ot.appendChild(el('span', 'qa-l', s.options.length ? 'Something else…' : 'Type your answer')); or.appendChild(ot);
+    or.onclick = () => { otherOpen = true; if (!s.multi) picks[cur].clear(); paint(); };
+    list.appendChild(or);
+    box.appendChild(list);
+    if (otherOpen || !s.options.length) {
+      const inp = document.createElement('input');
+      inp.className = 'qa-other';
+      inp.placeholder = 'Your answer';
+      inp.value = typed[cur];
+      inp.setAttribute('aria-label', 'Your own answer to: ' + s.question);
+      inp.addEventListener('input', () => { typed[cur] = inp.value; });
+      inp.addEventListener('keydown', (e) => {
+        e.stopPropagation();
+        if (e.key === 'Enter' && inp.value.trim()) { e.preventDefault(); typed[cur] = inp.value; if (!s.multi) picks[cur].clear(); next(); }
+        else if (e.key === 'Escape') { e.preventDefault(); otherOpen = false; paint(); }
+      });
+      box.appendChild(inp);
+      setTimeout(() => { if (inp.isConnected) inp.focus(); }, 0);
+    }
+    if (cur > 0) { const back = el('button', 'b lnk', '← Back'); back.type = 'button'; back.onclick = () => { cur -= 1; otherOpen = !!typed[cur]; paint(); }; acts.appendChild(back); }
+    acts.appendChild(el('span', 'qa-hint', '1–' + n + ' to pick' + (s.multi ? ', Enter for next' : '') + ' · Esc to skip'));
+    acts.appendChild(el('span', 'qa-sp'));
+    const skip = el('button', 'b', steps.length > 1 ? 'Skip all' : 'Skip'); skip.type = 'button'; skip.title = 'Let the agent decide (Esc)';
+    skip.onclick = () => finish(true);
+    acts.appendChild(skip);
+    if (s.multi) {
+      const go = el('button', 'b pri', cur < steps.length - 1 ? 'Next' : 'Send'); go.type = 'button';
+      go.disabled = !answered(cur); go.onclick = next; acts.appendChild(go);
+    }
+    box.appendChild(acts);
+  };
+
+  // Keys while it waits: 1-9 pick, Enter moves on (choose any), Backspace goes back, Esc skips.
   function onKey(e){
     if (done || v !== actView() || !box.isConnected) return;
-    if (e.target && e.target.classList && e.target.classList.contains('uq-other-in')) return;
+    if (e.target && e.target.classList && e.target.classList.contains('qa-other')) return;
     if (isField(e.target) && e.target.id === 'prompt' && e.target.value) return;   // typing an answer there
-    if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); finish(null, true); return; }
-    if (e.key === 'Enter' && !isField(e.target)) { e.preventDefault(); e.stopImmediatePropagation(); submit(); return; }
+    if (e.key === 'Escape') { e.preventDefault(); e.stopImmediatePropagation(); finish(true); return; }
+    if (confirm) return;
+    const s = steps[cur];
     if (/^[1-9]$/.test(e.key) && !e.ctrlKey && !e.altKey && !isField(e.target)) {
-      const s = secs[current]; const c = s && s.cards[Number(e.key) - 1];
-      if (c) { e.preventDefault(); e.stopImmediatePropagation(); c.click(); }
+      const rows = box.querySelectorAll('.qa-opt'); const r = rows[Number(e.key) - 1];
+      if (r) { e.preventDefault(); e.stopImmediatePropagation(); r.click(); }
+      return;
     }
+    if (e.key === 'Enter' && s.multi && answered(cur) && !isField(e.target)) { e.preventDefault(); e.stopImmediatePropagation(); next(); return; }
+    if (e.key === 'Backspace' && cur > 0 && !isField(e.target)) { e.preventDefault(); e.stopImmediatePropagation(); cur -= 1; otherOpen = !!typed[cur]; paint(); }
   }
   document.addEventListener('keydown', onKey, true);
-  // Typed in the message box and sent: that is the answer.
+
   v.pendingAsk = {
-    answerTyped: (text) => finish(qs.length === 1 ? { answers: { [qs[0].question]: text } } : text, false),
-    // The run ended (Stop, an error) before an answer: the card must not stay clickable.
+    box, kind: confirm ? 'confirm' : 'ask',
+    // Typed in the message box and sent: the answer to the question on screen.
+    answerTyped: (text) => {
+      if (confirm) { finish(false, text); return; }
+      typed[cur] = String(text || ''); picks[cur] = steps[cur].multi ? picks[cur] : new Set();
+      next();
+    },
+    // The run ended (Stop, an error) before an answer.
     expire: () => {
       if (done) return; done = true; v.pendingAsk = null;
       document.removeEventListener('keydown', onKey, true);
-      const rec = el('div', 'uq-done');
-      rec.appendChild(el('span', 'uq-q', esc(qs.length === 1 ? qs[0].question : qs.length + ' questions')));
-      rec.appendChild(el('span', 'uq-a', 'Not answered — the run ended'));
-      box.replaceWith(rec);
+      settleAsk(v, box, record([[steps.length === 1 ? steps[0].question : steps.length + ' questions', 'Not answered — the run ended']]));
       updateSendState();
     },
   };
-  refresh();
+  paint();
   return box;
 }
 /** Settings > Keyboard, drawn from the same table. */

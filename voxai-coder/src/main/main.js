@@ -21,6 +21,8 @@ const { runAgent, pendingAsk, answerPendingAsk } = require('../backend/agent');
 const { chatOnce, normalizeReasoning } = require('../backend/providers/openrouter');
 const store = require('../backend/sessions');
 const goalLib = require('../backend/goal');
+const commands = require('../backend/commands');
+const checkpoints = require('../backend/tools/checkpoints');
 const { compactSession, estimateSessionTokens } = require('../backend/compact');
 
 const isDev = process.argv.includes('--dev');
@@ -88,7 +90,9 @@ function getSettings(redacted = true) {
   const raw = readSettingsFile();
   return {
     openrouterHost: raw.openrouterHost || 'https://openrouter.ai',
-    openrouterModel: raw.openrouterModel || 'anthropic/claude-sonnet-4.5',
+    // DeepSeek V4.1 Flash: it can see screenshots, and in the one-shot build test it made a
+    // working app for ~$0.25 where V4 Flash (text only) made nothing usable.
+    openrouterModel: raw.openrouterModel || 'deepseek/deepseek-v4.1-flash',
     reasoningEffort: normalizeReasoning(raw.reasoningEffort),
     access: raw.access ? (require('../backend/tools/sandbox').normalizeAccess(raw.access)) : 'test',
     planMode: raw.planMode === true || raw.planMode === 'true',
@@ -981,7 +985,7 @@ app.whenReady().then(() => {
     });
   }
 
-  async function launchRun({ sessionId, text, attachments, resume = false, goalContinue = false }) {
+  async function launchRun({ sessionId, text, attachments, resume = false, goalContinue = false, readOnly = false }) {
     const s = getSettings(false);
     if (!s.openrouterKey) throw new Error('No OpenRouter API key — open Settings and paste one.');
     const sess = await getLive(sessionId);
@@ -1021,7 +1025,10 @@ app.whenReady().then(() => {
           session: sess, userText: text, resume,
           attachments: attachments || [],
           apiKey: s.openrouterKey, host: s.openrouterHost, model: sess.model || s.openrouterModel,
-          reasoningEffort: s.reasoningEffort, access: s.access, planMode: s.planMode,
+          // /review: looking only. Ask-first, and no tool that writes (a shell command that is only
+          // looking, like git diff, still runs without asking).
+          reasoningEffort: s.reasoningEffort, access: readOnly ? 'ask' : s.access, planMode: s.planMode,
+          ...(readOnly ? { allowTools: require('../backend/tools/spawn').READ_TOOLS.concat(['shell']) } : {}),
           signal: ctl.signal, askPermission, userInput: askUserInput,
           compactThreshold: s.compactThreshold, toolResultMaxChars: s.toolResultMaxChars, contextLimit: s.contextLimit, hardFraction: s.hardFraction,
           budgetUsd: Number(s.runBudgetUsd) > 0 ? Number(s.runBudgetUsd) : 1,
@@ -1147,6 +1154,82 @@ app.whenReady().then(() => {
     await store.saveSession(userData(), sess);
     return goalView(sess.goal);
   });
+  // ---- slash commands: /review /init /rewind /loop (backend/commands.js) ----
+  const runningFor = (sessionId) => [...controllers.keys()].some((k) => k.startsWith(sessionId + ':'));
+  const loops = new Map();   // sessionId -> { task, ms, runs, timer, nextAt, fails }
+  const loopView = (l) => (l ? { task: l.task, ms: l.ms, every: commands.every(l.ms), runs: l.runs, nextAt: l.nextAt } : null);
+  const loopEvent = (sessionId, event) => {
+    const c = chatWebContents();
+    c && c.send('agent:event', { sessionId, runKey: 'loop', event: { type: 'loop', ...event, loop: loopView(loops.get(sessionId)) } });
+  };
+  function stopLoop(sessionId, why) {
+    const l = loops.get(sessionId);
+    if (!l) return false;
+    clearInterval(l.timer);
+    loops.delete(sessionId);
+    loopEvent(sessionId, { phase: 'stopped', reason: why || '' });
+    return true;
+  }
+  async function loopTick(sessionId) {
+    const l = loops.get(sessionId);
+    if (!l) return;
+    l.nextAt = Date.now() + l.ms;
+    const sess = live.get(sessionId);
+    if (!sess || store.isDeleted(sess)) { stopLoop(sessionId, 'the session is gone'); return; }
+    // Busy (a run going, or a question waiting on you): this turn is skipped, not queued.
+    const waiting = [...pendingPerms.values()].some((x) => x.msg && x.msg.sessionId === sessionId)
+      || [...pendingInputs.values()].some((x) => x.sessionId === sessionId);
+    if (runningFor(sessionId) || waiting) { loopEvent(sessionId, { phase: 'skipped', reason: 'still busy from before' }); return; }
+    l.runs += 1;
+    try {
+      const r = await launchRun({ sessionId, text: commands.loopPrompt(l.task, l.runs) });
+      l.fails = 0;
+      loopEvent(sessionId, { phase: 'run', runKey: r.runKey });
+    } catch (e) {
+      l.fails = (l.fails || 0) + 1;
+      if (l.fails >= 3) stopLoop(sessionId, 'three runs in a row could not start: ' + String((e && e.message) || e).slice(0, 160));
+      else loopEvent(sessionId, { phase: 'skipped', reason: String((e && e.message) || e).slice(0, 160) });
+    }
+  }
+  ipcMain.handle('agent:command', async (_e, { sessionId, text }) => {
+    const cmd = commands.parseCommand(text);
+    if (!cmd) throw new Error('not a command');
+    const sess = await getLive(sessionId);
+    if (cmd.name === 'loop') {
+      const lp = commands.parseLoop(cmd.rest);
+      if (lp.stop) return { kind: 'loop', stopped: stopLoop(sessionId, 'you stopped it') };
+      if (!lp.task) throw new Error('Say what to repeat, for example: /loop 10m check the build still passes');
+      if (runningFor(sessionId)) throw new Error('A run is going: stop it or wait for it, then start the loop.');
+      stopLoop(sessionId, 'replaced by a new loop');
+      const l = { task: lp.task.slice(0, 1000), ms: lp.ms, runs: 1, fails: 0, nextAt: Date.now() + lp.ms, timer: null };
+      loops.set(sessionId, l);
+      l.timer = setInterval(() => { loopTick(sessionId).catch(() => {}); }, lp.ms);
+      const r = await launchRun({ sessionId, text: commands.loopPrompt(l.task, 1) });
+      loopEvent(sessionId, { phase: 'set' });
+      return { kind: 'run', runKey: r.runKey, loop: loopView(l) };
+    }
+    if (runningFor(sessionId)) throw new Error('A run is going: stop it or wait for it first.');
+    if (cmd.name === 'rewind') {
+      const trash = (f) => require('electron').shell.trashItem(f);
+      const r = await checkpoints.rewind(userData(), sessionId, trash);
+      if (r.ok && (r.restored.length || r.removed.length)) {
+        // The agent must know its last changes are gone, or it builds on files that are not there.
+        sess.messages.push({ role: 'user', content: '[VOX REWIND] The user rewound the file changes of your last run. '
+          + (r.restored.length ? 'Put back as they were before it: ' + r.restored.join(', ') + '. ' : '')
+          + (r.removed.length ? 'Removed (they did not exist before it): ' + r.removed.join(', ') + '. ' : '')
+          + 'Anything a shell command changed was not undone.' });
+        try { await store.saveSession(userData(), sess); } catch {}
+      }
+      return { kind: 'rewind', ...r };
+    }
+    const r = await launchRun(cmd.name === 'review'
+      ? { sessionId, text: commands.reviewPrompt(cmd.rest), readOnly: true }
+      : { sessionId, text: commands.initPrompt() });
+    return { kind: 'run', runKey: r.runKey };
+  });
+  ipcMain.handle('loop:get', async (_e, sessionId) => loopView(loops.get(sessionId)));
+  ipcMain.handle('loop:stop', async (_e, sessionId) => stopLoop(sessionId, 'you stopped it'));
+
   // Stop: the run ends, and the goal waits for you instead of starting the next one.
   ipcMain.handle('goal:pause', async (_e, sessionId) => {
     const sess = live.get(sessionId);

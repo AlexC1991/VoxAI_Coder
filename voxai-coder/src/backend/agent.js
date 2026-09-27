@@ -32,6 +32,7 @@ const { compactSession, estimateSessionTokens } = require('./compact');
 const crypto = require('crypto');
 const { checkToolAllowed, checkShellCommand, isReadOnlyCommand } = require('./tools/sandbox');
 const { processKills, onlyKills, harmlessBesidesKills, judgeKills, killKeys } = require('./tools/kills');
+const checkpoints = require('./tools/checkpoints');
 const { chatOnce, reasoningParam } = require('./providers/openrouter');
 
 // Auto mode's safety check: one short question per action that would otherwise ask.
@@ -246,6 +247,18 @@ async function loadDurableContext(workdir, userData) {
   } catch { /* no build state yet */ }
 
   const parts = [];
+  // The project's own notes for agents -- AGENTS.md (what Codex reads; /init writes it),
+  // else CLAUDE.md -- first, as instructions from the project. Nothing read them before.
+  for (const name of ['AGENTS.md', 'CLAUDE.md']) {
+    try {
+      const text = await require('fs/promises').readFile(require('path').join(workdir, name), 'utf8');
+      if (text.trim()) {
+        const cut = text.length > 12000 ? text.slice(0, 12000) + '\n[... the rest of ' + name + ' is not shown]' : text;
+        parts.push(`[PROJECT NOTES] from ${name} in the project folder -- how to build, test and run it, and its conventions. Follow them:\n${cut.trim()}`);
+        break;
+      }
+    } catch { /* no such file */ }
+  }
   if (memFacts.length) {
     // Bounded so a long-lived project cannot grow the prefix without limit.
     const shown = memFacts.slice(-60).map((f) => `- ${String(f.text || f).slice(0, 300)}`);
@@ -470,6 +483,8 @@ async function* runAgent(opts) {
     // on every send; bounding at write time does the same job cache-safely.
     toolResultMaxChars = null,
     isSubAgent = false,
+    // A worker: the run that started it, whose checkpoint its file changes go into (/rewind).
+    checkpointFrom = null,
     subagentModel = '', subagentMaxTurns = null, subagentTimeoutMs = null, mcpServers = null,
     maxTurns = null,
     // Carry on from the session as it stands, with no new message: a question the app
@@ -816,6 +831,10 @@ async function* runAgent(opts) {
     };
   }
 
+  // This run's file changes, for /rewind. A worker in the same folder adds to its parent's,
+  // so one /rewind undoes what the run and its workers changed. (A worker in a worktree keeps its own.)
+  if (checkpointFrom && checkpointFrom._checkpoint && checkpointFrom.workdir === session.workdir) session._checkpoint = checkpointFrom._checkpoint;
+  else checkpoints.startRun(session);
   const turnLimit = Number(maxTurns) > 0 ? Math.max(1, Math.round(Number(maxTurns))) : MAX_TURNS;
   const budget = Number(budgetUsd) > 0 ? Number(budgetUsd) : DEFAULT_RUN_BUDGET_USD;
   let spent = 0;
@@ -823,6 +842,7 @@ async function* runAgent(opts) {
   // Replies cut off at the output limit in a row, and a lower thinking level for the turn
   // after one (see the finishReason === 'length' handling below).
   let cutoffs = 0;
+  let planClosed = false;   // the finishing plan reminder, once per run
   let effortNext = null;
   // Auto and Full access are the "let it work" modes: pausing every 60 turns there
   // only meant someone typing "continue" seven times through one build. The spend
@@ -876,7 +896,7 @@ async function* runAgent(opts) {
       resolveIn, userData, live, userInput: userInput || (async () => ({ answer: null, cancelled: true })),
       runner: (o) => runAgent(o),
       // askPermission: a worker's prompts come to the same place as this run's (spawn.js).
-      agentOpts: { apiKey, host, model, reasoningEffort, reasoningSpec, access, sessionId: session.id, signal, isSubAgent, workdir: session.workdir, visionHelper, askPermission,
+      agentOpts: { apiKey, host, model, reasoningEffort, reasoningSpec, access, sessionId: session.id, signal, isSubAgent, workdir: session.workdir, visionHelper, askPermission, checkpointSession: session,
         defaultSubModel: subagentModel, defaultSubMaxTurns: subagentMaxTurns, defaultSubTimeoutMs: subagentTimeoutMs,
         // Sub-agents spend the PARENT's remaining allowance, never a fresh one.
         // Rebuilt each turn so a fan-out later in the run sees the depleted figure.
@@ -1054,6 +1074,18 @@ async function* runAgent(opts) {
     }
 
     if (!toolCalls.length) {
+      // About to finish with steps still open in its plan (seen: a long build stopped at
+      // 10 of 13 ticked). Once per run: tick off what was done, or say what was not and why.
+      const open = Array.isArray(session.todos) ? session.todos.filter((t) => t && !t.done) : [];
+      if (open.length && !planClosed && String(content || '').trim()) {
+        planClosed = true;
+        session.messages.push({ role: 'assistant', content });
+        session.messages.push({ role: 'user', content: `[VOX PLAN] Before you finish: your plan still shows ${open.length} open step${open.length === 1 ? '' : 's'} (`
+          + open.slice(0, 6).map((t) => '"' + String(t.text || t.title || t.content || '').slice(0, 60) + '"').join(', ') + '). '
+          + 'Call todo with the whole list: mark the steps that are done. For any not done, say which and why in one line. Do not start new work.' });
+        yield { type: 'warning', code: 'plan-close', message: 'The plan still had open steps; asked the agent to close it.' };
+        continue;
+      }
       if (!String(content || '').trim()) {
         yield { type: 'warning', code: 'empty-answer', message: 'The model returned an empty answer twice. Send your message again, or try another model.' };
       }
@@ -1205,6 +1237,8 @@ async function* runAgent(opts) {
         }
         // Run the tool and pump its events out while it is still running.
         let toolSettled = false;
+        // The file as it was, before this run's first change to it (/rewind puts it back).
+        await checkpoints.before(userData, session, checkpoints.pathsOf(tc.name, args));
         const runP = impl.run(args, ctx)
           .then((value) => ({ value }), (error) => ({ error }))
           .then((outcome) => { toolSettled = true; pushEvent(null); return outcome; });

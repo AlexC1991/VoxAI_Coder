@@ -253,9 +253,14 @@ check('worker detail starts collapsed', HTML.includes("const inner = el('div', '
 console.log('\n[AM] T1 rail; delegation lives on the row that delegated it');
 // They were the same object: 1px border, 8px radius, --panel fill, chevron, title,
 // right-aligned status. Two different things in one costume.
-check('reasoning has no border, fill or radius', /\.think\{display:grid;grid-template-columns:9px/.test(HTML), 'still a box');
-check('the rail replaces the chrome', HTML.includes('.think-rail{') && HTML.includes("el('div', 'think-rail')"), 'no rail');
-check('the rail settles when thinking stops', HTML.includes('.think.sealed .think-rail{'), 'pulses forever');
+check('reasoning has no border, fill or radius', /\.think\{display:grid;grid-template-columns:minmax\(0,1fr\);margin:7px 0\}/.test(HTML), 'still a box');
+// The user: a line down the side still read as a boxed-in space. Thinking is its line and text.
+check('inline code in an answer is the text\'s own colour on a faint tint, not a dark box in gold',
+  HTML.includes('.md code{font-family:"Sometype Mono",monospace;font-size:.92em;background:rgba(127,127,127,.14);border:0;border-radius:4px;padding:.05em .35em;color:inherit}'), 'gold box');
+check('no rail beside thinking', HTML.includes('.think-rail{display:none}') && !HTML.includes('.think.sealed .think-rail{'), 'rail');
+check('an answered question is a plain line, no rail', HTML.includes('.uq-done{display:flex;flex-wrap:wrap;gap:4px 10px;align-items:baseline;font-size:13px;color:var(--sub)}'), 'rail');
+check('what the agent writes stays in the thread; nothing folds it into a step', HTML.includes('    if (said) finalizeRunCard();') && !/foldNarration|SAY_MAX/.test(HTML)
+  && HTML.includes("          finalizeRunCard(); addMsg(text);"), 'folded');
 // A sub-agent's progress was a separate table; while a reviewer thought for three
 // minutes the row that started it said only "Delegating". Found in a live run.
 check('sub-agent events reach the delegating row', HTML.includes('if (host) subEvent(host, event);') && HTML.includes('v._subHost = rec;'), 'separate table');

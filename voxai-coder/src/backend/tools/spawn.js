@@ -206,6 +206,7 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
           ? (agentOpts.modelVision === undefined ? null : agentOpts.modelVision) : null,
         priceOut: agentOpts.priceOut || 0,
         visionHelper: agentOpts.visionHelper || '',
+        checkpointFrom: agentOpts.checkpointSession || null,
         contextLimit: agentOpts.contextLimit,
         compactThreshold: agentOpts.compactThreshold,
         hardFraction: agentOpts.hardFraction,

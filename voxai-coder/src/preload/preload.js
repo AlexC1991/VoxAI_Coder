@@ -91,6 +91,9 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
   // agent (own Node loop, streamed events)
   agentSend: (sessionId, text, attachments) => ipcRenderer.invoke('agent:send', { sessionId, text, attachments: attachments || [] }),
   agentCancel: (runKey) => ipcRenderer.invoke('agent:cancel', runKey),
+  agentCommand: (sessionId, text) => ipcRenderer.invoke('agent:command', { sessionId, text }),
+  loopGet: (sessionId) => ipcRenderer.invoke('loop:get', sessionId),
+  loopStop: (sessionId) => ipcRenderer.invoke('loop:stop', sessionId),
   goalGet: (sessionId) => ipcRenderer.invoke('goal:get', sessionId),
   goalSet: (sessionId, condition) => ipcRenderer.invoke('goal:set', { sessionId, condition }),
   goalClear: (sessionId) => ipcRenderer.invoke('goal:clear', sessionId),
