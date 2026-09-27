@@ -1335,6 +1335,7 @@ app.whenReady().then(() => {
           priceOut: modelPrice(sess.model || s.openrouterModel).out,
           // Whether screenshots are handed over as images or described as unseen.
           modelVision: modelVision(sess.model || s.openrouterModel),
+          visionOf: (id) => modelVision(id),   // a worker on another model (Team's coder) is asked about its own eyes
           visionHelper: s.visionHelperModel || '',
           // Auto's yes/no on each action, on a cheap model (Settings > Permissions).
           checkModel: s.autoCheckModel || '',
@@ -1342,6 +1343,7 @@ app.whenReady().then(() => {
           cacheTtl: s.claudeCacheHour ? '1h' : '',
           // Team: the cheap model that writes the code under this one (backend/team.js).
           coderModel: sess.coderModel && sess.coderModel !== (sess.model || s.openrouterModel) ? sess.coderModel : '',
+          coderVision: sess.coderModel ? modelVision(sess.coderModel) : null,
           // Which thinking levels this model takes, so the chip's choice means something.
           reasoningSpec: modelReasoning(sess.model || s.openrouterModel),
           subagentModel: s.subagentModel, subagentMaxTurns: s.subagentMaxTurns, subagentTimeoutMs: s.subagentTimeoutMs, mcpServers: readSettingsFile().mcpServers || {},

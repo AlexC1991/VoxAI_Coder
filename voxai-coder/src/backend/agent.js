@@ -571,6 +571,7 @@ async function* runAgent(opts) {
     // Can this model read images? true / false from the catalogue; null = unknown.
     // Decides whether a screenshot is handed over as a real image or described.
     modelVision = null,
+    visionOf = null,   // (modelId) -> true/false/null: whether another model can read images
     // A model that can see, to describe screenshots for one that cannot. '' = off.
     visionHelper = '',
     // A cheap model for Auto's yes/no on each action. '' = the session's own model.
@@ -581,6 +582,7 @@ async function* runAgent(opts) {
     cacheTtl = '',
     // Team (backend/team.js): a cheap model that does the hands-on work as this run's sub-agent. '' = off.
     coderModel = '',
+    coderVision = null,   // false: the coder cannot read images, so the planner does the looking
     // { enabled, engine, maxResults } from Settings. null = defaults (on, exa, 5).
     webSearch = null,
   } = opts;
@@ -604,7 +606,7 @@ async function* runAgent(opts) {
     if (emitWake) { const w = emitWake; emitWake = null; try { w(); } catch {} }
   };
   let planApproved = planMode ? false : true;
-  const teamRun = { coderFails: 0, written: 0, looks: 0 };   // Team: coder runs that did not finish (after two the planner may do the work), lines the planner wrote, its browser actions
+  const teamRun = { coderFails: 0, written: 0, looks: 0, blindCoder: coderVision === false };   // Team: coder runs that did not finish (after two the planner may do the work), lines the planner wrote, its browser actions
   const resolveIn = (wd, p) => {
     const pathMod = require('path');
     const full = pathMod.resolve(wd, p);
@@ -696,41 +698,6 @@ async function* runAgent(opts) {
   };
   // ---- Auto mode ----
   const ownList = () => { try { return require('./tools/procs').list(session.id).map((r) => `${r.pid} (${String(r.command || r.name).slice(0, 60)})`).slice(0, 8); } catch { return []; } };
-  const autoCheck = async (kind, target) => {
-    pushEvent({ type: 'auto_check', phase: 'start', kind });
-    const messages = autoCheckMessages({ asked: userText || lastUserText(session), workdir: session.workdir, own: ownList(), kind, target });
-    try {
-      // On a cheap model: it is a short yes/no, and on the session's model an expensive one
-      // paid its full price for each. The session's model answers if the cheap one fails.
-      // No thinking: it is a yes or no. With the checker's default (high) it spent the whole
-      // reply thinking, answered nothing, and nothing counts as ask -- half of Auto's needless
-      // prompts in scripts/auto-battery.js.
-      const ask = (m, spec) => chatOnce({ apiKey, host, model: m, messages, maxTokens: 400, signal,
-        extra: { ...(spec === undefined ? { reasoning: { enabled: false } } : reasoningParam('none', spec, m)), usage: { include: true } } });
-      const said = (r) => String((r && r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content) || '');
-      let r;
-      if (checkModel && checkModel !== model && !sharesData(checkModel)) {
-        try { r = await ask(checkModel, checkReasoningSpec); } catch (e) { if (signal && signal.aborted) throw e; r = null; }
-        // An answer it could not read: the session's model decides, rather than you being asked for nothing.
-        if (r && readAutoDecision(said(r)).reason === 'no clear answer') r = null;
-      }
-      if (!r) r = await ask(model, reasoningSpec);
-      const cost = Number(r && r.usage && (r.usage.cost || r.usage.total_cost)) || 0;
-      if (cost > 0) {
-        spent += cost;
-        const ru = runUsageOf(session);
-        ru.cost += cost;
-        addExtra(session, 'Auto checks', cost);
-        pushEvent({ type: 'usage', usage: { prompt_tokens: Number(r.usage.prompt_tokens) || 0, completion_tokens: Number(r.usage.completion_tokens) || 0, cost, total_cost: cost, source: 'auto-check' } });
-      }
-      const { decision, reason } = readAutoDecision(said(r));
-      pushEvent({ type: 'auto_check', phase: 'done', kind, decision, reason });
-      return { decision, reason };
-    } catch (e) {
-      pushEvent({ type: 'auto_check', phase: 'done', kind, decision: 'ask', reason: String(e.message || e) });
-      return { decision: 'ask', reason: String(e.message || e).slice(0, 200) };
-    }
-  };
   const ctx = {
     workdir: session.workdir,
     session,
@@ -792,13 +759,10 @@ async function* runAgent(opts) {
       // Known harm (sandbox.js riskyCommand) is yours to decide, whatever a check would say.
       const risk = access !== 'auto' ? '' : kind === 'shell' ? riskyCommand(target, session.workdir) : riskyAction(kind, target);
       if (risk) note = `Auto wants your say: ${risk}.`;
-      else if (access === 'auto') {
-        // Auto never blocks on its own: what the check passes runs, and anything it
-        // is not sure about comes to you with its reason, the way any other level asks.
-        const d = await autoCheck(kind, target);
-        if (d.decision === 'allow') return true;
-        note = d.decision === 'block' ? `Auto mode wants your say: ${d.reason}` : `Auto mode could not check this: ${d.reason}`;
-      }
+      // Auto: what the risk rules do not flag is the leading model's call. The user, 2026-09-27:
+      // the lead model knows what is going on; a second model (V4.1 Flash, shown only the
+      // request and the action) was an extra cost that did not. Known harm still comes to you.
+      else if (access === 'auto') return true;
       // ask the UI via callback; must resolve true/false (timeout → false)
       const allowed = await askPermission({ kind, target, note, ...(opts && opts.alwaysKey ? { alwaysKey: opts.alwaysKey, alwaysLabel: opts.alwaysLabel } : {}) });
       if (!allowed) throw new Error(`permission denied: ${kind} ${target}`);
@@ -820,7 +784,7 @@ async function* runAgent(opts) {
   // Search off means the tool is not offered at all, and the prompt must not tell the
   // model to use it -- an instruction naming a missing tool invites made-up calls.
   const webSearchOn = !(webSearch && webSearch.enabled === false);
-  const systemPrompt = SYSTEM(session.workdir, access, planMode, durable, webSearchOn) + goalPrompt(session.goal) + (isSubAgent ? '' : teamPrompt(coderModel));
+  const systemPrompt = SYSTEM(session.workdir, access, planMode, durable, webSearchOn) + goalPrompt(session.goal) + (isSubAgent ? '' : teamPrompt(coderModel, coderVision));
   const estimatedBefore = estimateSessionTokens(session, systemPrompt);
   // User-visible compaction notices (like Codex/Claude Code): tell the UI before
   // and after we fold older turns, so compaction is never silent.
@@ -980,7 +944,7 @@ async function* runAgent(opts) {
         defaultSubTimeoutMs: coderModel ? Math.max(15 * 60 * 1000, Number(subagentTimeoutMs) || 0) : subagentTimeoutMs,
         // Sub-agents spend the PARENT's remaining allowance, never a fresh one.
         // Rebuilt each turn so a fan-out later in the run sees the depleted figure.
-        budgetRemaining: Math.max(0, budget - spent), priceIn, priceOut, modelVision, webSearch, onOpenUrl, onAttachAtlas },
+        budgetRemaining: Math.max(0, budget - spent), priceIn, priceOut, modelVision, visionOf, webSearch, onOpenUrl, onAttachAtlas },
       // mcpServers were never passed, so no configured MCP server could be seen.
       getSettings: () => ({ access, mcpServers: mcpServers || {} }),
       getAccess: () => access,
@@ -1383,9 +1347,11 @@ async function* runAgent(opts) {
             teamRun.coderFails += subs.filter((s) => !s || s.ok === false).length; teamRun.refused = 0;
             // Something you can see, built and never looked at: say so to the planner, which
             // otherwise took "done" on trust (a Breakout game checked on a stubbed canvas).
-            const unseen = subs.filter((s) => s && s.ok !== false && !s.browser_checks
-              && (s.files_changed || []).some((f) => /\.(html?|css|jsx?|tsx?|vue|svelte)$/i.test(String((f && f.path) || ''))));
-            if (unseen.length) result.team_note = 'The coder changed files you can see but never opened them in the browser. '
+            const visual = (s) => (s.files_changed || []).some((f) => /\.(html?|css|jsx?|tsx?|vue|svelte)$/i.test(String((f && f.path) || '')));
+            // A coder that cannot see only read the page's text: the looking is the planner's.
+            if (coderVision === false && subs.some((s) => s && s.ok !== false && visual(s))) result.team_note = 'The coder cannot see images, so nobody has looked at this yet. '
+              + 'Open it in the browser yourself now, use it, and send the coder exact fixes (what is wrong, where, what it should be).';
+            else if (subs.some((s) => s && s.ok !== false && !s.browser_checks && visual(s))) result.team_note = 'The coder changed files you can see but never opened them in the browser. '
               + 'Send it back (spawn_agent with resume: its subId) to open the result, use it like a person would, and fix what looks or plays wrong.';
           }
           let subIn = 0, subOut = 0, subCR = 0, subCost = 0;

@@ -353,8 +353,31 @@ async function consumeSSE(body, onEvent) {
 
   const emit = (e) => { try { onEvent && onEvent(e); } catch { /* renderer gone */ } };
 
+  // A provider that hangs mid-request: OpenRouter keeps the connection open with ": PROCESSING"
+  // comments, so nothing ever timed out and the run waited for ever (a Muse Spark coder sat on
+  // "Thinking" for 8+ minutes with the whole game's code attached). No real data -- text,
+  // thinking, a tool call, usage -- for this long ends the request as a retryable error.
+  const IDLE_MS = Number(process.env.VOX_STREAM_IDLE_MS) || 180000;
+  let lastReal = Date.now();
+  const stall = () => {
+    try { reader.cancel(); } catch { /* already closed */ }
+    const e = new Error(`The model stopped responding: nothing came back for ${IDLE_MS >= 120000 ? Math.round(IDLE_MS / 60000) + ' minutes' : Math.round(IDLE_MS / 1000) + ' seconds'}.`);
+    e.retryable = true; e.stalled = true;
+    return e;
+  };
+  // Checked two ways: a timer for a connection that goes quiet, and after every chunk for one
+  // that keeps sending keep-alives (each of those would otherwise restart the timer).
+  const readOrStall = () => new Promise((resolve, reject) => {
+    const t = setInterval(() => {
+      if (Date.now() - lastReal < IDLE_MS) return;
+      clearInterval(t);
+      reject(stall());
+    }, Math.min(5000, IDLE_MS));
+    reader.read().then((r) => { clearInterval(t); resolve(r); }, (e) => { clearInterval(t); reject(e); });
+  });
+
   for (;;) {
-    const { done, value } = await reader.read();
+    const { done, value } = await readOrStall();
     if (done) break;
     buf += decoder.decode(value, { stream: true });
     const parts = buf.split('\n\n');
@@ -366,6 +389,7 @@ async function consumeSSE(body, onEvent) {
       if (data === '[DONE]') continue;
       let json;
       try { json = JSON.parse(data); } catch { continue; }
+      lastReal = Date.now();
       if (json.usage) usage = json.usage;
       const choice = json.choices && json.choices[0];
       // finish_reason is the model's own termination signal. 'length' means it ran
@@ -407,6 +431,7 @@ async function consumeSSE(body, onEvent) {
         }
       }
     }
+    if (Date.now() - lastReal >= IDLE_MS) throw stall();
   }
   // Emit in index order — Map iteration is insertion order, which diverges from
   // call order whenever fragments interleave.

@@ -346,17 +346,12 @@ async function drain(gen) {
       const ev = await drain(runAgent({ session: { id: 'cj', workdir: WD, messages: [] }, userText: 'run it', apiKey: 'k', model: 'm', access: 'auto', askPermission: async (q) => { asked.push(q); return true; }, maxTurns: calls + 2 }));
       return { asked, checks, ends: ev.filter((e) => e.type === 'tool_end'), usage: ev.filter((e) => e.type === 'usage' && e.usage.source === 'auto-check') };
     };
-    let r = await autoRun([{ decision: 'allow', reason: 'runs a script the user asked for' }], 1);
-    check('allowed by the check: it runs, nobody is asked', r.asked.length === 0 && r.ends[0] && r.ends[0].ok === true, r);
-    check('the check is paid for and counted', r.usage.length === 1 && r.usage[0].usage.cost > 0, r.usage);
-    // Auto never blocks by itself: whatever the check is unsure of comes to you.
-    r = await autoRun([{ decision: 'ask', reason: 'this deletes data you did not ask to delete' }], 1);
-    check('unsure: you are asked, with the reason', r.asked.length === 1 && /Auto mode wants your say: this deletes data/.test(r.asked[0].note), r.asked);
-    check('and when you allow it, it runs', r.ends[0] && r.ends[0].ok === true, r.ends[0]);
-    r = await autoRun([{ decision: 'block', reason: 'too risky' }], 3);
-    check('nothing is ever blocked without asking you', r.asked.length === 3 && r.ends.every((e) => e.ok === true) && !r.ends.some((e) => /blocked/.test(String(e.result))), r.asked.length);
-    r = await autoRun([{ nonsense: true }], 1);
-    check('no clear answer from the check: the user decides', r.asked.length === 1 && /could not check/.test(r.asked[0].note), r.asked);
+    // 2026-09-27: the leading model decides what the risk rules do not flag. A second model
+    // (shown only the request and the action) was an extra cost that did not know what was going on.
+    let r = await autoRun([{ decision: 'block', reason: 'ignored: there is no check any more' }], 3);
+    check('in-between: it runs on the leading model\'s call, nobody is asked, and no check is made or paid for', r.asked.length === 0 && r.checks === 0 && r.usage.length === 0 && r.ends.length === 3 && r.ends.every((e) => e.ok === true), r);
+    const AGa = read('src/backend/agent.js');
+    check('known harm still comes to you, with the reason (the risk rules, not a model)', AGa.includes('if (risk) note = `Auto wants your say: ${risk}.`;') && AGa.includes("else if (access === 'auto') return true;") && !AGa.includes('const autoCheck = async'), 'risk');
 
     const HTML = read('src/renderer/index.html');
     check('Auto is in the Permissions menu', /const ACCESS = \['ask','edit','test','auto','full'\]/.test(HTML) && /auto:'Auto'/.test(HTML), 'missing');
@@ -1401,8 +1396,8 @@ async function drain(gen) {
     check('the app\'s window is never mistaken for a pop-up', MAIN.includes('const w = mainWindow = new BrowserWindow({') && MAIN.includes("function win() { return (mainWindow && !mainWindow.isDestroyed()) ? mainWindow"), 'first window');
     // The user: "Auto is just for dangerous stuff" -- in Auto, browser actions go to the check, the
     // agent's own local page just runs; the other modes keep their fixed rules.
-    check('in Auto, acting on a website goes to the check; on the agent\'s own local page it just runs', AG.includes("if (name !== 'computer' || surface === 'native' || !['click', 'type', 'press'].includes(act)) return null;")
-      && AG.includes("if (access === 'auto' && kind === 'browser-act' && opts && opts.local && !opts.password) return true;") && AG.includes("      else if (access === 'auto') {")
+    check('in Auto, acting on a website is the leading model\'s call unless the risk rules flag it; on the agent\'s own local page it just runs', AG.includes("if (name !== 'computer' || surface === 'native' || !['click', 'type', 'press'].includes(act)) return null;")
+      && AG.includes("if (access === 'auto' && kind === 'browser-act' && opts && opts.local && !opts.password) return true;") && AG.includes("      else if (access === 'auto') return true;")
       && AG.includes('const gate = (await browserGate(tc.name, args)) || permissionAsk(tc.name, args);'), 'policy');
     check('local pages are not asked about that way', AG.includes("!/^(localhost|127\\.0\\.0\\.1|\\[::1\\])$/i.test(u.hostname)"), 'asks for localhost');
     check('"Always" covers the site, and says so', MAIN.includes("const key = kind + '\\u0000' + String(alwaysKey || target || '');") && AG.includes('alwaysLabel: `Always on ${host}`') && HTML.includes("$('askAlways').textContent = p.alwaysLabel ||"), 'one action only');
@@ -2019,8 +2014,7 @@ async function drain(gen) {
     const local = await runClick('http://localhost:5173/');
     check('Auto: a click in the agent\'s own app on localhost runs without asking or checking', local.asked.length === 0 && local.checked === null, local);
     const site = await runClick('https://example.com/shop');
-    check('Auto: a click on a website goes to the check, described in words; you are asked only if it says so', site.checked && /Click "Begin" on example\.com/.test(site.checked)
-      && site.asked.length === 1 && site.asked[0].target === 'Click "Begin" on example.com' && /^Auto mode wants your say: test/.test(site.asked[0].note), site);
+    check('Auto: an ordinary click on a website ("Begin") runs on the leading model\'s call, with no check and no question', site.checked === null && site.asked.length === 0, site);
   }
 
   // ------------------------------------------------------------------ [WF]
@@ -2238,9 +2232,7 @@ async function drain(gen) {
     const AG = read('src/backend/agent.js');
     const MAINc = read('src/main/main.js');
     const HTMLc = read('src/renderer/index.html');
-    check('Auto asks a cheap model (Settings), the session\'s model only if that fails; its cost kept apart', AG.includes("try { r = await ask(checkModel, checkReasoningSpec); }")
-      && AG.includes("if (!r) r = await ask(model, reasoningSpec);") && AG.includes("addExtra(session, 'Auto checks', cost);")
-      && MAINc.includes("autoCheckModel: typeof raw.autoCheckModel === 'string' ? raw.autoCheckModel : 'deepseek/deepseek-v4.1-flash',") && HTMLc.includes('id="fAutoCheck"'), 'checker');
+    check('Auto makes no second-model check (the leading model decides); its setting is gone from Settings', !AG.includes('const autoCheck = async') && !HTMLc.includes('id="fAutoCheck"'), 'checker');
     check('the "Worked for" line carries the breakdown, and the run log keeps it', MAINc.includes('...(runParts ? { parts: runParts.parts, extras: runParts.extras } : {})')
       && HTMLc.includes("const row = el('div', 'run-cost');") && MAINc.includes('cacheWriteCents: m.pricing && m.pricing.input_cache_write != null'), 'took');
     // The warning, run in a small copy of the page's function.
@@ -2278,8 +2270,7 @@ async function drain(gen) {
     check('"only looking" stops at secrets, and in Auto at the project\'s edge', !autoRule('shell', 'type C:\\Users\\batty\\.ssh\\id_rsa', 'edit', W)
       && !autoRule('shell', 'type C:\\Windows\\win.ini', 'auto', W) && autoRule('shell', 'type src\\app.js', 'auto', W) === 'only looking', 'looking');
     const AGu = read('src/backend/agent.js');
-    check('the checker answers without thinking; an answer it cannot read goes to the session\'s model', AGu.includes("extra: { ...(spec === undefined ? { reasoning: { enabled: false } } : reasoningParam('none', spec, m)), usage: { include: true } } });")
-      && AGu.includes("if (r && readAutoDecision(said(r)).reason === 'no clear answer') r = null;") && AGu.includes("Do NOT ask just because an action was not in the request"), 'checker');
+    check('in Auto, what the risk rules do not flag is the leading model\'s call', AGu.includes("Auto: what the risk rules do not flag is the leading model's call.") && AGu.includes("else if (access === 'auto') return true;"), 'checker');
     check('a no covers that attempt; asked again in a later message, it is a new request', AGu.includes('If the user asks for it in a later message, that is a new request: do it then.') && !AGu.includes('do NOT retry this tool call'), 'deny');
     check('scripts/auto-battery.js tests the real check with the app\'s own rules, commands and clicks alike', read('scripts/auto-battery.js').includes("const rule = autoRule(kind, cmd, 'auto', WD);")
       && read('scripts/auto-battery.js').includes("riskyAction(kind, cmd)"), 'battery');
@@ -2329,13 +2320,13 @@ async function drain(gen) {
     check('a busy free model is not called used up for the day, and OpenRouter\'s own words are kept', /is busy right now/.test(busy) && !/used up/.test(busy) && /temporarily rate-limited upstream/.test(busy)
       && /this minute/.test(T.explainProviderError('429 Rate limit exceeded: free-models-per-min', 'qwen/qwen3.8-27b:free')), busy);
     check('expensive means $5+ per 1M out (Opus yes, V4.1 Flash no)', T.isExpensive({ completionCents: 0.002 }) && !T.isExpensive({ completionCents: 0.000029 }), 'expensive');
-    check('the planner is told to plan, hand steps to the coder, and check its work', /spawn_agent/.test(T.teamPrompt('deepseek/deepseek-v4.1-flash')) && /check the work before the next step/.test(T.teamPrompt('x')) && T.teamPrompt('') === '', 'prompt');
+    check('the planner is told to plan, hand steps to the coder, and check its work', /spawn_agent/.test(T.teamPrompt('deepseek/deepseek-v4.1-flash')) && /send it back with the specific fix/.test(T.teamPrompt('x')) && T.teamPrompt('') === '', 'prompt');
     check('same folder, same consent (case and slashes aside)', T.projectKey('A:/Github/Shop/') === T.projectKey('a:\\github\\shop'), 'key');
     const AGt = read('src/backend/agent.js'), MAINt = read('src/main/main.js'), HTMLt = read('src/renderer/index.html');
     check('with a coder: it is the default worker, starting it needs no approval, and its cost is "Coder"', AGt.includes('defaultSubModel: coderModel || subagentModel,')
       && AGt.includes("if (coderModel && (kind === 'spawn_agent' || kind === 'spawn_parallel')) return true;") && AGt.includes("addExtra(session, coderModel ? 'Coder' : 'Sub-agents', subCost);")
-      && AGt.includes("+ (isSubAgent ? '' : teamPrompt(coderModel));"), 'agent');
-    check('Auto\'s checker never sends your commands to a model that shares data', AGt.includes('if (checkModel && checkModel !== model && !sharesData(checkModel)) {'), 'checker');
+      && AGt.includes("+ (isSubAgent ? '' : teamPrompt(coderModel, coderVision));"), 'agent');
+    check('Auto sends your commands to no second model at all (so none that shares data)', !AGt.includes('const autoCheck = async') && !AGt.includes('await ask(checkModel'), 'checker');
     check('a sharing model runs only in a project you agreed to share (checked before every run)', MAINt.includes('if (sh && !s.dataShareOk[team.projectKey(sess.workdir)]) {')
       && MAINt.includes('for (const m of [sess.model || s.openrouterModel, sess.coderModel || \'\']) {'), 'guard');
     check('choosing one shows the disclaimer first: "Choosing this model shares your coding data"', HTMLt.includes("async function setModel(id){\n  if (!id) return;\n  if (!(await confirmShare(id))) return;")
@@ -2399,11 +2390,35 @@ async function drain(gen) {
     const SPw = read('src/backend/tools/spawn.js');
     check('the coder can use the session\'s browser and is told to try what it built like a person would (it had no browser, so Team\'s "the coder tests it" could not happen)',
       SPw.includes("const WRITE_TOOLS = READ_TOOLS.concat(['write', 'edit', 'patch', 'shell', 'node_repl', 'memory', 'computer']);")
-      && SPw.includes('onAttachAtlas: agentOpts.onAttachAtlas || null,') && A.includes('priceIn, priceOut, modelVision, webSearch, onOpenUrl, onAttachAtlas },')
+      && SPw.includes('onAttachAtlas: agentOpts.onAttachAtlas || null,') && A.includes('priceIn, priceOut, modelVision, visionOf, webSearch, onOpenUrl, onAttachAtlas },')
       && /open it with the computer tool and use it the way a/.test(SPw) && SPw.includes('browser_checks: browserChecks,'), 'coder browser');
-    check('visual work the coder never opened is flagged to the planner, to send it back', A.includes('if (unseen.length) result.team_note =') && A.includes('/\\.(html?|css|jsx?|tsx?|vue|svelte)$/i.test('), 'unseen');
+    check('visual work the coder never opened is flagged to the planner, to send it back', A.includes("else if (subs.some((s) => s && s.ok !== false && !s.browser_checks && visual(s))) result.team_note =") && A.includes('/\\.(html?|css|jsx?|tsx?|vue|svelte)$/i.test('), 'unseen');
+    const blind = { coderFails: 0, written: 0, looks: 0, blindCoder: true }; const bl = [...Array(9)].map(() => T.teamGuard('computer', {}, blind));
+    check('a coder that cannot see: the planner is told the looking is its job, gets more looks, and is nudged after each visible change',
+      /The looking is yours/.test(T.teamPrompt('x/y', false)) && !/The looking is yours/.test(T.teamPrompt('x/y', true)) && bl.slice(0, 8).every((x) => x === '') && !!bl[8]
+      && read('src/main/main.js').includes('coderVision: sess.coderModel ? modelVision(sess.coderModel) : null,') && A.includes("blindCoder: coderVision === false")
+      && A.includes("if (coderVision === false && subs.some((s) => s && s.ok !== false && visual(s))) result.team_note = 'The coder cannot see images"), bl.map((x) => !!x));
+    check('a session back from a side pane shows its whole history, not just what arrived since (live events had started a bare view)',
+      H.includes('if (v && !v.opened) { keepPerm = v.perm ?') && H.includes('if (keepPerm) { v.perm = keepPerm.perm; v.permQueue = keepPerm.permQueue; }'), 'history');
+    check('a worker on another model is asked about its own eyes (Muse Spark got its screenshots as V4.1 descriptions)',
+      SPw.includes("(typeof agentOpts.visionOf === 'function' ? (() => { try { const v = agentOpts.visionOf(task.model || sub.model || agentOpts.defaultSubModel);")
+      && A.includes('priceIn, priceOut, modelVision, visionOf, webSearch, onOpenUrl, onAttachAtlas },') && read('src/main/main.js').includes('visionOf: (id) => modelVision(id),'), 'visionOf');
+    {
+      // A provider that hangs: OpenRouter's ": PROCESSING" keep-alives kept the request open for ever.
+      const ORs = require(path.join(ROOT, 'src/backend/providers/openrouter.js'));
+      const was = process.env.VOX_STREAM_IDLE_MS, fetch0 = global.fetch; process.env.VOX_STREAM_IDLE_MS = '600';
+      const enc = new TextEncoder(); let tk;
+      global.fetch = async () => ({ ok: true, body: new ReadableStream({ start(c) { tk = setInterval(() => c.enqueue(enc.encode(': OPENROUTER PROCESSING\n\n')), 100); }, cancel() { clearInterval(tk); } }) });
+      const e = await Promise.race([ORs.chatCompletions({ apiKey: 'k', model: 'm', messages: [{ role: 'user', content: 'hi' }] }).then(() => null, (x) => x), new Promise((r) => setTimeout(() => r('hung'), 5000))]);
+      clearInterval(tk); global.fetch = fetch0; if (was === undefined) delete process.env.VOX_STREAM_IDLE_MS; else process.env.VOX_STREAM_IDLE_MS = was;
+      check('a request that only gets keep-alives ends as a retryable stall instead of waiting for ever (a coder sat on "Thinking" for 8+ minutes)', e && e !== 'hung' && e.retryable === true && /stopped responding/.test(e.message), e && e.message || e);
+    }
+    const TP = T.teamPrompt('x/y');
+    check('the planner trusts the coder\'s report and finishes: no re-reading whole files, listing or tidying, one look, no extra notes (its turns were most of Team\'s cost)',
+      /Trust its report\. Do not re-read whole files it wrote, list folders or tidy up after it/.test(TP) && /Use one look of your own at the end, then finish/.test(TP)
+      && /what good looks like/.test(TP) && /Delete any scratch or test files you made\./.test(SPw), 'trust');
     const lk = { coderFails: 0, written: 0, looks: 0 }; const looks = [1, 2, 3, 4].map(() => T.teamGuard('computer', { action: 'screenshot' }, lk));
-    check('the planner gets a few browser actions; testing past that is the coder\'s (Sonnet took nine screenshots itself)', looks.slice(0, 3).every((x) => x === '') && /testing in the browser is the coder/.test(looks[3]) && /test in the browser and report/.test(T.teamPrompt('x/y')), looks.map((x) => !!x));
+    check('the planner gets a few browser actions; testing past that is the coder\'s (Sonnet took nine screenshots itself)', looks.slice(0, 3).every((x) => x === '') && /testing in the browser is the coder/.test(looks[3]) && /tests in the browser and reports what it saw/.test(T.teamPrompt('x/y')), looks.map((x) => !!x));
     check('after the coder fails twice the planner may do the work itself', T.teamGuard('write', { content: big }, 2) === '', 'fails');
     const st = { coderFails: 0, written: 0 }, ten = 'a\n'.repeat(9) + 'a';
     const five = [1, 2, 3, 4, 5].map(() => T.teamGuard('write', { content: ten }, st));

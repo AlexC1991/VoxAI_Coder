@@ -51,7 +51,7 @@ const ROLES = {
       + 'tests or a syntax check), and report exactly which files you changed and how. If what you made '
       + 'can be seen (a page, a game, an app screen), open it with the computer tool and use it the way a '
       + 'person would: click, type, play. Look at the screenshots, fix what looks or behaves wrong, and say '
-      + 'what you saw. Stay strictly inside the scope you were given — another agent may be working nearby.',
+      + 'what you saw. Delete any scratch or test files you made. Stay strictly inside the scope you were given — another agent may be working nearby.',
   },
   review: {
     tools: READ_TOOLS,
@@ -205,11 +205,13 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
         priceIn: agentOpts.priceIn || 0,
         // Workers follow the parent's web-search setting (off means off for them too).
         webSearch: agentOpts.webSearch || null,
-        // The parent's vision flag describes the PARENT's model. A worker on a
-        // different model inherits nothing -- unknown, so screenshots get described
-        // rather than sent to something that may not read them.
+        // The parent's vision flag describes the PARENT's model. A worker on a different
+        // model is looked up for itself: taken as unknown, Team's Muse Spark coder (which
+        // reads images) got its own screenshots as another model's descriptions.
         modelVision: (task.model || sub.model || agentOpts.defaultSubModel || agentOpts.model) === agentOpts.model
-          ? (agentOpts.modelVision === undefined ? null : agentOpts.modelVision) : null,
+          ? (agentOpts.modelVision === undefined ? null : agentOpts.modelVision)
+          : (typeof agentOpts.visionOf === 'function' ? (() => { try { const v = agentOpts.visionOf(task.model || sub.model || agentOpts.defaultSubModel); return v === true || v === false ? v : null; } catch { return null; } })() : null),
+        visionOf: agentOpts.visionOf || null,
         priceOut: agentOpts.priceOut || 0,
         visionHelper: agentOpts.visionHelper || '',
         checkModel: agentOpts.checkModel || '',
