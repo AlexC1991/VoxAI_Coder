@@ -108,6 +108,9 @@ const bg = require('./background');
 // Waits before retrying a model call that failed in a way that passes (rate limit, busy
 // provider). VOX_RETRY_WAITS_MS ("10,20") shortens them for tests.
 const retryWaits = () => (process.env.VOX_RETRY_WAITS_MS || '3000,8000').split(',').map(Number).filter((n) => n >= 0);
+// A free model's provider turning requests away takes longer to clear: 3 s then 8 s ended
+// runs that a minute's patience would have saved (qwen3.8, laguna-xs, gemma-4 :free).
+const freeRetryWaits = () => (process.env.VOX_RETRY_WAITS_MS || '5000,15000,30000').split(',').map(Number).filter((n) => n >= 0);
 /** Wait `ms`, or less if the run is stopped. */
 function pauseFor(ms, signal) {
   return new Promise((resolve) => {
@@ -1034,13 +1037,16 @@ async function* runAgent(opts) {
         } catch (callErr) {
           // A connection dropped before anything arrived passes like a network blip.
           const passing = callErr && (callErr.retryable || /\b(terminated|ECONNRESET|socket hang up|other side closed)\b/i.test(String(callErr.message || '')));
-          if (!passing || streamed || attempt >= retryWaits().length || (signal && signal.aborted)) throw callErr;
-          const wait = retryWaits()[attempt];
+          // The day's free allowance does not come back in seconds: say so at once.
+          const dayGone = /free-models-per-day/i.test(String((callErr && callErr.message) || ''));
+          const waits = callErr && callErr.status === 429 && /:free$/.test(String(model)) ? freeRetryWaits() : retryWaits();
+          if (!passing || dayGone || streamed || attempt >= waits.length || (signal && signal.aborted)) throw callErr;
+          const wait = waits[attempt];
           if (onLiveEvent) {
             // What went wrong, not the advice after it: "…then send again. Trying again"
             // contradicted itself.
             const what = String(callErr.message).split(/(?<=\.)\s+/)[0];
-            try { onLiveEvent({ type: 'warning', code: 'retrying', message: `${what} Trying again in ${Math.round(wait / 1000)}s (${attempt + 1} of ${retryWaits().length}).` }); } catch {}
+            try { onLiveEvent({ type: 'warning', code: 'retrying', message: `${what} Trying again in ${Math.round(wait / 1000)}s (${attempt + 1} of ${waits.length}).` }); } catch {}
           }
           await pauseFor(wait, signal);
           if (signal && signal.aborted) throw callErr;

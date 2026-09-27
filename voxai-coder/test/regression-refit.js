@@ -679,6 +679,10 @@ async function drain(gen) {
       const e502 = OR.responseError(502, JSON.stringify({ error: { message: 'Provider returned error', code: 502, metadata: { raw: '{"type":"overloaded_error"}', provider_name: 'Anthropic' } } }));
       check('a provider failure names the provider and is retried', /^The model's provider \(Anthropic\) had a problem: overloaded_error/.test(e502.message) && e502.retryable, e502.message);
       check('a bad key is not retried', OR.responseError(401, '{}').retryable === false && /did not accept the API key/.test(OR.responseError(401, '{}').message), 'retried');
+      check('requests carry tools without naming tool_choice (some free providers refuse the field)', !/tool_choice:/.test(read('src/backend/providers/openrouter.js').replace(/\/\/.*$/gm, '')), 'tool_choice');
+      const e403 = OR.responseError(403, JSON.stringify({ error: { message: 'This model is not available to your account', code: 403 } }));
+      check('a 403 about one model is not called a bad key, and says what OpenRouter said', !/did not accept the API key/.test(e403.message) && /not available to your account/.test(e403.message)
+        && /did not accept the API key/.test(OR.responseError(403, JSON.stringify({ error: { message: 'Invalid API key' } })).message), e403.message);
       const prevWaits = process.env.VOX_RETRY_WAITS_MS;
       process.env.VOX_RETRY_WAITS_MS = '20,40';
       try {
@@ -2321,6 +2325,9 @@ async function drain(gen) {
     check('OpenRouter\'s data-policy refusal is said plainly, with where to change it', /allows providers that may train on your data/.test(T.explainProviderError(real, 'meta/muse-spark-1.3-contributor'))
       && /openrouter\.ai\/settings\/privacy/.test(T.explainProviderError('No endpoints found matching your data policy', 'x')) && T.explainProviderError('HTTP 500', 'x') === '', 'explain');
     check('a free model\'s daily limit is said as one', /free limit .* is used up for today/.test(T.explainProviderError('429 Rate limit exceeded: free-models-per-day', 'poolside/laguna-s-2.1:free')), 'limit');
+    const busy = T.explainProviderError('429 qwen/qwen3.8-27b:free is temporarily rate-limited upstream. Provider returned error', 'qwen/qwen3.8-27b:free');
+    check('a busy free model is not called used up for the day, and OpenRouter\'s own words are kept', /is busy right now/.test(busy) && !/used up/.test(busy) && /temporarily rate-limited upstream/.test(busy)
+      && /this minute/.test(T.explainProviderError('429 Rate limit exceeded: free-models-per-min', 'qwen/qwen3.8-27b:free')), busy);
     check('expensive means $5+ per 1M out (Opus yes, V4.1 Flash no)', T.isExpensive({ completionCents: 0.002 }) && !T.isExpensive({ completionCents: 0.000029 }), 'expensive');
     check('the planner is told to plan, hand steps to the coder, and check its work', /spawn_agent/.test(T.teamPrompt('deepseek/deepseek-v4.1-flash')) && /check the work before the next step/.test(T.teamPrompt('x')) && T.teamPrompt('') === '', 'prompt');
     check('same folder, same consent (case and slashes aside)', T.projectKey('A:/Github/Shop/') === T.projectKey('a:\\github\\shop'), 'key');

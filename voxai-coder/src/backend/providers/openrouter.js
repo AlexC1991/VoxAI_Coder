@@ -37,9 +37,14 @@ function responseError(status, text) {
   let raw = '';
   if (meta && meta.raw) { try { const r = JSON.parse(meta.raw); raw = (r.error && (r.error.message || r.error.type)) || r.type || ''; } catch { raw = String(meta.raw).slice(0, 120); } }
   let say;
-  if (status === 401 || status === 403) say = 'OpenRouter did not accept the API key. Check it in Settings, under Account.';
+  // 403 is also OpenRouter refusing one model or one request (only on listed apps, flagged by
+  // moderation) while the key works for everything else: a 403 is said as a key problem only
+  // when its message is about the key. A 401 always is.
+  const aboutKey = !msg || msg === '{}' || /api key|credential|unauthori[sz]ed|user not found|no auth/i.test(msg);
+  if (status === 401 || (status === 403 && aboutKey)) say = 'OpenRouter did not accept the API key. Check it in Settings, under Account.';
+  else if (status === 403) say = `OpenRouter refused this request${provider ? ` (${provider})` : ''}: ${msg}${raw && raw !== msg ? ` (${raw})` : ''}. Other models may still work; pick another one or try again later.`;
   else if (status === 402) say = 'Your OpenRouter account is out of credits. Add credits at openrouter.ai/settings/credits, then send again.';
-  else if (status === 429) say = `OpenRouter is rate-limiting requests right now${msg ? ` (${msg})` : ''}. Wait a moment and send again.`;
+  else if (status === 429) say = `OpenRouter is rate-limiting requests right now${msg ? ` (${msg}${raw && raw !== msg ? `: ${raw}` : ''})` : ''}. Wait a moment and send again.`;
   else if (status === 400 && /context length|too many tokens|maximum context/i.test(msg)) say = `This conversation is too long for the model (${msg}) Compact it with the button at the top, or pick a model with a larger context.`;
   else if (status === 404 && /no endpoints/i.test(msg)) say = `No provider is serving this model right now (${msg}) Pick another model.`;
   else if (status >= 500) say = `The model's provider${provider ? ` (${provider})` : ''} had a problem${raw ? `: ${raw}` : (msg ? `: ${msg}` : '')}. Try again in a moment.`;
@@ -120,7 +125,10 @@ async function chatCompletions(opts) {
     // returned automatically now; stream_options appends it as a final chunk.
     stream_options: { include_usage: true },
     ...(temperature !== undefined ? { temperature } : {}),
-    ...(tools && tools.length ? { tools, tool_choice: 'auto' } : {}),
+    // No tool_choice: "auto" is already what a request with tools means, and naming it made
+    // OpenRouter drop every provider that does not take the field ("No endpoints found that
+    // support the provided 'tool_choice' value" on nemotron-3-nano-omni:free).
+    ...(tools && tools.length ? { tools } : {}),
     // Sticky routing. Without this OpenRouter derives its routing key by HASHING the
     // opening messages — which in an agent loop change every turn, so consecutive
     // turns can land on different upstreams and throw away the cache. Expires after

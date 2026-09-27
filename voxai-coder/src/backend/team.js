@@ -52,9 +52,18 @@ function explainProviderError(message, model) {
     return `${model} only runs when your OpenRouter account allows providers that may train on your data, and yours does not (the safe default). `
       + 'Turn that on at openrouter.ai/settings/privacy (it is your OpenRouter account, not VoxAI), or pick another model.';
   }
-  if (sh && sh.how === 'may' && /\b429\b|rate.?limit|free-models-per-day|daily limit/i.test(m)) {
+  // A free model's 429 is one of three things, and only one of them lasts until tomorrow.
+  const raw = m.replace(/\s+/g, ' ').trim().slice(0, 160);
+  if (sh && sh.how === 'may' && /free-models-per-day|daily limit/i.test(m)) {
     return `The free limit for ${model} is used up for today (50 requests a day, or 1,000 once your OpenRouter account has bought $10 of credit). `
-      + 'Carry on with the paid version of the model, or another one.';
+      + `Carry on with the paid version of the model, or another one. (OpenRouter: ${raw})`;
+  }
+  if (sh && sh.how === 'may' && /free-models-per-min/i.test(m)) {
+    return `Too many requests to free models this minute (OpenRouter allows 20 a minute). Wait a minute and send again. (OpenRouter: ${raw})`;
+  }
+  if (sh && sh.how === 'may' && /\b429\b|rate.?limit/i.test(m)) {
+    return `${model} is busy right now: its provider is turning away free requests (everyone shares a small free allowance). `
+      + `Wait a minute and send again, or pick another model. (OpenRouter: ${raw})`;
   }
   return '';
 }
