@@ -1,28 +1,29 @@
 /* The corner card (notice.html): fills itself from the query string, counts down,
-   pauses while pointed at, and tells main/attention.js what was clicked. */
+   pauses while pointed at, and tells main/attention.js which answer was clicked. */
 (function () {
   const $ = (id) => document.getElementById(id);
   let d = {};
   try { d = JSON.parse(new URLSearchParams(location.search).get('d') || '{}'); } catch { d = {}; }
   const act = (a) => { try { window.notice.act(a); } catch { /* closing */ } };
 
-  document.documentElement.style.setProperty('--tone', d.tone || '#d9a35f');
+  const card = $('card');
+  if (d.kind === 'ask') card.classList.add('ask');
+  document.documentElement.style.setProperty('--tone', d.tone || '#c8a961');
   $('t').textContent = d.title || 'VoxAI Coder';
-  $('a').textContent = d.account || '';
-  $('m').textContent = d.message || '';
-  $('m').title = d.message || '';
-  $('v').textContent = d.value || '';
-  $('mt').textContent = d.meta || '';
+  $('s').textContent = d.sub ? '· ' + d.sub : '';
+  $('w').textContent = d.what || '';
+  $('w').title = d.what || '';
   for (const b of d.actions || []) {
     const el = document.createElement('button');
     el.type = 'button';
-    el.className = 'b' + (b.primary ? ' pri' : '');
+    el.className = 'b' + (b.primary ? ' pri' : '') + (b.quiet ? ' no' : '');
     el.textContent = b.label;
+    if (b.title) el.title = b.title;
     el.onclick = (e) => { e.stopPropagation(); leave(b.act); };
     $('acts').appendChild(el);
   }
 
-  const card = $('card'), bar = $('left');
+  const bar = $('left');
   let gone = false;
   function leave(a) {
     if (gone) return;
@@ -31,7 +32,7 @@
     setTimeout(() => act(a), 130);
   }
   $('x').onclick = (e) => { e.stopPropagation(); leave('dismiss'); };
-  card.onclick = () => leave('open');                 // like the Hub: the card itself opens it
+  card.onclick = () => leave('open');                 // the card itself opens the session
 
   // Countdown, paused while the pointer is on the card.
   const total = Math.max(2000, Number(d.timeoutMs) || 12000);

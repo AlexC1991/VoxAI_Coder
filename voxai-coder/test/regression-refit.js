@@ -2093,35 +2093,50 @@ async function drain(gen) {
     handlers['will-quit'] && handlers['will-quit']();
 
     // The card (the default): drawn like AI Account Hub's Signal Rail.
-    const answered2 = [], opened = [];
-    const pp = new Map([['c1', { msg: { permId: 'c1', sessionId: 's1', kind: 'shell', target: 'npm test' }, resolve() {} }]]);
+    const answered2 = [], opened = [], inputs2 = [];
+    const pp = new Map([['c1', { msg: { permId: 'c1', sessionId: 's1', kind: 'shell', target: 'npm test', canAlways: true }, resolve() {} }]]);
+    const pi = new Map();
     const B = createAttention({ app: { on() {}, isPackaged: true, setAsDefaultProtocolClient() {} }, getWindow: () => fakeWin,
-      getSettings: () => ({ notifyToast: true, notifyTaskbar: false }), pendingPerms: pp, pendingInputs: new Map(), live: new Map([['s1', { workdir: 'C:/x/3D Game Project', title: 'Make a game', model: 'anthropic/claude-opus-5.5' }]]),
-      renderer: () => null, answerPerm: (id, ok) => answered2.push([id, ok]), openSession: (sid) => opened.push(sid) });
+      getSettings: () => ({ notifyToast: true, notifyTaskbar: false }), pendingPerms: pp, pendingInputs: pi, live: new Map([['s1', { workdir: 'C:/x/3D Game Project', title: 'Make a game', model: 'anthropic/claude-opus-5.5' }]]),
+      renderer: () => null, answerPerm: (id, ok, always) => answered2.push([id, ok, !!always]), answerInput: (id, value, label) => inputs2.push([id, value, label]), openSession: (sid) => opened.push(sid) });
     const shownBefore = shown.length;
     await B.tick();
     const c0 = FakeCards[0];
     const cd = c0 && JSON.parse(c0.query.query.d);
     check('away: a VoxAI card, not a Windows notification, in the corner above the taskbar', FakeCards.length === 1 && shown.length === shownBefore
-      && /notice\.html$/.test(c0.file) && c0.o.focusable === false && c0.o.skipTaskbar === true && c0.pos[0] === 1920 - 340 - 8 && c0.pos[1] === 1040 - 8 - 134, c0 && c0.pos);
-    check('it says the project, the session and model, the action, and offers Allow once / Deny / Open', cd && cd.title === '3D Game Project needs you' && cd.account === 'Make a game | claude opus 5.5'
-      && cd.message === 'npm test' && cd.value === 'Run' && cd.actions.map((a) => a.act).join() === 'allow,deny,open', cd);
+      && /notice\.html$/.test(c0.file) && c0.o.focusable === false && c0.o.skipTaskbar === true && c0.pos[0] === 1920 - 360 - 6 && c0.pos[1] === 1040 - 6 - 138, c0 && c0.pos);
+    check('like the app\'s approval box, with less: "Run a command? · 3D Game Project", the command, Deny / Always approve / Approve', cd && cd.title === 'Run a command?' && cd.sub === '3D Game Project'
+      && cd.what === 'npm test' && cd.actions.map((a) => a.label).join() === 'Deny,Always approve,Approve' && cd.actions[2].primary === true, cd);
     ipcHandlers['notice:act']({ sender: {} }, 'allow');
     check('a click from anything but the card\'s own window does nothing', answered2.length === 0, answered2);
-    ipcHandlers['notice:act']({ sender: c0.webContents }, 'allow');
-    check('its Allow once answers the approval and the card goes', answered2.length === 1 && answered2[0][1] === true && c0.dead === true, answered2);
+    ipcHandlers['notice:act']({ sender: c0.webContents }, 'always');
+    check('its Always approve answers yes-and-always, and the card goes', answered2.length === 1 && answered2[0][1] === true && answered2[0][2] === true && c0.dead === true, answered2);
+    check('no Always approve where the app would not offer one', B._cardData({ id: 'k', kind: 'perm', sessionId: 's1', text: 'taskkill /pid 5', what: 'shell', canAlways: false }).actions.map((a) => a.label).join() === 'Deny,Approve', 'always');
+    // Questions: answered on the card when the answer is short.
+    const qa = (e) => B._cardData({ id: 'q', kind: 'ask', sessionId: 's1', text: e.question || (e.questions && e.questions[0].question) || '', many: 1, event: e });
+    const yn = qa({ kind: 'confirm', question: 'Delete the old build folder?' });
+    const three = qa({ questions: [{ question: 'Raids on day 3 or day 5?', options: [{ label: 'Day 3 (Recommended)' }, { label: 'Day 5' }] }] });
+    const many = qa({ questions: [{ question: 'Pick a map', options: [{ label: 'A' }, { label: 'B' }, { label: 'C' }, { label: 'D' }] }] });
+    check('a yes/no question gets No / Yes; up to three choices get buttons; more opens VoxAI', yn.title === 'Confirm?' && yn.actions.map((a) => a.label).join() === 'No,Yes'
+      && three.actions.map((a) => a.label).join() === 'Day 3,Day 5' && three.actions[0].primary === true && many.actions.map((a) => a.label).join() === 'Answer in VoxAI', { yn, three, many });
+    pi.set('q1', { sessionId: 's1', event: { inputId: 'q1', questions: [{ question: 'Raids on day 3 or day 5?', options: [{ label: 'Day 3' }, { label: 'Day 5' }] }] }, resolve() {} });
+    await B.tick();
+    const qc = FakeCards[FakeCards.length - 1];
+    ipcHandlers['notice:act']({ sender: qc.webContents }, 'answer:1');
+    check('a choice clicked on the card is sent as the box sends it', inputs2.length === 1 && inputs2[0][0] === 'q1' && JSON.stringify(inputs2[0][1]) === JSON.stringify({ answers: { 'Raids on day 3 or day 5?': 'Day 5' } }) && inputs2[0][2] === 'Day 5', inputs2);
+    pi.clear();
     for (const id of ['c2', 'c3', 'c4', 'c5']) pp.set(id, { msg: { permId: id, sessionId: 's1', kind: 'shell', target: id }, resolve() {} });
     pp.delete('c1');
     await B.tick();
     const live3 = FakeCards.filter((w) => !w.dead);
-    check('at most three stack up; the oldest makes room', live3.length === 3 && FakeCards.filter((w) => w.dead).length === 2, live3.length);
+    check('at most three stack up; the oldest makes room', live3.length === 3 && FakeCards.slice(-4).filter((w) => w.dead).length === 1, live3.length);
     pp.clear();
     await B.tick();
     await new Promise((r) => setTimeout(r, 200));
     check('answered anywhere: its card goes', FakeCards.every((w) => w.dead), FakeCards.map((w) => !!w.dead));
     const NH = read('src/renderer/notice.html'), NJ = read('src/renderer/notice.js');
-    check('the card: a tone rail, identity tile, three lines, a metric with ×, and a countdown that pauses on hover', NH.includes('<div class="rail"></div>') && NH.includes('class="tile"')
-      && NH.includes('class="metric"') && NH.includes("script-src 'self'") && NJ.includes("card.addEventListener('mouseenter', () => { paused = true; });") && NJ.includes("leave('expire')"), 'notice');
+    check('the card: title and project, the command block, the answers, × and a countdown that pauses on hover', NH.includes('<div class="h"><b id="t"></b><span id="s"></span>') && NH.includes('<div class="what" id="w"></div>')
+      && !NH.includes('class="rail"') && NH.includes("script-src 'self'") && NJ.includes("card.addEventListener('mouseenter', () => { paused = true; });") && NJ.includes("leave('expire')"), 'notice');
     if (before) require.cache[elecPath] = before; else delete require.cache[elecPath];
     delete require.cache[attnPath];
     const MAIN = read('src/main/main.js');

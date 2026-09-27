@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-tlGfzvtlj5lq4oE4PGmNG2A8eJ6lXuPE7AMjZo51O3w='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-9sn5UmkPnRLEZ7qTPXerigggFYPFpwaYBU+vt7AjOdQ='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -4990,9 +4990,9 @@ if (window.voxai.split) {
   }
 }
 // A question answered in another pane: this page stops asking it.
-if (window.voxai.onInputDone) window.voxai.onInputDone(({ inputId }) => {
+if (window.voxai.onInputDone) window.voxai.onInputDone(({ inputId, via, label }) => {
   for (const v of viewStore.values()) {
-    if (v.pendingAsk && v.pendingAsk.box.dataset.inputId === inputId) v.pendingAsk.elsewhere();
+    if (v.pendingAsk && v.pendingAsk.box.dataset.inputId === inputId) v.pendingAsk.elsewhere(via === 'card' ? 'You chose: ' + (label || 'an answer') + ' (from the notification)' : '');
     else if (v.askEl && v.askEl.dataset.inputId === inputId) { settleAsk(v, v.askEl, null); setActivity(v, 'Working'); if (v === actView()) updateSendState(); }
   }
 });
@@ -6946,10 +6946,10 @@ function askPanel(v, event){
     },
     // Answered on another page (a split pane). Taking the box away was not enough: its key
     // listener and this hook stayed, and the next message typed here went in as an answer.
-    elsewhere: () => {
+    elsewhere: (said) => {
       if (done) return; done = true; v.pendingAsk = null;
       document.removeEventListener('keydown', onKey, true);
-      settleAsk(v, box, record([[steps.length === 1 ? steps[0].question : steps.length + ' questions', 'Answered in another pane']]));
+      settleAsk(v, box, record([[steps.length === 1 ? steps[0].question : steps.length + ' questions', said || 'Answered in another pane']]));
       setActivity(v, 'Working');
       updateSendState();
     },

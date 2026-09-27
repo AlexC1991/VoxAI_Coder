@@ -1740,11 +1740,18 @@ ipcMain.handle('openrouter:generations', async (_e, { limit = 40, cursor } = {})
       app, getWindow: () => win(), getSettings: () => getSettings(false), pendingPerms, pendingInputs, live,
       renderer: () => chatWebContents(),
       // Answered from a notification: the same as the box's Allow / Deny, and the box is told.
-      answerPerm: (permId, allowed) => {
+      answerPerm: (permId, allowed, always) => {
         const p = pendingPerms.get(permId);
         if (!p) return;
-        pendingPerms.delete(permId); p.resolve(!!allowed, false);
+        pendingPerms.delete(permId); p.resolve(!!allowed, !!always);
         const c = allRenderers(); c && c.send('agent:perm-done', { permId, allowed: !!allowed });
+      },
+      // A question answered on the card (Yes / No, or one of up to three choices).
+      answerInput: (inputId, answer, label) => {
+        const p = pendingInputs.get(inputId);
+        if (!p) return;
+        pendingInputs.delete(inputId); p.resolve({ answer: answer || '', cancelled: false });
+        allRenderers().send('agent:input-done', { inputId, via: 'card', label: String(label || '') });
       },
       openSession: (sid) => { const c = chatWebContents(); c && c.send('vox:open-session', sid); },
     });

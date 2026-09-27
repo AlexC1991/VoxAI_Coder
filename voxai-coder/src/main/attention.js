@@ -1,9 +1,9 @@
 /**
  * attention -- telling you a session needs you when VoxAI is not in front.
  *
- *   A  a card in the corner per request, drawn like AI Account Hub's Signal Rail: which
- *      project, what it asks, and for an approval Allow once / Deny / Open right on it
- *      (Open for a question). Or, if you prefer, Windows' own notification.
+ *   A  a card in the corner per request, drawn like the app's own approval box: what it
+ *      asks and where, and the answers right on it -- Deny / Always approve / Approve, or
+ *      Yes / No and up to three choices for a question. Or Windows' own notification.
  *   B  a count badge on the taskbar button, which flashes when a new one arrives,
  *      and a red dot on the tray icon
  *   +  a tray icon (Open, Quit) and, if you want, minimize / close to the tray
@@ -20,9 +20,8 @@ const { Tray, Menu, Notification, nativeImage, BrowserWindow, ipcMain, screen } 
 const PROTOCOL = 'voxai-coder';
 // The corner card (renderer/notice.html). The window has 10 px of shadow room round the
 // card; fixed sizes keep a stack from shifting. Up to three, newest at the bottom.
-const CARD_W = 340, CARD_H = 134, CARD_GAP = 6, CARD_MARGIN = 8, CARD_MAX = 3;
-const CARD_TONE = { perm: '#d9a35f', ask: '#8fb3d9' };
-const CARD_WORD = { shell: 'Run', 'write-file': 'Edit', 'browser-act': 'Browser', 'desktop-act': 'Desktop', 'desktop-look': 'Look', 'web-fetch': 'Fetch', 'web-search': 'Search' };
+const CARD_W = 360, CARD_H = 138, CARD_GAP = 4, CARD_MARGIN = 6, CARD_MAX = 3;
+const CARD_TONE = { perm: '#c8a961', ask: '#8fb3d9' };
 
 function xml(s) {
   return String(s == null ? '' : s).replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c]));
@@ -46,7 +45,7 @@ function dotted(img) {
   return nativeImage.createFromBitmap(buf, { width: size, height: size });
 }
 
-function createAttention({ app, getWindow, getSettings, pendingPerms, pendingInputs, live, renderer, answerPerm, openSession }) {
+function createAttention({ app, getWindow, getSettings, pendingPerms, pendingInputs, live, renderer, answerPerm, answerInput, openSession }) {
   const iconFile = path.join(__dirname, '..', '..', 'resources', 'icon.png');
   const appIcon = nativeImage.createFromPath(iconFile);
   const dotIcon = appIcon.isEmpty() ? appIcon : dotted(appIcon);
@@ -119,13 +118,13 @@ function createAttention({ app, getWindow, getSettings, pendingPerms, pendingInp
     const out = [];
     for (const [id, p] of pendingPerms) {
       if (!p || !p.msg) continue;
-      out.push({ id, kind: 'perm', sessionId: p.msg.sessionId, text: String(p.msg.target || ''), what: p.msg.kind });
+      out.push({ id, kind: 'perm', sessionId: p.msg.sessionId, text: String(p.msg.target || ''), what: p.msg.kind, canAlways: !!p.msg.canAlways, alwaysLabel: p.msg.alwaysLabel || '' });
     }
     for (const [id, p] of pendingInputs) {
       if (!p) continue;
       const e = p.event || {};
       const q = e.question || (Array.isArray(e.questions) && e.questions[0] && e.questions[0].question) || 'It has a question for you';
-      out.push({ id, kind: 'ask', sessionId: p.sessionId, text: String(q), many: Array.isArray(e.questions) ? e.questions.length : 1 });
+      out.push({ id, kind: 'ask', sessionId: p.sessionId, text: String(q), many: Array.isArray(e.questions) ? e.questions.length : 1, event: e });
     }
     return out;
   }
@@ -159,22 +158,47 @@ function createAttention({ app, getWindow, getSettings, pendingPerms, pendingInp
   }
 
   // ---- A: the corner card -------------------------------------------------------------
-  const MODEL_SHORT = (m) => String(m || '').split('/').pop().replace(/[-_]/g, ' ');
+  /**
+   * The answers a card can give a question right there: yes / no for a confirm, or up to
+   * three choices for one single-pick question. Anything else opens VoxAI to answer.
+   * Each is { label, value, primary }; value is what the agent gets, as the box sends it.
+   */
+  function quickAnswers(e) {
+    const clean = (s) => String(s || '').replace(/\s*\(Recommended\)\s*$/i, '');
+    const rec = (s) => /\(Recommended\)\s*$/i.test(String(s || ''));
+    const qs = Array.isArray(e.questions) ? e.questions : null;
+    if (e.kind === 'confirm' && !(qs && qs.length)) return [{ label: 'No', value: 'no', quiet: true }, { label: 'Yes', value: 'yes', primary: true }];
+    if (qs && qs.length === 1 && !qs[0].multiSelect && Array.isArray(qs[0].options) && qs[0].options.length >= 1 && qs[0].options.length <= 3) {
+      return qs[0].options.map((o) => ({ label: clean(o.label), value: { answers: { [qs[0].question]: o.label } }, primary: rec(o.label) }));
+    }
+    if (!qs && Array.isArray(e.options) && e.options.length >= 1 && e.options.length <= 3) {
+      return e.options.map((o) => ({ label: clean(o.label), value: String(o.value != null ? o.value : o.label), primary: rec(o.label) }));
+    }
+    return null;
+  }
+  // "Run a command?" -- the app's own words for each kind of approval.
+  const ASK_TITLE = { shell: 'Run a command?', 'write-file': 'Change a file?', 'browser-act': 'Use the browser?', 'desktop-act': 'Control the desktop?',
+    'desktop-look': 'Look at the screen?', 'web-fetch': 'Open a web page?', 'web-search': 'Search the web?' };
   function cardData(req) {
     const sess = live.get(req.sessionId);
     const project = sess && sess.workdir ? path.basename(String(sess.workdir).replace(/[\\/]+$/, '')) : 'A session';
-    const title = sess && sess.title ? String(sess.title) : '';
-    const model = sess && sess.model ? MODEL_SHORT(sess.model) : MODEL_SHORT(getSettings().openrouterModel);
-    const perm = req.kind === 'perm';
+    if (req.kind === 'perm') {
+      return {
+        kind: 'perm', tone: CARD_TONE.perm, title: ASK_TITLE[req.what] || 'Allow this?', sub: project, what: req.text.slice(0, 400),
+        actions: [
+          { label: 'Deny', act: 'deny', quiet: true },
+          ...(req.canAlways ? [{ label: 'Always approve', act: 'always', title: req.alwaysLabel || 'Approve this, and the same again in this session without asking' }] : []),
+          { label: 'Approve', act: 'allow', primary: true },
+        ],
+        timeoutMs: 12000,
+      };
+    }
+    const quick = quickAnswers(req.event || {});
     return {
-      tone: perm ? CARD_TONE.perm : CARD_TONE.ask,
-      title: `${project} needs you`,
-      account: [title, model].filter(Boolean).join(' | '),
-      message: req.text.slice(0, 300),
-      value: perm ? (CARD_WORD[req.what] || 'Approve') : 'Ask',
-      meta: perm ? 'approval' : (req.many > 1 ? `${req.many} questions` : 'question'),
-      actions: perm
-        ? [{ label: 'Allow once', act: 'allow', primary: true }, { label: 'Deny', act: 'deny' }, { label: 'Open', act: 'open' }]
+      kind: 'ask', tone: CARD_TONE.ask,
+      title: (req.event && req.event.kind === 'confirm') ? 'Confirm?' : (req.many > 1 ? req.many + ' questions' : 'Question'),
+      sub: project, what: req.text.slice(0, 400),
+      actions: quick ? quick.map((q, i) => ({ label: q.label, act: 'answer:' + i, primary: !!q.primary, quiet: !!q.quiet }))
         : [{ label: 'Answer in VoxAI', act: 'open', primary: true }],
       timeoutMs: 12000,
     };
@@ -218,7 +242,7 @@ function createAttention({ app, getWindow, getSettings, pendingPerms, pendingInp
     try { win.setAlwaysOnTop(true, 'pop-up-menu'); } catch { /* older Electron */ }
     win.webContents.on('will-navigate', (e) => e.preventDefault());
     win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-    const c = { id: req.id, win, sessionId: req.sessionId };
+    const c = { id: req.id, win, sessionId: req.sessionId, answers: req.kind === 'ask' ? quickAnswers(req.event || {}) : null };
     cards.push(c);
     const spot = cardSpots().get(c);
     win.setPosition(spot.x, spot.y);
@@ -231,8 +255,11 @@ function createAttention({ app, getWindow, getSettings, pendingPerms, pendingInp
   ipcMain.on('notice:act', (e, a) => {
     const c = cards.find((x) => !x.win.isDestroyed() && x.win.webContents === e.sender);
     if (!c) return;
-    if (a === 'allow' || a === 'deny') answerPerm(c.id, a === 'allow');
-    else if (a === 'open') { show(); openSession(c.sessionId); }
+    if (a === 'allow' || a === 'deny' || a === 'always') answerPerm(c.id, a !== 'deny', a === 'always');
+    else if (/^answer:\d+$/.test(String(a)) && c.answers && answerInput) {
+      const q = c.answers[Number(String(a).slice(7))];
+      if (q) answerInput(c.id, q.value, q.label);
+    } else if (a === 'open') { show(); openSession(c.sessionId); }
     dropCard(c, false);
   });
 
@@ -301,7 +328,7 @@ function createAttention({ app, getWindow, getSettings, pendingPerms, pendingInp
     } catch { /* the buttons fall back to opening the app */ }
   }
 
-  return { wireWindow, handleLink, registerProtocol, syncTray, tick, _waiting: waiting, _cards: cards, _cardData: cardData };
+  return { wireWindow, handleLink, registerProtocol, syncTray, tick, _waiting: waiting, _cards: cards, _cardData: cardData, _quickAnswers: quickAnswers };
 }
 
 module.exports = { createAttention, dotted, PROTOCOL };
