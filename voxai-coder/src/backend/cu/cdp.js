@@ -148,6 +148,7 @@ async function bindPage(wsUrl, onUserEvent) {
   await send('Page.enable', {});
   await send('Runtime.enable', {});
   await send('DOM.enable', {});
+  try { await send('Network.enable', {}); await send('Network.setCacheDisabled', { cacheDisabled: true }); } catch {}   // always the files as they are now
 }
 
 async function ensureReady() {
@@ -463,6 +464,9 @@ async function attach(wc) {
   try { await send('Page.enable', {}); } catch {}
   try { await send('Runtime.enable', {}); } catch {}
   try { await send('DOM.enable', {}); } catch {}
+  // No cache while the agent drives it, like DevTools' Disable cache: after an edit it reloaded
+  // the page, got the old script from the cache, and went hunting for a bug it had fixed. Seen live.
+  try { await send('Network.enable', {}); await send('Network.setCacheDisabled', { cacheDisabled: true }); } catch {}
   return { ok: true, surface: 'atlas' };
 }
 

@@ -15,6 +15,9 @@ const MAX_PANES = 3;   // beside the first: four in all
 
 function createSplit({ rootV, WebContentsView, prefs, pageFile, guard, first, onChange }) {
   const panes = [];   // { sid, view }
+  let mainSid = '';   // what the window's own page shows: never also in a pane
+  let held = false;   // a session is being dragged: the panes step aside for the map
+  let lastRects = null;
 
   const find = (sid) => panes.find((p) => p.sid === sid);
   const sids = () => panes.map((p) => p.sid);
@@ -26,11 +29,12 @@ function createSplit({ rootV, WebContentsView, prefs, pageFile, guard, first, on
     try { onChange && onChange(state()); } catch { /* not fatal */ }
   }
 
-  /** Open a session in a new pane. { ok, error } */
-  function add(sid) {
+  /** Open a session in a new pane, at `at` among the panes (the end by default). { ok, error } */
+  function add(sid, at) {
     sid = String(sid || '');
     if (!/^[\w.-]{1,80}$/.test(sid)) return { ok: false, error: 'no such session' };
     if (find(sid)) return { ok: false, error: 'already open' };
+    if (sid === mainSid) return { ok: false, error: 'already open in the main pane' };
     if (panes.length >= MAX_PANES) return { ok: false, error: `up to ${MAX_PANES + 1} side by side` };
     const view = new WebContentsView({ webPreferences: prefs });
     try { view.setBackgroundColor('#0e0e10'); } catch { /* older Electron */ }
@@ -38,10 +42,30 @@ function createSplit({ rootV, WebContentsView, prefs, pageFile, guard, first, on
     rootV.addChildView(view);
     guard(view.webContents);
     view.webContents.loadFile(pageFile, { query: { pane: sid } });
-    panes.push({ sid, view });
+    const i = Number.isInteger(at) && at >= 0 && at < panes.length ? at : panes.length;
+    panes.splice(i, 0, { sid, view });
     changed();
     return { ok: true };
   }
+
+  /** Four open: the pane at `at` shows `sid` instead. */
+  function swap(at, sid) {
+    const p = panes[at];
+    if (!p) return { ok: false, error: 'no such pane' };
+    if (find(sid) || String(sid) === mainSid) return { ok: false, error: 'already open' };
+    const old = p.sid;
+    remove(old);
+    const r = add(sid, at);
+    if (!r.ok) add(old, at);
+    return r;
+  }
+
+  function hold(on) {
+    held = !!on;
+    if (held) for (const p of panes) p.view.setVisible(false);
+    else place(lastRects);
+  }
+  function setMain(sid) { mainSid = String(sid || ''); }
 
   function remove(sid) {
     const i = panes.findIndex((p) => p.sid === sid);
@@ -55,6 +79,8 @@ function createSplit({ rootV, WebContentsView, prefs, pageFile, guard, first, on
 
   /** The first page measured its slots: { sid: {x, y, width, height} }. */
   function place(rects) {
+    lastRects = rects;
+    if (held) return;
     for (const p of panes) {
       const r = rects && rects[p.sid];
       if (!r || !(r.width > 40) || !(r.height > 40)) { p.view.setVisible(false); continue; }
@@ -74,7 +100,7 @@ function createSplit({ rootV, WebContentsView, prefs, pageFile, guard, first, on
   const paneOf = (wc) => { const p = panes.find((x) => x.view.webContents === wc); return p ? p.sid : null; };
   const contents = () => panes.map((p) => p.view.webContents).filter((wc) => wc && !wc.isDestroyed());
 
-  return { add, remove, place, focus, state, sids, active, paneOf, contents, MAX_PANES };
+  return { add, swap, remove, place, hold, setMain, focus, state, sids, active, paneOf, contents, MAX_PANES };
 }
 
 module.exports = { createSplit, MAX_PANES };

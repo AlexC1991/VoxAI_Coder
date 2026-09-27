@@ -2133,6 +2133,32 @@ async function drain(gen) {
     check('a session is dragged from the list (or "Open side by side"), and a pane keeps to its own', HTMLs.includes('b.draggable = true;') && HTMLs.includes('<button data-act="split">Open side by side</button>')
       && HTMLs.includes("  if (!PANE && SPLIT.panes.includes(id)) { window.voxai.split.focus(id); return; }") && HTMLs.includes("async function newSession(dir){\n  if (PANE) return;"), 'page');
     check('another session\'s usage does not paint this header', HTMLs.includes('if (v.tokens && v === actView()) updateSessStats(v);'), 'stats');
+
+    // Dropping where you want it; the main pane's session never repeats in a pane.
+    children.length = 0;
+    const S2 = createSplit({ rootV, WebContentsView: FakeView, prefs: {}, pageFile: 'index.html', guard() {}, first: () => first });
+    S2.setMain('m');
+    const dup = S2.add('m');
+    check('the session in the main pane cannot also open in a pane', !dup.ok && /main pane/.test(dup.error), dup);
+    S2.add('b'); S2.add('c', 0); S2.add('d', 1);
+    check('a session dropped on a spot opens there, the others fill the rest', S2.sids().join() === 'c,d,b', S2.sids());
+    const sw = S2.swap(2, 'e');
+    check('with four open, dropping on a pane swaps it', sw.ok && S2.sids().join() === 'c,d,e', { sw, sids: S2.sids() });
+    check('a swap to one already open changes nothing', !S2.swap(0, 'd').ok && !S2.swap(0, 'm').ok && S2.sids().join() === 'c,d,e', S2.sids());
+    const big = { x: 0, y: 0, width: 500, height: 400 };
+    S2.place({ c: big, d: big, e: big });
+    S2.hold(true);
+    const hidden = children.every((v) => v.visible === false);
+    S2.place({ c: big, d: big, e: big });
+    const stillHidden = children.every((v) => v.visible === false);
+    S2.hold(false);
+    check('while a session is dragged the panes step aside, and come back where they were', hidden && stillHidden && children.every((v) => v.visible === true), children.map((v) => v.visible));
+    check('the drag shows a map of the layout over the panes, with a spot per pane', HTMLs.includes("const SPOTS = { 2: [['1', '1 / 3'], ['2', '1 / 3']], 3: [['1', '1 / 3'], ['2', '1'], ['2', '2']], 4: [['1', '1'], ['2', '1'], ['1', '2'], ['2', '2']] };")
+      && HTMLs.includes('window.voxai.split.hold(true);') && HTMLs.includes("m === 'swap' ? await window.voxai.split.swap(k - 1, sid) : await window.voxai.split.add(sid, k - 1)")
+      && !HTMLs.includes('split-drop') && HTMLs.includes('function tellMainSession(){'), 'map');
+    const CDPs = read('src/backend/cu/cdp.js');
+    check('the agent\'s browser never serves an old copy of a page it just changed', (CDPs.match(/Network\.setCacheDisabled', \{ cacheDisabled: true \}/g) || []).length === 2
+      && MAIN.includes('browserV.webContents.reloadIgnoringCache()'), 'cache');
   }
 
   // ------------------------------------------------------------------ [WD]

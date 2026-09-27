@@ -736,14 +736,18 @@ app.whenReady().then(() => {
   });
   ipcMain.handle('preview:state', () => previewState());
   // Split panes (split.js). The window's own page lays them out; a pane can close itself.
-  ipcMain.handle('split:add', (_e, sid) => (split ? split.add(sid) : { ok: false, error: 'not ready' }));
+  ipcMain.handle('split:add', (_e, a) => (split ? split.add(a && typeof a === 'object' ? a.sid : a, a && a.at) : { ok: false, error: 'not ready' }));
+  ipcMain.handle('split:swap', (_e, { at, sid } = {}) => (split ? split.swap(at, sid) : { ok: false, error: 'not ready' }));
+  ipcMain.on('split:hold', (e, on) => { if (split && e.sender === chatWebContents()) split.hold(!!on); });
+  ipcMain.on('split:main', (e, sid) => { if (split && e.sender === chatWebContents()) split.setMain(sid); });
   ipcMain.handle('split:remove', (e, sid) => !!(split && split.remove(sid || split.paneOf(e.sender))));
   ipcMain.handle('split:state', () => (split ? split.state() : { panes: [], max: 4 }));
   ipcMain.handle('split:focus', (_e, sid) => !!(split && split.focus(sid)));
   ipcMain.on('split:place', (e, rects) => { if (split && e.sender === chatWebContents()) split.place(rects); });
   ipcMain.on('preview:back', () => { try { browserV && browserV.webContents.goBack(); } catch {} });
   ipcMain.on('preview:forward', () => { try { browserV && browserV.webContents.goForward(); } catch {} });
-  ipcMain.on('preview:reload', () => { try { browserV && browserV.webContents.reload(); } catch {} });
+  // Reload means the files as they are now, not the cached copy (the page is usually one being built).
+  ipcMain.on('preview:reload', () => { try { browserV && browserV.webContents.reloadIgnoringCache(); } catch {} });
   // The address bar. A file in the project is judged against the session's folder,
   // like the preview's other ways in (see preview:open).
   ipcMain.on('preview:go', (_e, arg) => {

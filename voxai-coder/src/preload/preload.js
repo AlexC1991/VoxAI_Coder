@@ -96,7 +96,10 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
   onInputDone: (cb) => { const fn = (_e, d) => cb(d); ipcRenderer.on('agent:input-done', fn); return () => ipcRenderer.removeListener('agent:input-done', fn); },
   // Sessions side by side (main/split.js).
   split: {
-    add: (sid) => ipcRenderer.invoke('split:add', sid),
+    add: (sid, at) => ipcRenderer.invoke('split:add', { sid, at }),
+    swap: (at, sid) => ipcRenderer.invoke('split:swap', { at, sid }),
+    hold: (on) => ipcRenderer.send('split:hold', !!on),
+    setMain: (sid) => ipcRenderer.send('split:main', sid || ''),
     remove: (sid) => ipcRenderer.invoke('split:remove', sid),
     state: () => ipcRenderer.invoke('split:state'),
     focus: (sid) => ipcRenderer.invoke('split:focus', sid),

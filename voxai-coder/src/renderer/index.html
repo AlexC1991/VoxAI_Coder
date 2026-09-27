@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-mqGxsU5aQ3/t6n2lVvBJT/4KkSf8KsDbn8tu46QdjqA='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-YIBu7eaKLrYomYttI3bVxALxNvZRYMijCc+tvOUZ9Eg='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -957,15 +957,17 @@ html[data-split] .composer-keys,.pane-mode .composer-keys{display:none}
 html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-shadow:inset 0 -2px 0 var(--gold)}
 .pane-flash .workhead{animation:paneFlash .7s ease}
 @keyframes paneFlash{0%,100%{background:transparent}30%{background:rgba(200,169,97,.16)}}
-/* Dragging a session in: where it will open. */
 .work{position:relative}
-.split-drop{position:absolute;inset:0;z-index:60;pointer-events:none;display:none}
-.split-drop.on{display:block}
-.split-drop .sd-box{position:absolute;top:10px;bottom:10px;right:10px;width:calc(50% - 15px);border:2px dashed var(--gold);border-radius:12px;background:rgba(200,169,97,.08);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--gold);text-align:center;padding:12px}
-.pane-mode .split-drop .sd-box{left:10px;width:auto}
-.split-drop .sd-box b{font:600 14px Chivo,sans-serif}
-.split-drop .sd-box span{font:12px "Sometype Mono",monospace;color:var(--sub)}
-.split-drop.no .sd-box{border-color:var(--edge2);background:rgba(0,0,0,.25);color:var(--sub)}
+/* Dragging a session: the new layout, over the panes (which step aside). */
+.split-map{position:fixed;z-index:90;display:none;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:10px;padding:10px;background:var(--bg)}
+.split-map.on{display:grid}
+.sm-cell{min-width:0;min-height:0;border:2px dashed var(--edge2);border-radius:12px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;padding:12px;text-align:center;color:var(--sub);transition:border-color .12s,background .12s}
+.sm-cell b{font:600 14px Chivo,sans-serif;color:var(--ink);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.sm-cell span{font:12px "Sometype Mono",monospace;color:var(--faint)}
+.sm-cell.sm-main{border-style:solid;border-color:var(--edge);background:var(--panel)}
+.sm-cell.hot{border-style:solid;border-color:var(--gold);background:rgba(200,169,97,.10)}
+.sm-cell.hot b,.sm-cell.hot span{color:var(--gold)}
+.sm-msg{grid-column:1 / 3;grid-row:1 / 3;border-style:solid}
 /* In the list: open in a pane. */
 .sess.in-pane{box-shadow:inset 2px 0 0 var(--edge2)}
 .sess.in-pane .s-t::after{content:"side by side";margin-left:8px;font:10.5px "Sometype Mono",monospace;color:var(--faint)}
@@ -4001,7 +4003,7 @@ async function newSession(dir){
   // From the start screen, what was typed is for this new session (Send made it).
   const prevView = actView();
   if (prevView) { stashDraft(prevView); const ta = $('prompt'); ta.value = ''; ta.dispatchEvent(new Event('input', { bubbles: true })); }
-  activeId = created.id;
+  activeId = created.id; tellMainSession();
   $('sessTitle').textContent = created.title || 'New session'; $('sessTitle').title = $('sessTitle').textContent;
   if (window.__syncTitlebar) __syncTitlebar(created.title || 'New session');
   $('sessSub').textContent = created.workdir || S.workingDir;
@@ -4175,7 +4177,7 @@ async function openSession(id){
   v.latestTool = null;
   const prevView = actView();
   if (prevView && prevView !== v) stashDraft(prevView);
-  activeId = id;
+  activeId = id; tellMainSession();
   if (prevView && prevView !== v) restoreDraft(v);
   $('sessTitle').textContent = v._title || 'Session'; $('sessTitle').title = $('sessTitle').textContent;
   if (window.__syncTitlebar) __syncTitlebar(v._title || 'Session');
@@ -4787,6 +4789,7 @@ function splitWhyNot(sid){
   if (SPLIT.panes.length + 1 >= SPLIT.max) return 'Up to ' + SPLIT.max + ' side by side';
   return '';
 }
+function tellMainSession(){ if (!PANE && window.voxai.split && window.voxai.split.setMain) window.voxai.split.setMain(activeId || ''); }
 async function openBeside(sid){
   const why = splitWhyNot(sid);
   if (why) { toast(why + '.'); if (SPLIT.panes.includes(sid)) window.voxai.split.focus(sid); return; }
@@ -4843,25 +4846,106 @@ if (window.voxai.split) {
   // Which pane has the keyboard.
   const focusMark = () => document.documentElement.classList.toggle('has-focus', document.hasFocus());
   window.addEventListener('focus', focusMark); window.addEventListener('blur', focusMark); focusMark();
-  // Dragging a session over the chat: where it opens, or why it cannot.
-  const work = $('screen-work');
-  const zone = el('div', 'split-drop', '<div class="sd-box"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3" y="4" width="18" height="16" rx="2"/><line x1="12" y1="4" x2="12" y2="20"/></svg><b></b><span></span></div>');
-  work.appendChild(zone);
-  let depth = 0;
-  const isSess = (e) => !!(e.dataTransfer && [...e.dataTransfer.types].includes(SESS_MIME));
-  const showZone = () => {
-    const why = splitWhyNot(DRAG_SID);
-    zone.classList.toggle('no', !!why);
-    zone.querySelector('b').textContent = why || 'Open side by side';
-    zone.querySelector('span').textContent = why ? '' : (SPLIT.panes.length + 2) + ' of ' + SPLIT.max + ' \u00b7 the preview stays off';
-    zone.classList.add('on');
-  };
-  const hideZone = () => { depth = 0; zone.classList.remove('on'); };
-  work.addEventListener('dragenter', (e) => { if (!isSess(e)) return; depth++; showZone(); });
-  work.addEventListener('dragover', (e) => { if (!isSess(e) || splitWhyNot(DRAG_SID)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
-  work.addEventListener('dragleave', (e) => { if (!isSess(e)) return; if (--depth <= 0) hideZone(); });
-  work.addEventListener('drop', (e) => { if (!isSess(e)) return; e.preventDefault(); hideZone(); const sid = e.dataTransfer.getData(SESS_MIME); DRAG_SID = null; if (sid) openBeside(sid); });
-  document.addEventListener('dragend', () => { DRAG_SID = null; hideZone(); });
+  // Dragging a session from the list: the panes step aside and a map of the layout covers
+  // them. Drop on the spot it should go (the others fill the rest), on this pane to open it
+  // here, or -- with four open -- on a pane to swap it. It used to be one box on the right of
+  // this pane, so it looked as if a session could only go in one corner.
+  if (!PANE) {
+    const map = el('div', 'split-map');
+    map.setAttribute('aria-hidden', 'true');
+    document.body.appendChild(map);
+    const titleOf = (sid) => ((SESS_ITEMS || []).find((s) => s.id === sid) || {}).title || 'Session';
+    // Where each cell sits for a count: [column, row] with a row span of 2 written as '1 / 3'.
+    const SPOTS = { 2: [['1', '1 / 3'], ['2', '1 / 3']], 3: [['1', '1 / 3'], ['2', '1'], ['2', '2']], 4: [['1', '1'], ['2', '1'], ['1', '2'], ['2', '2']] };
+    let mode = '', hot = null;   // mode: 'add' (a new spot), 'swap' (four open), 'no'
+    const cellAt = (i) => map.querySelector('.sm-cell[data-i="' + i + '"]');
+    function paintMap(){
+      const sid = DRAG_SID, n = SPLIT.panes.length;
+      const shown = mode === 'add' ? n + 2 : n + 1;      // cells: this pane + the others
+      for (let i = 0; i < shown; i++) {
+        const c = cellAt(i); if (!c) continue;
+        let big = '', small = '', lit = false;
+        if (i === 0) {
+          const here = activeId ? titleOf(activeId) : 'This pane';
+          big = hot === 0 ? titleOf(sid) : here;
+          small = hot === 0 ? (activeId ? 'opens here instead of ' + here : 'opens here') : 'drop here to open it in this pane';
+          lit = hot === 0;
+        } else if (mode === 'add') {
+          const order = SPLIT.panes.slice(); if (hot != null && hot > 0) order.splice(hot - 1, 0, sid);
+          const at = order[i - 1];
+          if (hot == null || hot === 0) { big = 'Drop here'; small = 'opens side by side'; }
+          else if (at === sid) { big = titleOf(sid); small = 'opens here'; lit = true; }
+          else { big = titleOf(at); small = ''; }
+        } else {
+          const at = SPLIT.panes[i - 1];
+          big = hot === i ? titleOf(sid) : titleOf(at);
+          small = hot === i ? 'swaps in for ' + titleOf(at) : 'drop to swap';
+          lit = hot === i;
+        }
+        c.classList.toggle('hot', lit);
+        c.querySelector('b').textContent = big;
+        c.querySelector('span').textContent = small;
+      }
+    }
+    function openMap(){
+      const sid = DRAG_SID; if (!sid) return;
+      const n = SPLIT.panes.length;
+      const r1 = $('screen-work').getBoundingClientRect(), side = document.querySelector('.side');
+      const left = side ? side.getBoundingClientRect().right : r1.left;
+      Object.assign(map.style, { left: left + 'px', top: r1.top + 'px', right: '0px', bottom: '0px' });
+      map.innerHTML = ''; hot = null;
+      if (sid === activeId) mode = 'no';
+      else if (SPLIT.panes.includes(sid)) mode = 'no';
+      else mode = n + 1 >= SPLIT.max ? 'swap' : 'add';
+      if (mode === 'no') {
+        const m = el('div', 'sm-cell sm-msg', '<b></b><span></span>');
+        m.querySelector('b').textContent = sid === activeId ? 'Already open in this pane' : 'Already open side by side';
+        m.querySelector('span').textContent = 'drop anywhere to go to it';
+        map.appendChild(m);
+      } else {
+        const count = mode === 'add' ? n + 2 : n + 1;
+        (SPOTS[count] || SPOTS[2]).forEach(([col, row], i) => {
+          const c = el('div', 'sm-cell' + (i === 0 ? ' sm-main' : ''), '<b></b><span></span>');
+          c.dataset.i = String(i); c.style.gridColumn = col; c.style.gridRow = row;
+          map.appendChild(c);
+        });
+      }
+      map.classList.add('on');
+      window.voxai.split.hold(true);       // the panes step aside, so the map can take the drop
+      paintMap();
+    }
+    function closeMap(){
+      if (!map.classList.contains('on')) return;
+      map.classList.remove('on'); map.innerHTML = ''; hot = null; mode = '';
+      window.voxai.split.hold(false);
+    }
+    const isSess = (e) => !!(e.dataTransfer && [...e.dataTransfer.types].includes(SESS_MIME));
+    const cellOf = (e) => e.target && e.target.closest && e.target.closest('.sm-cell');
+    map.addEventListener('dragover', (e) => {
+      if (!isSess(e)) return;
+      e.preventDefault();
+      const c = cellOf(e);
+      e.dataTransfer.dropEffect = c || mode === 'no' ? 'copy' : 'none';
+      const k = c && c.dataset.i != null ? Number(c.dataset.i) : null;
+      if (k !== hot) { hot = k; paintMap(); }
+    });
+    map.addEventListener('drop', async (e) => {
+      if (!isSess(e)) return;
+      e.preventDefault();
+      const sid = e.dataTransfer.getData(SESS_MIME) || DRAG_SID;
+      const c = cellOf(e), k = c && c.dataset.i != null ? Number(c.dataset.i) : null, m = mode;
+      DRAG_SID = null; closeMap();
+      if (!sid) return;
+      if (m === 'no') { if (SPLIT.panes.includes(sid)) window.voxai.split.focus(sid); return; }
+      if (k == null) return;
+      if (k === 0) { openSession(sid); return; }
+      const r = m === 'swap' ? await window.voxai.split.swap(k - 1, sid) : await window.voxai.split.add(sid, k - 1);
+      if (!r || !r.ok) toast('Could not open it side by side: ' + ((r && r.error) || 'unknown') + '.');
+    });
+    // The drag begins in the list; the map is up before the pointer reaches the chat.
+    document.addEventListener('dragstart', (e) => { if (isSess(e) || DRAG_SID) setTimeout(openMap, 0); });
+    document.addEventListener('dragend', () => { DRAG_SID = null; closeMap(); });
+  }
 }
 // A question answered in another pane: this page stops asking it.
 if (window.voxai.onInputDone) window.voxai.onInputDone(({ inputId }) => {
@@ -5786,7 +5870,7 @@ async function deleteSessions(ids, project){
   for (const id of gone) {
     viewStore.delete(id); SEL.delete(id);
     if (activeId === id) {
-      activeId = null; const th = $('thread'); if (th) th.innerHTML = '';
+      activeId = null; tellMainSession(); const th = $('thread'); if (th) th.innerHTML = '';
       const tEl = $('sessTitle'); if (tEl) tEl.textContent = 'New session';
       if (window.__syncTitlebar) __syncTitlebar('New session');
       const sEl = $('sessSub'); if (sEl) sEl.textContent = '';
