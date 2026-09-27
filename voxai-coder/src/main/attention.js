@@ -1,8 +1,9 @@
 /**
  * attention -- telling you a session needs you when VoxAI is not in front.
  *
- *   A  a Windows notification per request: which project, what it asks, and for an
- *      approval Allow once / Deny / Open right on it (Open for a question)
+ *   A  a card in the corner per request, drawn like AI Account Hub's Signal Rail: which
+ *      project, what it asks, and for an approval Allow once / Deny / Open right on it
+ *      (Open for a question). Or, if you prefer, Windows' own notification.
  *   B  a count badge on the taskbar button, which flashes when a new one arrives,
  *      and a red dot on the tray icon
  *   +  a tray icon (Open, Quit) and, if you want, minimize / close to the tray
@@ -14,9 +15,14 @@
  */
 const path = require('path');
 const crypto = require('crypto');
-const { Tray, Menu, Notification, nativeImage } = require('electron');
+const { Tray, Menu, Notification, nativeImage, BrowserWindow, ipcMain, screen } = require('electron');
 
 const PROTOCOL = 'voxai-coder';
+// The corner card (renderer/notice.html). The window has 10 px of shadow room round the
+// card; fixed sizes keep a stack from shifting. Up to three, newest at the bottom.
+const CARD_W = 340, CARD_H = 134, CARD_GAP = 6, CARD_MARGIN = 8, CARD_MAX = 3;
+const CARD_TONE = { perm: '#d9a35f', ask: '#8fb3d9' };
+const CARD_WORD = { shell: 'Run', 'write-file': 'Edit', 'browser-act': 'Browser', 'desktop-act': 'Desktop', 'desktop-look': 'Look', 'web-fetch': 'Fetch', 'web-search': 'Search' };
 
 function xml(s) {
   return String(s == null ? '' : s).replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&apos;' }[c]));
@@ -50,6 +56,7 @@ function createAttention({ app, getWindow, getSettings, pendingPerms, pendingInp
   const seen = new Set();          // request ids already announced
   const toasts = new Map();        // request id -> { note, secret, sessionId }
   const badges = new Map();        // count label -> nativeImage
+  const cards = [];                // { id, win, sessionId }, oldest first
 
   app.on('before-quit', () => { quitting = true; });
 
@@ -151,6 +158,84 @@ function createAttention({ app, getWindow, getSettings, pendingPerms, pendingInp
     } catch { /* notifications off in Windows: the badge still shows */ }
   }
 
+  // ---- A: the corner card -------------------------------------------------------------
+  const MODEL_SHORT = (m) => String(m || '').split('/').pop().replace(/[-_]/g, ' ');
+  function cardData(req) {
+    const sess = live.get(req.sessionId);
+    const project = sess && sess.workdir ? path.basename(String(sess.workdir).replace(/[\\/]+$/, '')) : 'A session';
+    const title = sess && sess.title ? String(sess.title) : '';
+    const model = sess && sess.model ? MODEL_SHORT(sess.model) : MODEL_SHORT(getSettings().openrouterModel);
+    const perm = req.kind === 'perm';
+    return {
+      tone: perm ? CARD_TONE.perm : CARD_TONE.ask,
+      title: `${project} needs you`,
+      account: [title, model].filter(Boolean).join(' | '),
+      message: req.text.slice(0, 300),
+      value: perm ? (CARD_WORD[req.what] || 'Approve') : 'Ask',
+      meta: perm ? 'approval' : (req.many > 1 ? `${req.many} questions` : 'question'),
+      actions: perm
+        ? [{ label: 'Allow once', act: 'allow', primary: true }, { label: 'Deny', act: 'deny' }, { label: 'Open', act: 'open' }]
+        : [{ label: 'Answer in VoxAI', act: 'open', primary: true }],
+      timeoutMs: 12000,
+    };
+  }
+  function cardSpots() {
+    const wa = screen.getPrimaryDisplay().workArea;
+    const x = wa.x + wa.width - CARD_W - CARD_MARGIN;
+    let y = wa.y + wa.height - CARD_MARGIN;
+    const spots = new Map();
+    for (const c of [...cards].reverse()) { y -= CARD_H; spots.set(c, { x, y }); y -= CARD_GAP; }
+    return spots;
+  }
+  function glide(win, to) {
+    if (!win || win.isDestroyed()) return;
+    const [fx, fy] = win.getPosition();
+    if (fx === to.x && fy === to.y) return;
+    clearInterval(win._glide);
+    let i = 0; const n = 9;
+    win._glide = setInterval(() => {
+      if (win.isDestroyed()) { clearInterval(win._glide); return; }
+      i++; const k = 1 - Math.pow(1 - i / n, 3);
+      win.setPosition(Math.round(fx + (to.x - fx) * k), Math.round(fy + (to.y - fy) * k));
+      if (i >= n) clearInterval(win._glide);
+    }, 16);
+  }
+  function restack() { for (const [c, p] of cardSpots()) glide(c.win, p); }
+  function dropCard(c, fade) {
+    const i = cards.indexOf(c); if (i < 0) return;
+    cards.splice(i, 1);
+    const end = () => { try { if (!c.win.isDestroyed()) c.win.destroy(); } catch { /* gone */ } restack(); };
+    if (fade && !c.win.isDestroyed()) { try { c.win.webContents.send('notice:bye'); } catch { /* gone */ } setTimeout(end, 150); } else end();
+  }
+  function card(req) {
+    while (cards.length >= CARD_MAX) dropCard(cards[0], false);
+    const win = new BrowserWindow({
+      width: CARD_W, height: CARD_H, frame: false, transparent: true, backgroundColor: '#00000000', hasShadow: false,
+      resizable: false, movable: false, minimizable: false, maximizable: false, fullscreenable: false,
+      skipTaskbar: true, alwaysOnTop: true, focusable: false, show: false, title: 'VoxAI Coder',
+      webPreferences: { preload: path.join(__dirname, '..', 'preload', 'notice-preload.js'), contextIsolation: true, sandbox: true, nodeIntegration: false },
+    });
+    try { win.setAlwaysOnTop(true, 'pop-up-menu'); } catch { /* older Electron */ }
+    win.webContents.on('will-navigate', (e) => e.preventDefault());
+    win.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
+    const c = { id: req.id, win, sessionId: req.sessionId };
+    cards.push(c);
+    const spot = cardSpots().get(c);
+    win.setPosition(spot.x, spot.y);
+    win.loadFile(path.join(__dirname, '..', 'renderer', 'notice.html'), { query: { d: JSON.stringify(cardData(req)) } });
+    win.once('ready-to-show', () => { if (!win.isDestroyed()) win.showInactive(); });
+    win.on('closed', () => { const i = cards.indexOf(c); if (i >= 0) { cards.splice(i, 1); restack(); } });
+    restack();
+  }
+  // What was clicked on a card. Only a card's own window is heard, for its own request.
+  ipcMain.on('notice:act', (e, a) => {
+    const c = cards.find((x) => !x.win.isDestroyed() && x.win.webContents === e.sender);
+    if (!c) return;
+    if (a === 'allow' || a === 'deny') answerPerm(c.id, a === 'allow');
+    else if (a === 'open') { show(); openSession(c.sessionId); }
+    dropCard(c, false);
+  });
+
   /** Once a second: badge, tray dot, flash and notifications follow what is waiting. */
   async function tick() {
     const s = getSettings();
@@ -165,12 +250,13 @@ function createAttention({ app, getWindow, getSettings, pendingPerms, pendingInp
       if (seen.has(req.id) || !away) continue;
       seen.add(req.id);
       if (s.notifyTaskbar && w && !w.isDestroyed()) { try { w.flashFrame(true); } catch { /* gone */ } }
-      if (s.notifyToast) toast(req);
+      if (s.notifyToast) { if (s.notifyNative) toast(req); else card(req); }
     }
     // Answered (here or on screen): its notification goes, its id is forgotten.
     const ids = new Set(list.map((r) => r.id));
     for (const id of [...seen]) if (!ids.has(id)) seen.delete(id);
     for (const [id, t] of toasts) if (!ids.has(id)) { try { t.note.close(); } catch { /* gone */ } toasts.delete(id); }
+    for (const c of [...cards]) if (!ids.has(c.id)) dropCard(c, true);
     if (n === lastCount) return;
     lastCount = n;
     if (w && !w.isDestroyed()) {
@@ -186,7 +272,7 @@ function createAttention({ app, getWindow, getSettings, pendingPerms, pendingInp
     }
   }
   const timer = setInterval(() => { tick().catch(() => {}); }, 1000);
-  app.on('will-quit', () => { clearInterval(timer); if (tray) { try { tray.destroy(); } catch { /* gone */ } } });
+  app.on('will-quit', () => { clearInterval(timer); for (const c of [...cards]) dropCard(c, false); if (tray) { try { tray.destroy(); } catch { /* gone */ } } });
 
   // ---- a toast's button, arriving as a link --------------------------------------------------
   /** Returns true when the link was ours (acted on or refused). */
@@ -215,7 +301,7 @@ function createAttention({ app, getWindow, getSettings, pendingPerms, pendingInp
     } catch { /* the buttons fall back to opening the app */ }
   }
 
-  return { wireWindow, handleLink, registerProtocol, syncTray, tick, _waiting: waiting };
+  return { wireWindow, handleLink, registerProtocol, syncTray, tick, _waiting: waiting, _cards: cards, _cardData: cardData };
 }
 
 module.exports = { createAttention, dotted, PROTOCOL };

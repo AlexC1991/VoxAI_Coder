@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-YIBu7eaKLrYomYttI3bVxALxNvZRYMijCc+tvOUZ9Eg='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-tlGfzvtlj5lq4oE4PGmNG2A8eJ6lXuPE7AMjZo51O3w='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -741,6 +741,12 @@ tests"). Scroll the row instead of breaking words:
 .sh-goal[hidden]{display:none}
 /* "Worked for 23m 14s \u00b7 $0.38 \u00b7 8.7M tokens": quiet, under the answer. */
 .run-took{font:11.5px "Sometype Mono",monospace;color:var(--faint);margin:2px 0 6px}
+.run-cost{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:4px;font-size:11px}
+.rc-it{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.rc-it i{width:6px;height:6px;border-radius:2px;background:var(--edge2);flex:none}
+.rc-it b{font-weight:600;color:var(--sub)}
+.rc-it em{font-style:normal;color:var(--faint);opacity:.8}
+.rc-fresh i{background:#8fb3d9}.rc-cached i{background:#6fbf8e}.rc-written i{background:#d9a35f}.rc-output i{background:var(--gold)}
 .sh-loop #shLoopTxt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;color:var(--fg,inherit)}
 .slash-menu{display:flex;flex-direction:column;gap:1px;padding:5px;border:1px solid var(--edge2);border-radius:12px;background:var(--panel);box-shadow:0 8px 24px rgba(0,0,0,.25)}
 .slash-menu[hidden]{display:none}
@@ -1041,6 +1047,7 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
             <span class="sh-goal" id="shGoal" hidden><span class="sh-goal-ic" aria-hidden="true">◎</span><span id="shGoalTxt"></span><button class="sh-lnk" id="shGoalClear" type="button">Clear goal</button></span>
             <span class="sh-work" id="shWork" hidden><span class="spin"></span><span id="shWorkTxt">Working</span><span class="tm" id="shWorkTm"></span></span>
             <span class="sh-warn" id="shWarn" hidden><span id="shWarnTxt"></span><button class="sh-lnk" id="shCompact" type="button">Summarise now</button></span>
+            <span class="sh-warn" id="shCache" hidden><span id="shCacheTxt"></span><button class="sh-lnk" id="shCacheFix" type="button">Summarise first</button></span>
             <span class="sh-warn" id="shImg" hidden><span id="shImgTxt"></span><button class="sh-lnk" id="shImgFix" type="button"></button></span>
             <span class="sh-steer" id="steerHint" hidden>Steering message <b id="steerHintTarget"></b><button id="steerHintCancel" type="button">Cancel</button></span>
             <div id="attachTray" class="attach-tray" hidden></div>
@@ -1204,14 +1211,14 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
     <section class="set-page" data-set="notify" hidden>
       <header class="set-top"><h3>Notifications</h3><p>When a session needs you -- an approval or a question -- and VoxAI isn’t the window in front.</p></header>
       <div class="set-scroll">
-        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Windows notification</div><div class="set-desc">A notification in the corner saying which project needs you and what for. Allow or Deny an approval right from it, or open the session.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntToast" role="switch" aria-checked="false" aria-label="Windows notification"></button></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Taskbar badge</div><div class="set-desc">The taskbar button shows how many are waiting, and flashes when a new one comes in.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntTaskbar" role="switch" aria-checked="false" aria-label="Taskbar badge"></button></div></div></div>
+        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Card in the corner</div><div class="set-desc">A card above the taskbar saying which project needs you and what for. Allow or Deny an approval right from it, or open the session. It tucks away after 12 seconds (not while you point at it).</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntToast" role="switch" aria-checked="false" aria-label="Card in the corner"></button></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Use Windows’ own notification</div><div class="set-desc">The same, as a Windows notification instead of the VoxAI card: it also stays in the Windows notification centre.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntNative" role="switch" aria-checked="false" aria-label="Use Windows’ own notification"></button></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Taskbar badge</div><div class="set-desc">The taskbar button shows how many are waiting, and flashes when a new one comes in.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntTaskbar" role="switch" aria-checked="false" aria-label="Taskbar badge"></button></div></div></div>
         <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Minimize to the system tray</div><div class="set-desc">Minimizing hides the window to the tray icon instead of the taskbar. Click the icon to bring it back.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntTrayMin" role="switch" aria-checked="false" aria-label="Minimize to the system tray"></button></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Close to the system tray</div><div class="set-desc">Closing the window keeps VoxAI running in the tray, so runs carry on. Quit from the tray icon.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntTrayClose" role="switch" aria-checked="false" aria-label="Close to the system tray"></button></div></div></div>
       </div>
     </section>
     <section class="set-page" data-set="subs" hidden>
       <header class="set-top"><h3>Sub-agents</h3><p>Workers the agent can hand self-contained jobs to. They report back and share the run’s spending limit.</p></header>
       <div class="set-scroll">
-        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Model</div><div class="set-desc">A cheaper model makes fan-outs cheaper. Leave empty to use the session’s model.</div></div><div class="set-ctl"><input id="fSubModel" class="txt" placeholder="Same as the session" autocomplete="off" aria-label="Sub-agent model"></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Eyes for models that cannot see</div><div class="set-desc">When the session’s model cannot read images, this model looks at each screenshot and describes it, problems included. Empty turns it off.</div></div><div class="set-ctl"><input id="fVisionHelper" class="txt" placeholder="Off" autocomplete="off" aria-label="Model that describes screenshots"></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Turns before answering</div><div class="set-desc">How many tool steps a worker may take before it must report.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease turns before answering">−</button><input id="fSubMaxTurns" type="number" min="1" max="100" step="5" placeholder="25" aria-label="turns before answering"><span class="num-u">turns</span><button type="button" class="num-b" data-num="1" aria-label="Increase turns before answering">+</button></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Time limit</div><div class="set-desc">A worker still running after this is stopped and returns what it has.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease time limit">−</button><input id="fSubTimeout" type="number" min="10" max="3600" step="30" placeholder="300" aria-label="time limit"><span class="num-u">sec</span><button type="button" class="num-b" data-num="1" aria-label="Increase time limit">+</button></div></div></div></div>
+        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Model</div><div class="set-desc">A cheaper model makes fan-outs cheaper. Leave empty to use the session’s model.</div></div><div class="set-ctl"><input id="fSubModel" class="txt" placeholder="Same as the session" autocomplete="off" aria-label="Sub-agent model"></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Eyes for models that cannot see</div><div class="set-desc">When the session’s model cannot read images, this model looks at each screenshot and describes it, problems included. Empty turns it off.</div></div><div class="set-ctl"><input id="fVisionHelper" class="txt" placeholder="Off" autocomplete="off" aria-label="Model that describes screenshots"></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Auto’s checker</div><div class="set-desc">In Auto, this model decides whether each action needs your say. It is a short yes or no, so a cheap model is plenty. Empty uses the session’s model.</div></div><div class="set-ctl"><input id="fAutoCheck" class="txt" placeholder="Session’s model" autocomplete="off" aria-label="Model for Auto’s checks"></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Turns before answering</div><div class="set-desc">How many tool steps a worker may take before it must report.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease turns before answering">−</button><input id="fSubMaxTurns" type="number" min="1" max="100" step="5" placeholder="25" aria-label="turns before answering"><span class="num-u">turns</span><button type="button" class="num-b" data-num="1" aria-label="Increase turns before answering">+</button></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Time limit</div><div class="set-desc">A worker still running after this is stopped and returns what it has.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease time limit">−</button><input id="fSubTimeout" type="number" min="10" max="3600" step="30" placeholder="300" aria-label="time limit"><span class="num-u">sec</span><button type="button" class="num-b" data-num="1" aria-label="Increase time limit">+</button></div></div></div></div>
       </div>
     </section>
 
@@ -1666,6 +1673,37 @@ function updateSteerHint(v){
  * how full the conversation is. Attachments for the next message sit beside it, and the
  * changed files on the right. It hides itself when it has nothing to say.
  */
+/**
+ * Claude (and Qwen) keep the conversation cached for five minutes. After that the next
+ * turn pays to write all of it to the cache again -- at a 150k-token conversation on Opus,
+ * about $0.75 where a cached turn costs $0.03. Said while the session sits idle, or waits
+ * on you mid-run, past that point, with what it will cost; only when that is worth saying.
+ */
+const CACHE_TTL_MS = 5 * 60 * 1000;
+function cacheNote(v){
+  const id = (v && v.model) || S.openrouterModel || '';
+  if (!/(^|\/)anthropic\/|claude|(^|\/)qwen\//i.test(id)) return null;
+  const tokens = Number(v.ctxFill && v.ctxFill.tokens) || 0;
+  if (tokens < 20000) return null;
+  if (v.busy && !v.perm && !v.askEl) return null;     // working: its calls keep the cache warm
+  const item = (SESS_ITEMS || []).find((s) => s.id === v.id) || {};
+  const upd = typeof item.updatedAt === 'number' ? item.updatedAt : Date.parse(item.updatedAt || '');
+  const at = v.lastCallAt || (Number.isFinite(upd) ? upd : 0);
+  if (!at || Date.now() - at < CACHE_TTL_MS) return null;
+  const m = modelEntry(id) || {};
+  const wc = m.cacheWriteCents != null ? Number(m.cacheWriteCents) : (m.promptCents != null ? Number(m.promptCents) * 1.25 : null);
+  if (wc == null) return null;
+  const cost = tokens * wc / 100;
+  if (cost < 0.05) return null;
+  const k = tokens >= 1e6 ? (tokens / 1e6).toFixed(1) + 'M' : Math.round(tokens / 1e3) + 'k';
+  const waiting = v.busy;
+  return {
+    text: 'Cache expired \u00b7 ' + (waiting ? 'carrying on' : 'your next message') + ' re-caches ' + k + ' tokens (~$' + cost.toFixed(2) + ')',
+    title: 'This model keeps the conversation cached for 5 minutes, and it has been longer. The next turn pays to cache all of it again (' + k + ' tokens at the cache-write price), then turns are cheap again. Summarising first makes that smaller.',
+  };
+}
+// Five minutes pass with nothing happening: the shelf has to notice by itself.
+setInterval(() => { try { const v = actView(), cw = $('shCache'); if (v && cw && cw.hidden === !!cacheNote(v)) paintShelf(); } catch {} }, 20000);
 function paintShelf(){
   const v = actView();
   const steer = $('steerHint'), work = $('shWork'), warn = $('shWarn');
@@ -1702,8 +1740,10 @@ function paintShelf(){
       $('shGoalTxt').title = g.condition + (g.last && g.last.reason ? '\n\nLast check: ' + g.last.reason : '');
     }
   }
+  const cn = v ? cacheNote(v) : null, cw = $('shCache');
+  if (cw) { cw.hidden = steering || !cn || !!img; if (cn) { $('shCacheTxt').textContent = cn.text; cw.title = cn.title; $('shCacheFix').hidden = !!busy; } }
   const w = v ? contextWarning(v.ctxFill) : '';
-  if (warn) { warn.hidden = steering || busy || !w || !!img; $('shWarnTxt').textContent = w; }
+  if (warn) { warn.hidden = steering || busy || !w || !!img || !!cn; $('shWarnTxt').textContent = w; }
   paintQDock();
   const any = [...$('shelf').children].some((c) => !c.hidden && !c.classList.contains('sh-sp'));
   $('shelf').hidden = !any;
@@ -1824,6 +1864,7 @@ function compactNow(){
   try { window.voxai.agentCompact(activeId); } catch (e) {}
 }
 $('shCompact').onclick = compactNow;
+$('shCacheFix').onclick = compactNow;
 
 function drainQueue(sid, byHand){
   const v = viewOf(sid);
@@ -4529,6 +4570,7 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
     renderTodos(event.todos);
   } else if (event.type === 'usage') {
     const u = event.usage || {};
+    if (!u.source) v.lastCallAt = Date.now();   // the model's own call (not a check or a search)
     // accumulate input/output tokens separately (Goose's model)
     const it = Number(u.prompt_tokens) || 0;
     const ot = Number(u.completion_tokens) || 0;
@@ -4764,7 +4806,7 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
 }
 window.voxai.onAgentEvent(onAgentEvt);
 // Settings > Notifications: switch id -> setting.
-const NT_TOGS = [['ntToast', 'notifyToast'], ['ntTaskbar', 'notifyTaskbar'], ['ntTrayMin', 'trayOnMinimize'], ['ntTrayClose', 'trayOnClose']];
+const NT_TOGS = [['ntToast', 'notifyToast'], ['ntNative', 'notifyNative'], ['ntTaskbar', 'notifyTaskbar'], ['ntTrayMin', 'trayOnMinimize'], ['ntTrayClose', 'trayOnClose']];
 // An approval answered from a Windows notification: the box stops asking.
 if (window.voxai.onPermDone) window.voxai.onPermDone(({ permId, allowed }) => {
   for (const v of viewStore.values()) {
@@ -4950,7 +4992,8 @@ if (window.voxai.split) {
 // A question answered in another pane: this page stops asking it.
 if (window.voxai.onInputDone) window.voxai.onInputDone(({ inputId }) => {
   for (const v of viewStore.values()) {
-    if (v.askEl && v.askEl.dataset.inputId === inputId) { settleAsk(v, v.askEl, null); setActivity(v, 'Working'); if (v === actView()) updateSendState(); }
+    if (v.pendingAsk && v.pendingAsk.box.dataset.inputId === inputId) v.pendingAsk.elsewhere();
+    else if (v.askEl && v.askEl.dataset.inputId === inputId) { settleAsk(v, v.askEl, null); setActivity(v, 'Working'); if (v === actView()) updateSendState(); }
   }
 });
 // A notification's Open: that session.
@@ -5298,6 +5341,7 @@ function prefillAdvanced(){
   if ($('fRunBudget')) $('fRunBudget').value = s.runBudgetUsd || '1.00';
   if ($('fGoalBudget')) $('fGoalBudget').value = s.goalBudgetUsd || '5.00';
   if ($('fVisionHelper')) $('fVisionHelper').value = s.visionHelperModel || '';
+  if ($('fAutoCheck')) $('fAutoCheck').value = s.autoCheckModel || '';
   // sub-agent knobs
   const sm = s.subagentModel || '';
   const smt = s.subagentMaxTurns || '25';
@@ -5377,6 +5421,7 @@ async function saveSettingsNow(withKeys){
   if ($('fGoalBudget') && $('fGoalBudget').value) patch.goalBudgetUsd = Number($('fGoalBudget').value).toFixed(2);
   // Always sent: clearing it turns the describing off.
   if ($('fVisionHelper')) patch.visionHelperModel = $('fVisionHelper').value.trim();
+  if ($('fAutoCheck')) patch.autoCheckModel = $('fAutoCheck').value.trim();
   // Always sent, so clearing the field really goes back to "same as the session".
   patch.subagentModel = $('fSubModel').value.trim();
   if ($('fSubMaxTurns').value) patch.subagentMaxTurns = String(Math.round(Number($('fSubMaxTurns').value)));
@@ -6145,7 +6190,23 @@ function tookLine(r){
   if (c > 0) bits.push(c < 0.01 ? '<$0.01' : '$' + c.toFixed(2));
   const t = Number(r.tokens) || 0;
   if (t > 0) bits.push((t >= 1e6 ? (t / 1e6).toFixed(1) + 'M' : t >= 1e3 ? Math.round(t / 1e3) + 'k' : t) + ' tokens');
-  return el('div', 'run-took', esc(bits.join(' \u00b7 ')));
+  const line = el('div', 'run-took', esc(bits.join(' \u00b7 ')));
+  // Where the money went (main.js, backend/costs.js): shown when there was money to speak of.
+  const parts = Array.isArray(r.parts) ? r.parts : [], extras = Array.isArray(r.extras) ? r.extras : [];
+  if (c >= 0.01 && (parts.length || extras.length)) {
+    const usd = (x) => (x < 0.01 ? '<$0.01' : '$' + x.toFixed(2));
+    const tok = (x) => (x >= 1e6 ? (x / 1e6).toFixed(1) + 'M' : x >= 1e3 ? Math.round(x / 1e3) + 'k' : String(x));
+    const row = el('div', 'run-cost');
+    for (const p of parts) {
+      const it = el('span', 'rc-it rc-' + p.key);
+      it.innerHTML = '<i></i>' + esc(p.label) + ' <b>' + esc(usd(Number(p.cost) || 0)) + '</b> <em>' + esc(tok(Number(p.tokens) || 0) + (p.thinking ? ', ' + tok(p.thinking) + ' thinking' : '')) + '</em>';
+      row.appendChild(it);
+    }
+    for (const x of extras) { const it = el('span', 'rc-it rc-extra'); it.innerHTML = '<i></i>' + esc(x.label) + ' <b>' + esc(usd(Number(x.cost) || 0)) + '</b>'; row.appendChild(it); }
+    row.title = 'Where this run\u2019s cost went. The model\u2019s share is split by its own prices for each kind of token; the extras are billed on their own.';
+    line.appendChild(row);
+  }
+  return line;
 }
 
 /** The goal loop's steps, sent by main.js goalStep. */
@@ -6881,6 +6942,15 @@ function askPanel(v, event){
       if (done) return; done = true; v.pendingAsk = null;
       document.removeEventListener('keydown', onKey, true);
       settleAsk(v, box, record([[steps.length === 1 ? steps[0].question : steps.length + ' questions', 'Not answered — the run ended']]));
+      updateSendState();
+    },
+    // Answered on another page (a split pane). Taking the box away was not enough: its key
+    // listener and this hook stayed, and the next message typed here went in as an answer.
+    elsewhere: () => {
+      if (done) return; done = true; v.pendingAsk = null;
+      document.removeEventListener('keydown', onKey, true);
+      settleAsk(v, box, record([[steps.length === 1 ? steps[0].question : steps.length + ' questions', 'Answered in another pane']]));
+      setActivity(v, 'Working');
       updateSendState();
     },
   };

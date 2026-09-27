@@ -117,6 +117,8 @@ function getSettings(redacted = true) {
     goalBudgetUsd: raw.goalBudgetUsd || '5.00',
     // Looks at screenshots for a model that cannot, and says what it sees. '' = off.
     visionHelperModel: typeof raw.visionHelperModel === 'string' ? raw.visionHelperModel : 'deepseek/deepseek-v4.1-flash',
+    // Auto's check of each action: a short yes/no, on a cheap model. '' = the session's own model.
+    autoCheckModel: typeof raw.autoCheckModel === 'string' ? raw.autoCheckModel : 'deepseek/deepseek-v4.1-flash',
     // Per-project: has the user said "always show previews here"? Claude Code saves
     // the equivalent choice into .claude/launch.json; this is the same idea, kept in
     // settings so it survives without writing into the user's repo.
@@ -130,6 +132,7 @@ function getSettings(redacted = true) {
     // When a session needs you and VoxAI is not in front (attention.js).
     notifyToast: raw.notifyToast !== false,
     notifyTaskbar: raw.notifyTaskbar !== false,
+    notifyNative: raw.notifyNative === true,   // Windows' own notification instead of the VoxAI card
     trayOnMinimize: raw.trayOnMinimize === true,
     trayOnClose: raw.trayOnClose === true,
     webSearchEnabled: raw.webSearchEnabled !== false && raw.webSearchEnabled !== 'false',
@@ -1059,7 +1062,7 @@ app.whenReady().then(() => {
     if (!resume && sess.title === 'New session') sess.title = text.slice(0, 60);
     // A message from you while a goal is paused picks it back up ("continue" works).
     if (!goalContinue && sess.goal && sess.goal.status === 'active') { sess.goal.paused = false; sess.goal.pausedReason = ''; sess.goal.idle = 0; }
-    let runEnd = 'error', runTools = 0, runCost = 0, runTokens = 0;   // for the goal loop (goalStep) and the run's summary
+    let runEnd = 'error', runTools = 0, runCost = 0, runTokens = 0, runParts = null;   // for the goal loop (goalStep) and the run's summary
 
     const runKey = `${sessionId}:${Date.now()}`;
     const runT0 = Date.now();   // for "Worked for ..." when it ends
@@ -1102,6 +1105,8 @@ app.whenReady().then(() => {
           // Whether screenshots are handed over as images or described as unseen.
           modelVision: modelVision(sess.model || s.openrouterModel),
           visionHelper: s.visionHelperModel || '',
+          // Auto's yes/no on each action, on a cheap model (Settings > Permissions).
+          checkModel: s.autoCheckModel || '',
           // Which thinking levels this model takes, so the chip's choice means something.
           reasoningSpec: modelReasoning(sess.model || s.openrouterModel),
           subagentModel: s.subagentModel, subagentMaxTurns: s.subagentMaxTurns, subagentTimeoutMs: s.subagentTimeoutMs, mcpServers: readSettingsFile().mcpServers || {},
@@ -1151,13 +1156,15 @@ app.whenReady().then(() => {
           const ru = sess._runUsage;
           runCost = (ru && Number(ru.cost)) || 0;
           runTokens = ru ? (Number(ru.input) || 0) + (Number(ru.output) || 0) : 0;
+          // Where it went: fresh input, cached, cache writes, output, and the extras (costs.js).
+          if (ru && runCost > 0) { const mid = sess.model || getSettings(false).openrouterModel; runParts = require('../backend/costs').breakdown(ru, require('../backend/costs').pricesOf(modelCapCache.byId.get(mid), mid)); }
           if (ru && (ru.input || ru.output || ru.cost)) store.recordUsage(sess, ru);
           delete sess._runUsage;
         } catch { /* ledger write is best-effort */ }
         // How long it took and what it cost, under the answer -- a finished build said nothing of
         // either (the user: "no end recorded time lapsed"). Kept, so a reopened session shows it too.
         if (!store.isDeleted(sess)) {
-          const took = { at: sess.messages.length, ms: Date.now() - runT0, cost: runCost, tokens: runTokens, end: runEnd };
+          const took = { at: sess.messages.length, ms: Date.now() - runT0, cost: runCost, tokens: runTokens, end: runEnd, ...(runParts ? { parts: runParts.parts, extras: runParts.extras } : {}) };
           const log = sess.runLog || (sess.runLog = []);
           log.push(took); if (log.length > 300) log.splice(0, log.length - 300);
           const c3 = allRenderers(); c3 && c3.send('agent:event', { sessionId, runKey, event: { type: 'run_summary', ...took } });
@@ -1564,6 +1571,9 @@ ipcMain.handle('openrouter:generations', async (_e, { limit = 40, cursor } = {})
           context: m.context_length || null,
           promptCents: m.pricing && m.pricing.prompt != null ? parseFloat(m.pricing.prompt) * 100 : null,
           completionCents: m.pricing && m.pricing.completion != null ? parseFloat(m.pricing.completion) * 100 : null,
+          // What reading from and writing to the prompt cache cost (the run's breakdown, the cache warning).
+          cacheReadCents: m.pricing && m.pricing.input_cache_read != null ? parseFloat(m.pricing.input_cache_read) * 100 : null,
+          cacheWriteCents: m.pricing && m.pricing.input_cache_write != null ? parseFloat(m.pricing.input_cache_write) * 100 : null,
           // A model without native tool support does not error — it just answers in
           // prose forever, which is indistinguishable from a broken agent. Keep the
           // capability flags so the picker can say so up front.

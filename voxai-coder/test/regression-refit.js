@@ -1945,7 +1945,7 @@ async function drain(gen) {
     check('it sits inside the input box, at the top, like an approval', /<div class="box" id="cmpBox">\n[^\n]*\n\s*<div class="qdock" id="qDock" hidden[^>]*><\/div>/.test(HTML) && HTML.includes("const box = el('div', 'ask qa');"), 'markup');
     check('every kind of question goes into it (one renderer), none into the thread', (HTML.match(/    mountAsk\(v, box\);\n/g) || []).length === 1 && HTML.includes('const box = askPanel(v, event);')
       && !HTML.includes('function askCard(') && !HTML.includes('rq.appendChild(box)'), 'mount');
-    check('answered or expired, it leaves the box and its one-line record goes into the thread', (HTML.match(/settleAsk\(v, box, record\(/g) || []).length === 2 && !/box\.replaceWith\(/.test(HTML)
+    check('answered, expired or answered in another pane, it leaves the box and its one-line record goes into the thread', (HTML.match(/settleAsk\(v, box, record\(/g) || []).length === 3 && !/box\.replaceWith\(/.test(HTML)
       && HTML.includes('if (rec && v.root) { (v.curRun && v.curRun.body || v.root).appendChild(rec);'), 'settle');
     check('one question at a time: a pick moves to the next, the last one sends', HTML.includes('picks[i] = new Set([value]); typed[i] = \'\';\n    next();')
       && HTML.includes("if (cur < steps.length - 1) { cur += 1; otherOpen = false; paint(); }\n    else finish(false);") && HTML.includes("h.appendChild(el('span', '', (cur + 1) + ' of ' + steps.length));"), 'stepper');
@@ -2044,11 +2044,16 @@ async function drain(gen) {
   {
     // Electron stand-in for this block only.
     const shown = [];
+    const FakeCards = [];
+    const ipcHandlers = {};
     const fakeElectron = {
       Tray: class { constructor() {} setToolTip() {} setContextMenu() {} on() {} setImage() {} destroy() {} },
       Menu: { buildFromTemplate: () => ({}) },
       Notification: class { static isSupported() { return true; } constructor(o) { this.o = o; shown.push(o); } show() {} close() { this.closed = true; } },
       nativeImage: { createFromPath: () => ({ isEmpty: () => true }), createFromDataURL: () => ({ isEmpty: () => false }), createFromBitmap: () => ({}) },
+      BrowserWindow: class { constructor(o) { this.o = o; this.pos = [0, 0]; this.webContents = { on() {}, setWindowOpenHandler() {}, send() {} }; FakeCards.push(this); } setAlwaysOnTop() {} setPosition(x, y) { this.pos = [x, y]; } getPosition() { return this.pos; } loadFile(f, q) { this.file = f; this.query = q; } once() {} on() {} isDestroyed() { return !!this.dead; } destroy() { this.dead = true; } showInactive() {} },
+      ipcMain: { on: (ch, fn) => { ipcHandlers[ch] = fn; } },
+      screen: { getPrimaryDisplay: () => ({ workArea: { x: 0, y: 0, width: 1920, height: 1040 } }) },
     };
     const elecPath = require.resolve('electron', { paths: [ROOT] });
     const before = require.cache[elecPath];
@@ -2064,7 +2069,7 @@ async function drain(gen) {
     const pendingInputs = new Map();
     const answered = [];
     const A = createAttention({ app: { on: (ev, fn) => { handlers[ev] = fn; }, isPackaged: true, setAsDefaultProtocolClient() {} }, getWindow: () => fakeWin,
-      getSettings: () => ({ notifyToast: true, notifyTaskbar: true }), pendingPerms, pendingInputs, live: new Map([['s1', { workdir: 'C:/Users/me/3D Game Project' }]]),
+      getSettings: () => ({ notifyToast: true, notifyTaskbar: true, notifyNative: true }), pendingPerms, pendingInputs, live: new Map([['s1', { workdir: 'C:/Users/me/3D Game Project' }]]),
       renderer: () => null, answerPerm: (id, allowed) => answered.push([id, allowed]), openSession: () => {} });
     await A.tick();
     const xmlT = shown[0] && shown[0].toastXml || '';
@@ -2086,6 +2091,37 @@ async function drain(gen) {
     await A.tick();
     check('and not again on the next tick', shown.length === 2, shown.length);
     handlers['will-quit'] && handlers['will-quit']();
+
+    // The card (the default): drawn like AI Account Hub's Signal Rail.
+    const answered2 = [], opened = [];
+    const pp = new Map([['c1', { msg: { permId: 'c1', sessionId: 's1', kind: 'shell', target: 'npm test' }, resolve() {} }]]);
+    const B = createAttention({ app: { on() {}, isPackaged: true, setAsDefaultProtocolClient() {} }, getWindow: () => fakeWin,
+      getSettings: () => ({ notifyToast: true, notifyTaskbar: false }), pendingPerms: pp, pendingInputs: new Map(), live: new Map([['s1', { workdir: 'C:/x/3D Game Project', title: 'Make a game', model: 'anthropic/claude-opus-5.5' }]]),
+      renderer: () => null, answerPerm: (id, ok) => answered2.push([id, ok]), openSession: (sid) => opened.push(sid) });
+    const shownBefore = shown.length;
+    await B.tick();
+    const c0 = FakeCards[0];
+    const cd = c0 && JSON.parse(c0.query.query.d);
+    check('away: a VoxAI card, not a Windows notification, in the corner above the taskbar', FakeCards.length === 1 && shown.length === shownBefore
+      && /notice\.html$/.test(c0.file) && c0.o.focusable === false && c0.o.skipTaskbar === true && c0.pos[0] === 1920 - 340 - 8 && c0.pos[1] === 1040 - 8 - 134, c0 && c0.pos);
+    check('it says the project, the session and model, the action, and offers Allow once / Deny / Open', cd && cd.title === '3D Game Project needs you' && cd.account === 'Make a game | claude opus 5.5'
+      && cd.message === 'npm test' && cd.value === 'Run' && cd.actions.map((a) => a.act).join() === 'allow,deny,open', cd);
+    ipcHandlers['notice:act']({ sender: {} }, 'allow');
+    check('a click from anything but the card\'s own window does nothing', answered2.length === 0, answered2);
+    ipcHandlers['notice:act']({ sender: c0.webContents }, 'allow');
+    check('its Allow once answers the approval and the card goes', answered2.length === 1 && answered2[0][1] === true && c0.dead === true, answered2);
+    for (const id of ['c2', 'c3', 'c4', 'c5']) pp.set(id, { msg: { permId: id, sessionId: 's1', kind: 'shell', target: id }, resolve() {} });
+    pp.delete('c1');
+    await B.tick();
+    const live3 = FakeCards.filter((w) => !w.dead);
+    check('at most three stack up; the oldest makes room', live3.length === 3 && FakeCards.filter((w) => w.dead).length === 2, live3.length);
+    pp.clear();
+    await B.tick();
+    await new Promise((r) => setTimeout(r, 200));
+    check('answered anywhere: its card goes', FakeCards.every((w) => w.dead), FakeCards.map((w) => !!w.dead));
+    const NH = read('src/renderer/notice.html'), NJ = read('src/renderer/notice.js');
+    check('the card: a tone rail, identity tile, three lines, a metric with ×, and a countdown that pauses on hover', NH.includes('<div class="rail"></div>') && NH.includes('class="tile"')
+      && NH.includes('class="metric"') && NH.includes("script-src 'self'") && NJ.includes("card.addEventListener('mouseenter', () => { paused = true; });") && NJ.includes("leave('expire')"), 'notice');
     if (before) require.cache[elecPath] = before; else delete require.cache[elecPath];
     delete require.cache[attnPath];
     const MAIN = read('src/main/main.js');
@@ -2159,6 +2195,46 @@ async function drain(gen) {
     const CDPs = read('src/backend/cu/cdp.js');
     check('the agent\'s browser never serves an old copy of a page it just changed', (CDPs.match(/Network\.setCacheDisabled', \{ cacheDisabled: true \}/g) || []).length === 2
       && MAIN.includes('browserV.webContents.reloadIgnoringCache()'), 'cache');
+  }
+
+  // ------------------------------------------------------------------ [CB]
+  console.log('\n[CB] where a run\'s money went; Auto\'s checks on a cheap model; the expired-cache warning');
+  {
+    const { breakdown, pricesOf } = require(path.join(ROOT, 'src/backend/costs.js'));
+    const { accumulateUsage } = require(path.join(ROOT, 'src/backend/agent.js'));
+    const sess = {};
+    accumulateUsage(sess, { prompt_tokens: 100000, completion_tokens: 5000, cost: 0.5, prompt_tokens_details: { cached_tokens: 80000, cache_write_tokens: 15000 }, completion_tokens_details: { reasoning_tokens: 3000 } });
+    const ru = sess._runUsage;
+    check('cache writes are read as OpenRouter reports them, and thinking is counted', ru.cacheRead === 80000 && ru.cacheWrite === 15000 && ru.reasoning === 3000, ru);
+    // Opus 5.5 prices ($/token x100 = cents), one run with an Auto check beside it.
+    const opus = pricesOf({ promptCents: 0.0004, completionCents: 0.002, cacheReadCents: 0.00002, cacheWriteCents: 0.0005 }, 'anthropic/claude-opus-5.5');
+    const b = breakdown({ input: 1000000, cacheRead: 800000, cacheWrite: 150000, output: 60000, reasoning: 40000, cost: 2.55, extras: { 'Auto checks': 0.15 } }, opus);
+    const sum = b.parts.reduce((s, p) => s + p.cost, 0) + b.extras.reduce((s, e) => s + e.cost, 0);
+    const byKey = Object.fromEntries(b.parts.map((p) => [p.key, p]));
+    check('the parts add up to what was charged', Math.abs(sum - 2.55) < 1e-9, sum);
+    check('fresh 50k, cached 800k, written 150k, output 60k with 40k thinking', byKey.fresh.tokens === 50000 && byKey.cached.tokens === 800000 && byKey.written.tokens === 150000 && byKey.output.tokens === 60000 && byKey.output.thinking === 40000, byKey);
+    check('split by the model\'s own prices: output and cache writes weigh most on Opus', byKey.output.cost > byKey.cached.cost && byKey.written.cost > byKey.fresh.cost && b.extras[0].label === 'Auto checks', b);
+    const b2 = breakdown({ input: 1000, output: 100, cost: 0.2, subIn: 1000, subOut: 100, extras: { 'Sub-agents': 0.2 } }, opus);
+    check('a sub-agent\'s tokens are not charged to this model\'s parts', b2.parts.length === 0 && b2.extras[0].cost === 0.2, b2);
+    const AG = read('src/backend/agent.js');
+    const MAINc = read('src/main/main.js');
+    const HTMLc = read('src/renderer/index.html');
+    check('Auto asks a cheap model (Settings), the session\'s model only if that fails; its cost kept apart', AG.includes("if (checkModel && checkModel !== model) { try { r = await ask(checkModel, null); }")
+      && AG.includes("if (!r) r = await ask(model, reasoningSpec);") && AG.includes("addExtra(session, 'Auto checks', cost);")
+      && MAINc.includes("autoCheckModel: typeof raw.autoCheckModel === 'string' ? raw.autoCheckModel : 'deepseek/deepseek-v4.1-flash',") && HTMLc.includes('id="fAutoCheck"'), 'checker');
+    check('the "Worked for" line carries the breakdown, and the run log keeps it', MAINc.includes('...(runParts ? { parts: runParts.parts, extras: runParts.extras } : {})')
+      && HTMLc.includes("const row = el('div', 'run-cost');") && MAINc.includes('cacheWriteCents: m.pricing && m.pricing.input_cache_write != null'), 'took');
+    // The warning, run in a small copy of the page's function.
+    const src = HTMLc.slice(HTMLc.indexOf('const CACHE_TTL_MS'), HTMLc.indexOf('// Five minutes pass with nothing happening'));
+    const mk = new Function('S', 'SESS_ITEMS', 'modelEntry', src + '; return cacheNote;');
+    const note = mk({ openrouterModel: 'anthropic/claude-opus-5.5' }, [{ id: 'a', updatedAt: Date.now() - 20 * 60000 }], () => ({ promptCents: 0.0004, cacheWriteCents: 0.0005 }));
+    const old = note({ id: 'a', ctxFill: { tokens: 150000 } });
+    check('idle past five minutes on Claude: "re-caches 150k tokens (~$0.75)"', old && /Cache expired · your next message re-caches 150k tokens \(~\$0\.75\)/.test(old.text), old);
+    check('not while it is fresh, working, small, or on a model that caches by itself', !note({ id: 'b', lastCallAt: Date.now() - 60000, ctxFill: { tokens: 150000 } })
+      && !note({ id: 'a', busy: true, ctxFill: { tokens: 150000 } }) && !note({ id: 'a', ctxFill: { tokens: 5000 } })
+      && !note({ id: 'a', model: 'deepseek/deepseek-v4.1-flash', ctxFill: { tokens: 150000 } }), 'noisy');
+    const waiting = note({ id: 'a', busy: true, perm: {}, ctxFill: { tokens: 150000 } });
+    check('waiting on you mid-run: "carrying on re-caches..."', waiting && /carrying on re-caches/.test(waiting.text), waiting);
   }
 
   // ------------------------------------------------------------------ [WD]

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'none'; connect-src 'none'; base-uri 'none'; form-action 'none'">
+<title>VoxAI Coder</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:wght@400;700&family=Sometype+Mono:wght@400;600&display=swap">
+<style>
+/* A session needs you: the card in the corner (main/attention.js). Laid out like AI
+   Account Hub's Signal Rail -- a tone rail, an identity tile, three lines, one metric --
+   in VoxAI's colours, with the approval's buttons where the Hub has its progress bar. */
+:root{
+  --panel:#141417; --hover:#1f1f24; --edge:#2e2e34; --ink:#e4e2df; --sub:#9d9891; --faint:#6a6762;
+  --gold:#c8a961; --tone:#d9a35f;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:transparent;overflow:hidden;font-family:Chivo,"Segoe UI",system-ui,sans-serif;-webkit-font-smoothing:antialiased;user-select:none}
+.wrap{padding:10px;height:100%}
+.card{position:relative;height:100%;display:flex;background:var(--panel);border:1px solid var(--edge);border-radius:8px;overflow:hidden;cursor:pointer;
+  box-shadow:0 5px 24px rgba(0,0,0,.44);opacity:0;transform:translateY(9px);transition:opacity .18s cubic-bezier(.22,.61,.36,1),transform .18s cubic-bezier(.22,.61,.36,1)}
+.card.in{opacity:1;transform:none}
+.card.out{opacity:0;transform:none;transition:opacity .12s ease-in}
+.rail{flex:none;width:4px;background:var(--tone);border-radius:2px;margin:1px 0 1px 1px}
+.body{flex:1;min-width:0;display:flex;flex-direction:column;gap:7px;padding:8px 8px 9px 9px}
+.top{display:flex;gap:8px;align-items:center;min-width:0}
+.tile{flex:none;width:30px;height:30px;border-radius:7px;background:rgba(200,169,97,.14);color:var(--gold);display:flex;align-items:center;justify-content:center}
+.copy{flex:1;min-width:0;display:flex;flex-direction:column}
+.copy div{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.t{color:var(--ink);font-size:12px;font-weight:700;line-height:15px}
+.a{color:var(--faint);font-size:10px;line-height:13px}
+.m{color:var(--sub);font-size:10px;line-height:13px;font-family:"Sometype Mono",Consolas,monospace}
+.metric{flex:none;width:78px;display:flex;flex-direction:column;align-items:flex-end;align-self:stretch}
+.x{width:20px;height:20px;border:0;border-radius:5px;background:transparent;color:var(--faint);font-size:15px;line-height:18px;padding:0;cursor:pointer;margin:-2px -2px 0 0}
+.x:hover{background:var(--hover);color:var(--ink)}
+.v{color:var(--tone);font-size:16px;font-weight:700;line-height:18px;margin-top:auto;white-space:nowrap}
+.mt{color:var(--faint);font-size:9px;line-height:12px;white-space:nowrap}
+.acts{display:flex;gap:6px}
+.b{flex:1;height:24px;border:1px solid var(--edge);border-radius:6px;background:transparent;color:var(--ink);font:600 11px Chivo,"Segoe UI",sans-serif;cursor:pointer}
+.b:hover{background:var(--hover)}
+.b.pri{background:rgba(200,169,97,.16);border-color:rgba(200,169,97,.55);color:var(--gold)}
+.b.pri:hover{background:rgba(200,169,97,.26)}
+/* Time left before it tucks away (paused while the pointer is on it). */
+.left{position:absolute;left:5px;right:0;bottom:0;height:2px;background:var(--tone);opacity:.55;transform-origin:left;transform:scaleX(1)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="card" id="card" role="alert">
+    <div class="rail"></div>
+    <div class="body">
+      <div class="top">
+        <div class="tile" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="3"/><polyline points="8 9 11 12 8 15"/><line x1="13" y1="15" x2="16" y2="15"/></svg></div>
+        <div class="copy"><div class="t" id="t"></div><div class="a" id="a"></div><div class="m" id="m"></div></div>
+        <div class="metric"><button class="x" id="x" type="button" title="Dismiss" aria-label="Dismiss">&times;</button><div class="v" id="v"></div><div class="mt" id="mt"></div></div>
+      </div>
+      <div class="acts" id="acts"></div>
+    </div>
+    <div class="left" id="left"></div>
+  </div>
+</div>
+<script src="notice.js"></script>
+</body>
+</html>

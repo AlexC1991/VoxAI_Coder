@@ -218,13 +218,26 @@ function cacheReadTokens(usage) {
 
 // Fix 1: accumulate a run's OpenRouter usage onto the session (persisted later
 // by caller via store.saveSession + recordUsage).
+function runUsageOf(session) {
+  return session._runUsage || (session._runUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0, cost: 0, subIn: 0, subOut: 0, subCR: 0, extras: {} });
+}
+/** Spend beside the model's own calls (Auto's checks, sub-agents, search...), by name, for the run's breakdown. */
+function addExtra(session, label, cost) {
+  const ru = runUsageOf(session);
+  ru.extras = ru.extras || {};
+  ru.extras[label] = (ru.extras[label] || 0) + (Number(cost) || 0);
+}
 function accumulateUsage(session, usage) {
   const u = usage || {};
-  const s = session._runUsage || (session._runUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 });
+  const s = runUsageOf(session);
   s.input += Number(u.prompt_tokens) || 0;
   s.output += Number(u.completion_tokens) || 0;
   s.cacheRead += cacheReadTokens(u) || 0;
-  s.cacheWrite += Number(u.cache_write_input_tokens) || 0;
+  // Written to the cache: OpenRouter reports it under prompt_tokens_details; Anthropic's own
+  // name was the only one read, so writes counted as nothing.
+  const d = u.prompt_tokens_details || {};
+  s.cacheWrite += Number(d.cache_write_tokens) || Number(u.cache_write_input_tokens) || Number(u.cache_creation_input_tokens) || 0;
+  s.reasoning = (s.reasoning || 0) + (Number(u.completion_tokens_details && u.completion_tokens_details.reasoning_tokens) || 0);
   s.cost += Number(u.total_cost) || Number(u.cost) || 0;
   return s;
 }
@@ -513,6 +526,8 @@ async function* runAgent(opts) {
     modelVision = null,
     // A model that can see, to describe screenshots for one that cannot. '' = off.
     visionHelper = '',
+    // A cheap model for Auto's yes/no on each action. '' = the session's own model.
+    checkModel = '',
     // { enabled, engine, maxResults } from Settings. null = defaults (on, exa, 5).
     webSearch = null,
   } = opts;
@@ -638,15 +653,19 @@ async function* runAgent(opts) {
         + `Action (${kind}):\n${String(target || '').slice(0, 2000)}` },
     ];
     try {
-      const r = await chatOnce({
-        apiKey, host, model, messages, maxTokens: 300, signal,
-        extra: { ...reasoningParam('none', reasoningSpec, model), usage: { include: true } },
-      });
+      // On a cheap model: it is a short yes/no, and on the session's model an expensive one
+      // paid its full price for each. The session's model answers if the cheap one fails.
+      const ask = (m, spec) => chatOnce({ apiKey, host, model: m, messages, maxTokens: 300, signal,
+        extra: { ...reasoningParam('none', spec, m), usage: { include: true } } });
+      let r;
+      if (checkModel && checkModel !== model) { try { r = await ask(checkModel, null); } catch (e) { if (signal && signal.aborted) throw e; r = null; } }
+      if (!r) r = await ask(model, reasoningSpec);
       const cost = Number(r && r.usage && (r.usage.cost || r.usage.total_cost)) || 0;
       if (cost > 0) {
         spent += cost;
-        const ru = session._runUsage || (session._runUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 });
+        const ru = runUsageOf(session);
         ru.cost += cost;
+        addExtra(session, 'Auto checks', cost);
         pushEvent({ type: 'usage', usage: { prompt_tokens: Number(r.usage.prompt_tokens) || 0, completion_tokens: Number(r.usage.completion_tokens) || 0, cost, total_cost: cost, source: 'auto-check' } });
       }
       const text = String((r && r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content) || '');
@@ -911,7 +930,7 @@ async function* runAgent(opts) {
       resolveIn, userData, live, userInput: userInput || (async () => ({ answer: null, cancelled: true })),
       runner: (o) => runAgent(o),
       // askPermission: a worker's prompts come to the same place as this run's (spawn.js).
-      agentOpts: { apiKey, host, model, reasoningEffort, reasoningSpec, access, sessionId: session.id, signal, isSubAgent, workdir: session.workdir, visionHelper, askPermission, checkpointSession: session,
+      agentOpts: { apiKey, host, model, reasoningEffort, reasoningSpec, access, sessionId: session.id, signal, isSubAgent, workdir: session.workdir, visionHelper, checkModel, askPermission, checkpointSession: session,
         defaultSubModel: subagentModel, defaultSubMaxTurns: subagentMaxTurns, defaultSubTimeoutMs: subagentTimeoutMs,
         // Sub-agents spend the PARENT's remaining allowance, never a fresh one.
         // Rebuilt each turn so a fan-out later in the run sees the depleted figure.
@@ -1307,8 +1326,10 @@ async function* runAgent(opts) {
             subCost += Number(u.cost) || 0;
           }
           if (subIn || subOut || subCost) {
-            const runUsage = session._runUsage || (session._runUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 });
+            const runUsage = runUsageOf(session);
             runUsage.input += subIn; runUsage.output += subOut; runUsage.cacheRead += subCR; runUsage.cost += subCost;
+            runUsage.subIn = (runUsage.subIn || 0) + subIn; runUsage.subOut = (runUsage.subOut || 0) + subOut; runUsage.subCR = (runUsage.subCR || 0) + subCR;
+            addExtra(session, 'Sub-agents', subCost);
           }
           // Charge sub-agent spend to the parent's cap. Without this a fan-out is
           // the cheapest way to blow straight past the limit: each child tracks its
@@ -1332,8 +1353,9 @@ async function* runAgent(opts) {
           spent += c;
           // Into the saved ledger too. Only the live header counted it, so a session's
           // cost dropped by every search fee when it was reopened. Found in a live run.
-          const ru = session._runUsage || (session._runUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 });
+          const ru = runUsageOf(session);
           ru.cost += c;
+          addExtra(session, tc.name === 'web_search' ? 'Web search' : tc.name, c);
           emitQueue.push({ type: 'usage', usage: { prompt_tokens: 0, completion_tokens: 0, cost: c, total_cost: c, source: tc.name } });
           emitQueue.push({ type: 'budget', spent, budget, estimated: false, source: tc.name });
         }
@@ -1348,8 +1370,9 @@ async function* runAgent(opts) {
               about: `${tc.name} ${JSON.stringify(args).slice(0, 200)}`, request: lastUserText(session) });
             if (d.cost > 0) {
               spent += d.cost;
-              const ru = session._runUsage || (session._runUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, cost: 0 });
+              const ru = runUsageOf(session);
               ru.cost += d.cost;
+              addExtra(session, 'Screenshot descriptions', d.cost);
               emitQueue.push({ type: 'usage', usage: { prompt_tokens: 0, completion_tokens: 0, cost: d.cost, total_cost: d.cost, source: 'screenshot description' } });
               emitQueue.push({ type: 'budget', spent, budget, estimated: false, source: 'screenshot description' });
             }
