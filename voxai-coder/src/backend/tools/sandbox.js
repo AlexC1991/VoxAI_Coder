@@ -256,6 +256,29 @@ function riskyCommand(cmd, workdir) {
   return '';
 }
 
+/**
+ * The same for clicks and typing on websites and in desktop apps (the action as the app words
+ * it: 'Click "Place your order" on www.amazon.co.uk'). The check passed "Place your order" and
+ * "Sign in with Google" now and then (scripts/auto-battery.js) -- a rule never does. The agent's
+ * own local page is allowed before this (agent.js). Returns why, said to the user, or ''.
+ */
+const RISKY_ACTIONS = [
+  [/\b(buy|purchase|check ?out|place (your |the )?order|pay( now)?|payment|subscribe|upgrade( plan| now)?|donate|add (a )?card|transfer|withdraw|send money|top ?up)\b/i, 'it spends or moves money'],
+  [/\b(send|post|tweet|publish|reply|comment|share|write a review|submit (a |your )?review|message)\b/i, 'it sends or posts something in your name'],
+  [/\b(sign ?in|log ?in|sign up with|continue with (google|github|apple|microsoft)|authori[sz]e|allow access|grant|connect (your |an )?(account|app))\b/i, 'it signs in or gives access to an account'],
+  [/\b(delete|remove|erase|deactivate|close|cancel) (this |my |the |your )?(account|repository|repo|project|profile|workspace|organi[sz]ation|subscription|data)\b|\buninstall\b|\breset (this pc|to factory)/i, 'it deletes an account, a repository or data'],
+  [/\b(accept (all|terms|the terms)|i agree|agree to)\b/i, 'it accepts terms or all cookies'],
+  [/\b(regedit|gpedit|services\.msc|diskmgmt|compmgmt|secpol|msconfig)\b/i, 'it opens a system tool'],
+  [/^press (shift\+)?delete in (explorer|file explorer)/i, 'it deletes files'],
+  [/password (field|box)/i, 'it types into a password box'],
+];
+function riskyAction(kind, target) {
+  if (!['browser-act', 'desktop-act'].includes(kind)) return '';
+  const s = String(target || '');
+  for (const [re, why] of RISKY_ACTIONS) if (re.test(s)) return why;
+  return '';
+}
+
 function checkToolAllowed(toolName, access, extra) {
   const lvl = levelIndex(access);
   // `extra` carries the call's arguments so a folded tool is judged on the
@@ -318,4 +341,4 @@ function makeSandboxTool({ getAccess }) {
   };
 }
 
-module.exports = { checkToolAllowed, checkShellCommand, worktreeIsolationInfo, makeSandboxTool, ACCESS_LEVELS, ACCESS_LABELS, normalizeAccess, labelFor, isReadOnlyCommand, isProjectCommand, touchesOutside, SECRET_PATH, riskyCommand };
+module.exports = { checkToolAllowed, checkShellCommand, worktreeIsolationInfo, makeSandboxTool, ACCESS_LEVELS, ACCESS_LABELS, normalizeAccess, labelFor, isReadOnlyCommand, isProjectCommand, touchesOutside, SECRET_PATH, riskyCommand, riskyAction };

@@ -605,9 +605,15 @@ function buildTools(opts) {
   const cuT = makeComputerUseTool({ showInApp, attachAtlas });
 
   // feature 1-8 tools each expose defs[] + a run(name,args,ctx) dispatcher
+  // Every tool's schema rides at the head of every request, so what cannot be used is left
+  // out: the MCP tool when no MCP server is set up, and sandbox_status, which only repeated
+  // the access level the system prompt already states. (Counted with Claude's tokenizer:
+  // the tools were ~6,800 tokens of the ~8,900 every session starts with.)
+  const mcpOn = Object.keys(((opts.getSettings && opts.getSettings()) || {}).mcpServers || {}).length > 0;
+  void sandboxT;
   const featureDeps = [
-    [mcpT, 'mcp_'], [skillsT, 'skill'], [fsT, 'fsops'], [docRagT, 'doc'],
-    [spawnT, 'spawn'], [browserT, 'browser_'], [sandboxT, 'sandbox'], [artT, 'artifact'],
+    ...(mcpOn ? [[mcpT, 'mcp_']] : []), [skillsT, 'skill'], [fsT, 'fsops'], [docRagT, 'doc'],
+    [spawnT, 'spawn'], [browserT, 'browser_'], [artT, 'artifact'],
     [cuT, 'cu'],
   ];
   const featureTools = [];

@@ -87,11 +87,13 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
   const taskSchema = {
     type: 'object',
     properties: {
-      task: { type: 'string', description: 'Self-contained instruction (the sub-agent sees nothing from this conversation).' },
-      role: { type: 'string', enum: Object.keys(ROLES), description: 'explore/review are read-only; build can modify files. Default build.' },
-      model: { type: 'string', description: 'Optional model override.' },
-      maxTurns: { type: 'integer', description: 'Optional max tool-turns (default 25).' },
-      timeoutMs: { type: 'integer', description: 'Optional, SHORTER time limit in ms. It cannot go past the limit the user set in Settings (default 300000); a larger number is cut to that.' },
+      // The fields are described once, at the top level of spawn_agent: every word here is
+      // paid at the head of every request.
+      task: { type: 'string' },
+      role: { type: 'string', enum: Object.keys(ROLES) },
+      model: { type: 'string' },
+      maxTurns: { type: 'integer' },
+      timeoutMs: { type: 'integer' },
     },
     required: ['task'],
     additionalProperties: false,
@@ -365,31 +367,23 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
         function: {
           name: 'spawn_agent',
           description:
-            'Delegate a self-contained sub-task to an independent agent and get a structured report back. '
-            + 'Each sub-agent has its OWN context and sees NOTHING from this conversation, so every task must '
-            + 'stand alone — "check the thing we discussed" will fail silently. '
-            + 'Use it for work that would otherwise flood your context: broad searches, reading an unfamiliar '
-            + 'subsystem, triaging a noisy test run, or a well-scoped edit you can describe precisely. Not for '
-            + 'something you can do yourself in one or two calls. '
-            + 'Roles: "explore" and "review" are READ-ONLY; "build" can modify files (default). '
-            + 'Returns files_changed (path, operation, whether it verified), stopReason, cost and a subId. '
-            + 'Pass `tasks` instead of `task` to run several concurrently — give them disjoint files. '
-            + 'Pass `resume` with a subId from an earlier result to ask that worker a follow-up without it '
-            + 'losing its context. '
-            + 'Pass `background: true` to keep working while it runs — the report arrives automatically when it '
-            + 'finishes, and the run will not end with agents still in flight. '
-            + 'Cannot be used from inside a sub-agent.',
+            'Hand a self-contained sub-task to a separate agent and get a report back (files_changed, stopReason, cost, subId). '
+            + 'It sees NOTHING of this conversation, so the task must stand alone. Use it for work that would flood your context '
+            + '(broad searches, an unfamiliar subsystem, a noisy test run) or a well-scoped edit you can describe precisely; '
+            + 'not for one or two calls you can make yourself. '
+            + '`tasks` runs several at once (give them separate files); `resume` (a subId) asks that worker a follow-up; '
+            + '`background: true` lets you carry on, and its report arrives when done. Not available inside a sub-agent.',
           parameters: {
             type: 'object',
             properties: {
               task: { type: 'string', description: 'Self-contained instruction for a single sub-agent.' },
-              tasks: { type: 'array', items: taskSchema, description: 'Several self-contained tasks, run concurrently. Use instead of `task`.' },
+              tasks: { type: 'array', items: taskSchema, description: 'Several tasks at once, instead of `task` (each item takes the fields below).' },
               role: { type: 'string', enum: Object.keys(ROLES), description: 'explore/review are read-only; build can modify files. Default build.' },
               resume: { type: 'string', description: 'A subId from an earlier spawn_agent result: continue that worker, with `task` as the follow-up.' },
-              background: { type: 'boolean', description: 'Return immediately and let the agent run while you continue. Its report is delivered to you automatically when it finishes. Use when you have other work to get on with; leave false when you need the answer before your next step.' },
+              background: { type: 'boolean', description: 'Return now; the report arrives when it finishes. Leave false when you need the answer next.' },
               model: { type: 'string', description: 'Optional model override.' },
               maxTurns: { type: 'integer', description: 'Optional max tool-turns (default 25).' },
-              timeoutMs: { type: 'integer', description: 'Optional, SHORTER time limit in ms. It cannot go past the limit the user set in Settings (default 300000); a larger number is cut to that.' },
+              timeoutMs: { type: 'integer', description: 'Optional shorter limit in ms (never past the one in Settings).' },
             },
             additionalProperties: false,
           },

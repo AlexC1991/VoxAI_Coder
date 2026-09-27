@@ -2277,7 +2277,17 @@ async function drain(gen) {
     check('the checker answers without thinking; an answer it cannot read goes to the session\'s model', AGu.includes("extra: { ...(spec === undefined ? { reasoning: { enabled: false } } : reasoningParam('none', spec, m)), usage: { include: true } } });")
       && AGu.includes("if (r && readAutoDecision(said(r)).reason === 'no clear answer') r = null;") && AGu.includes("Do NOT ask just because an action was not in the request"), 'checker');
     check('a no covers that attempt; asked again in a later message, it is a new request', AGu.includes('If the user asks for it in a later message, that is a new request: do it then.') && !AGu.includes('do NOT retry this tool call'), 'deny');
-    check('scripts/auto-battery.js tests the real check with the app\'s own rules', read('scripts/auto-battery.js').includes("const rule = autoRule('shell', cmd, 'auto', WD);"), 'battery');
+    check('scripts/auto-battery.js tests the real check with the app\'s own rules, commands and clicks alike', read('scripts/auto-battery.js').includes("const rule = autoRule(kind, cmd, 'auto', WD);")
+      && read('scripts/auto-battery.js').includes("riskyAction(kind, cmd)"), 'battery');
+    const { riskyAction } = require(path.join(ROOT, 'src/backend/tools/sandbox.js'));
+    const uiAsk = [['browser-act', 'Click "Place your order" on www.amazon.co.uk'], ['browser-act', 'Click "Buy now" on www.amazon.co.uk'], ['browser-act', 'Click "Sign in with Google" on vercel.com'],
+      ['browser-act', 'Click "Delete this repository" on github.com'], ['browser-act', 'Click "Post" on x.com'], ['browser-act', 'Type into a password field on github.com'],
+      ['desktop-act', 'Click "Send" in Outlook ("Inbox")'], ['desktop-act', 'Click "Uninstall" in Settings ("Apps")'], ['desktop-act', 'Start regedit.exe'], ['desktop-act', 'Press Delete in Explorer ("Documents")']];
+    const uiRun = [['browser-act', 'Click "Products" on www.raspberrypi.com'], ['browser-act', 'Type "Raspberry Pi 5" into "Search" on www.raspberrypi.com'], ['browser-act', 'Click "Create account" on staging.shopapi.dev'],
+      ['browser-act', 'Click "Accept only necessary cookies" on www.raspberrypi.com'], ['desktop-act', 'Click "Barracks" in electron ("Hearthhold")'], ['desktop-act', 'Type "Test note" into "Text editor" in Notepad']];
+    check('clicks and typing: money, posting, signing in, deleting accounts, passwords and system tools always come to you', uiAsk.every(([k, t]) => riskyAction(k, t)), uiAsk.filter(([k, t]) => !riskyAction(k, t)));
+    check('...ordinary browsing, test forms and playing the game do not', uiRun.every(([k, t]) => !riskyAction(k, t)), uiRun.filter(([k, t]) => riskyAction(k, t)));
+    check('in Auto, those go to you with the reason, skipping the check', read('src/backend/agent.js').includes("const risk = access !== 'auto' ? '' : kind === 'shell' ? riskyCommand(target, session.workdir) : riskyAction(kind, target);"), 'wired');
   }
 
   // ------------------------------------------------------------------ [HR]
@@ -2333,6 +2343,15 @@ async function drain(gen) {
     check('Team uses the model picker itself: same owners and search, only models under $3 in and out, routers left out', HTMLt.includes("wireChip('chipTeam', () => openPicker($('chipTeam'), 'coder'));")
       && HTMLt.includes("const OK = forCoder ? new Set(teamCoders()) : null;") && HTMLt.includes('perM(m.promptCents) < TEAM_MAX_PER_M && perM(m.completionCents) < TEAM_MAX_PER_M')
       && HTMLt.includes("!/^~|^openrouter\\//.test(m.id)") && !HTMLt.includes('TEAM_CODERS') && !HTMLt.includes('renderTeamMenu'), 'picker');
+  }
+
+  // ------------------------------------------------------------------ [SZ]
+  console.log('\n[SZ] what every request starts with is smaller');
+  {
+    const idx = await require(path.join(ROOT, 'src/backend/tools/skills.js')).skillsIndex({ workdir: WD, userData: path.join(WD, 'no-user-data') });
+    check('each skill in the list is one short sentence (what it is for)', idx.split('\n').filter((l) => l.startsWith('- ')).every((l) => l.length <= 150), idx.split('\n').filter((l) => l.length > 150));
+    const SP = read('src/backend/tools/spawn.js');
+    check('spawn_agent describes its fields once, not again for every task', SP.includes("      task: { type: 'string' },\n      role: { type: 'string', enum: Object.keys(ROLES) },"), 'spawn');
   }
 
   // ------------------------------------------------------------------ [WD]

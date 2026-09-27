@@ -153,7 +153,14 @@ async function loadSkill(name, where = {}, { part = 1, file = '' } = {}) {
 async function skillsIndex(where = {}, max = 40) {
   const skills = (await findSkills(where)).filter((s) => s.description);
   if (!skills.length) return '';
-  const lines = skills.slice(0, max).map((s) => `- ${s.name}: ${s.description.length > 200 ? s.description.slice(0, 197) + '...' : s.description}`);
+  // What each is for, in its first sentence (at most ~110 characters): enough to know when to
+  // load one. The whole index rides at the head of every request -- at 200 characters a
+  // skill it was 1,300 tokens, paid at the start of every session.
+  const short = (d) => {
+    const first = String(d).split(/(?<=[.!?])\s|\s--\s|\s—\s/)[0].trim();
+    return first.length > 110 ? first.slice(0, first.lastIndexOf(' ', 108) > 60 ? first.lastIndexOf(' ', 108) : 108) + '...' : first;
+  };
+  const lines = skills.slice(0, max).map((s) => `- ${s.name}: ${short(s.description)}`);
   return `[SKILLS] Instructions for particular tools, services and kinds of work. When a task touches one, `
     + `load it first with the skill tool (action "load", name) and follow it; its reference files open with \`file\`.\n`
     + lines.join('\n')

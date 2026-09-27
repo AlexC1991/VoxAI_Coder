@@ -235,7 +235,14 @@ async function facadeTests() {
   });
   const names = ALL.map((t) => t.def.function.name);
 
-  check('facades are present', ['computer', 'fs', 'skill', 'mcp'].every((n) => names.includes(n)), names);
+  check('facades are present', ['computer', 'fs', 'skill'].every((n) => names.includes(n)), names);
+  // The MCP tool only when an MCP server is set up: its schema is paid on every request.
+  const withMcp = tools.buildTools({
+    workdir: WD, session: { messages: [] }, emit: () => {},
+    checkPermission: async () => {}, resolveIn: (wd, p) => path.resolve(wd, p),
+    getSettings: () => ({ mcpServers: { demo: { command: 'x' } } }), getAccess: () => 'full',
+  }).ALL.map((t) => t.def.function.name);
+  check('mcp is offered only with a server set up', !names.includes('mcp') && withMcp.includes('mcp') && !names.includes('sandbox_status'), { names, withMcp });
   check('members are gone from the surface', !names.some((n) => /^cu_|^browser_|^mcp_|^skills?_|^spawn_parallel$/.test(n)
     || ['stat', 'mkdir', 'move', 'remove'].includes(n)), names.filter((n) => /^cu_|^browser_/.test(n)));
   check('surface is under 30 tools', names.length < 30, names.length);

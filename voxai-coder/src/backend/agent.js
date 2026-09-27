@@ -30,7 +30,7 @@ const { chatCompletions } = require('./providers/openrouter');
 const tools = require('./tools');
 const { compactSession, estimateSessionTokens } = require('./compact');
 const crypto = require('crypto');
-const { checkToolAllowed, checkShellCommand, isReadOnlyCommand, isProjectCommand, touchesOutside, SECRET_PATH, riskyCommand } = require('./tools/sandbox');
+const { checkToolAllowed, checkShellCommand, isReadOnlyCommand, isProjectCommand, touchesOutside, SECRET_PATH, riskyCommand, riskyAction } = require('./tools/sandbox');
 const { processKills, onlyKills, harmlessBesidesKills, judgeKills, killKeys } = require('./tools/kills');
 const checkpoints = require('./tools/checkpoints');
 const { chatOnce, reasoningParam } = require('./providers/openrouter');
@@ -786,7 +786,7 @@ async function* runAgent(opts) {
       // The user: "Auto is just for dangerous stuff." Browser and desktop actions go to the check
       // too (they used to come to you every time); it passes ordinary use and asks about the risky.
       // Known harm (sandbox.js riskyCommand) is yours to decide, whatever a check would say.
-      const risk = access === 'auto' && kind === 'shell' ? riskyCommand(target, session.workdir) : '';
+      const risk = access !== 'auto' ? '' : kind === 'shell' ? riskyCommand(target, session.workdir) : riskyAction(kind, target);
       if (risk) note = `Auto wants your say: ${risk}.`;
       else if (access === 'auto') {
         // Auto never blocks on its own: what the check passes runs, and anything it
@@ -1623,4 +1623,4 @@ function answerPendingAsk(session, callId, res) {
 }
 
 module.exports = {
-  extractImages, TOOL_IMAGES_MARKER, runAgent, MAX_TURNS, AUTO_POLICY, autoCheckMessages, readAutoDecision, autoRule, describeScreenshot, goalPrompt, boundToolResult, accumulateUsage, uniqueToolIds, pendingAsk, answerPendingAsk, compactImage, browserTargetJs };
+  _systemPrompt: (...a) => SYSTEM(...a), extractImages, TOOL_IMAGES_MARKER, runAgent, MAX_TURNS, AUTO_POLICY, autoCheckMessages, readAutoDecision, autoRule, describeScreenshot, goalPrompt, boundToolResult, accumulateUsage, uniqueToolIds, pendingAsk, answerPendingAsk, compactImage, browserTargetJs };
