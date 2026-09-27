@@ -581,7 +581,7 @@ async function drain(gen) {
     check('and exported with it', store.exportSession(back).includes('"kind":"stop"'), 'missing');
     const MAIN = read('src/main/main.js');
     check('a limit or error is recorded where it happened', MAIN.includes("if (ev.type === 'budget_reached' || ev.type === 'limit_reached' || ev.type === 'error') {") && MAIN.includes('stops.push({ at: sess.messages.length, type: ev.type'), 'not recorded');
-    check('reopening hands the stops to the window', MAIN.includes('stats: sess.stats, stops: sess.stops || [], context'), 'not sent');
+    check('reopening hands the stops to the window', MAIN.includes('stats: sess.stats, stops: sess.stops || [], runLog: sess.runLog || [], context'), 'not sent');
     const HTML = read('src/renderer/index.html');
     check('replay draws the notice where the run stopped; only the last can continue', HTML.includes('v.root.appendChild(stopNotice(st, i === full.messages.length));') && HTML.includes('endOfRun(full.messages.length, lastMsg);'), 'generic line');
     check('summarising clears stops rather than misplacing them', read('src/backend/compact.js').split('session.stops = [];').length === 3, 'misplaced');
@@ -2017,6 +2017,26 @@ async function drain(gen) {
     const site = await runClick('https://example.com/shop');
     check('Auto: a click on a website goes to the check, described in words; you are asked only if it says so', site.checked && /Click "Begin" on example\.com/.test(site.checked)
       && site.asked.length === 1 && site.asked[0].target === 'Click "Begin" on example.com' && /^Auto mode wants your say: test/.test(site.asked[0].note), site);
+  }
+
+  // ------------------------------------------------------------------ [WF]
+  console.log('\n[WF] a finished run says how long it took, what it cost and how many tokens');
+  {
+    const HTML = read('src/renderer/index.html');
+    const src = /function tookLine\(r\)\{[\s\S]*?\n\}/.exec(HTML);
+    const tl = vm.runInNewContext(`(() => { ${src[0]}; return tookLine; })()`, { el: (t, c, h) => ({ cls: c, text: h }), esc: (x) => x });
+    check('"Worked for 23m 14s · $0.38 · 8.7M tokens"', tl({ ms: 1394000, cost: 0.38, tokens: 8700000, end: 'done' }).text === 'Worked for 23m 14s · $0.38 · 8.7M tokens', tl({ ms: 1394000, cost: 0.38, tokens: 8700000, end: 'done' }));
+    check('short, stopped and hour-long runs read right', tl({ ms: 9000, cost: 0.004, tokens: 12000, end: 'cancelled' }).text === 'Stopped after 9s · <$0.01 · 12k tokens'
+      && tl({ ms: 3900000, end: 'done' }).text === 'Worked for 1h 5m', [tl({ ms: 9000, cost: 0.004, tokens: 12000, end: 'cancelled' }).text, tl({ ms: 3900000 }).text]);
+    const SS = require(path.join(ROOT, 'src/backend/sessions.js'));
+    const UD = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-wf-'));
+    await SS.saveSession(UD, { id: 'wf', title: 't', workdir: WD, model: 'm', messages: [{ role: 'user', content: 'hi' }], todos: [], runLog: [{ at: 1, ms: 5000, cost: 0.01, tokens: 900, end: 'done' }] });
+    const back = await SS.loadSession(UD, 'wf');
+    check('it is kept with the session and read back', back.runLog && back.runLog.length === 1 && back.runLog[0].ms === 5000, back.runLog);
+    try { fs.rmSync(UD, { recursive: true, force: true }); } catch {}
+    const MAIN = read('src/main/main.js');
+    check('main records each run and sends it; a reopened session draws it where the run ended', MAIN.includes("event: { type: 'run_summary', ...took } });") && MAIN.includes('runLog: sess.runLog || [],')
+      && HTML.includes("if (event.type === 'run_summary') {") && HTML.includes('const took = runs.filter((r) => r && r.at === i && Number(r.ms) >= 1000).pop();'), 'wiring');
   }
 
   try { fs.rmSync(WD, { recursive: true, force: true }); } catch {}

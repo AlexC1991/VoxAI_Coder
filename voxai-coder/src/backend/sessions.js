@@ -78,6 +78,8 @@ async function saveSession(userData, session) {
     ...(session.usage || []).map((u) => JSON.stringify({ kind: 'usage', usage: u })),
     // Where runs stopped at a limit or failed, so a reopened session says so.
     ...(session.stops || []).map((st) => JSON.stringify({ kind: 'stop', stop: st })),
+    // Each run's time, cost and tokens ("Worked for ..." under its answer).
+    ...(session.runLog || []).map((r) => JSON.stringify({ kind: 'run', run: r })),
     JSON.stringify({ kind: 'todos', todos: session.todos }),
     // The session's goal (/goal): set, met, failed or paused -- it outlives the app.
     ...(session.goal ? [JSON.stringify({ kind: 'goal', goal: session.goal })] : []),
@@ -126,6 +128,7 @@ async function loadSession(userData, id) {
     else if (o.kind === 'todos') session.todos = o.todos;
     else if (o.kind === 'goal') session.goal = o.goal;
     else if (o.kind === 'stop') (session.stops || (session.stops = [])).push(o.stop);
+    else if (o.kind === 'run') (session.runLog || (session.runLog = [])).push(o.run);
   }
   // rebuild accumulated stats for older sessions that predate the ledger
   session.stats = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, cost: 0, runs: session.usage.length };

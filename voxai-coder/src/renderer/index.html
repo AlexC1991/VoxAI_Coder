@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-439TA6yAwllixwYdsTksXHmaWU6AoajZsDmLKWVk72o='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-691G4EVeEUoC3YmewfYklSF3Vpp9eiGbfSouGdCwL+8='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -730,6 +730,8 @@ tests"). Scroll the row instead of breaking words:
 .sh-work[hidden],.sh-warn[hidden],.sh-steer[hidden]{display:none}
 .sh-goal{display:flex;align-items:center;gap:8px;min-width:0;flex:1 1 100%;color:var(--accent,#7aa2ff)}
 .sh-goal[hidden]{display:none}
+/* "Worked for 23m 14s \u00b7 $0.38 \u00b7 8.7M tokens": quiet, under the answer. */
+.run-took{font:11.5px "Sometype Mono",monospace;color:var(--faint);margin:2px 0 6px}
 .sh-loop #shLoopTxt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;color:var(--fg,inherit)}
 .slash-menu{display:flex;flex-direction:column;gap:1px;padding:5px;border:1px solid var(--edge2);border-radius:12px;background:var(--panel);box-shadow:0 8px 24px rgba(0,0,0,.25)}
 .slash-menu[hidden]{display:none}
@@ -3985,10 +3987,13 @@ async function openSession(id){
     // one, at the very end, still offers to carry on.
     const stops = Array.isArray(full.stops) ? full.stops : [];
     const stopAt = (i) => stops.filter((st) => st && st.at === i).pop() || null;
+    const runs = Array.isArray(full.runLog) ? full.runLog : [];
     const endOfRun = (i, before) => {
       const st = stopAt(i);
       if (st) { finalizeRunCard(); v.root.appendChild(stopNotice(st, i === full.messages.length)); }
       else if (unfinished(before)) v.root.appendChild(el('div', 'fold run-cut', 'this run ended before it finished'));
+      const took = runs.filter((r) => r && r.at === i && Number(r.ms) >= 1000).pop();
+      if (took) { finalizeRunCard(); v.root.appendChild(tookLine(took)); }
     };
     for (let mi = 0; mi < full.messages.length; mi++) {
       const m = full.messages[mi];
@@ -4350,6 +4355,7 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
   if (event.type === 'user_input' && event.inputId) (v.shownInputs || (v.shownInputs = new Set())).add(event.inputId);
   if (event.type === 'goal') { onGoalEvent(v, event); T = null; return; }
   if (event.type === 'loop') { onLoopEvent(v, event); T = null; return; }
+  if (event.type === 'run_summary') { if (Number(event.ms) >= 1000 && v.root) { v.root.appendChild(tookLine(event)); if (v === actView()) followThread(); } T = null; return; }
   // A finished run takes its approval, if one was still showing, with it.
   if (['done', 'error', 'cancelled', 'limit_reached', 'budget_reached'].includes(event.type) && v.perm) {
     clearTimeout(v.perm.timer); v.perm = null; v.permQueue = []; if (sid === activeId) paintAsk();
@@ -5854,6 +5860,19 @@ async function goalCommand(v, text){
   } catch (e) {
     say('bad', 'Couldn\u2019t set the goal', tidyPaths(ipcMessage(e)));
   }
+}
+
+/** How long a run took, what it cost, how many tokens: one quiet line under its answer. */
+function tookLine(r){
+  const ms = Math.max(0, Number(r.ms) || 0), s = Math.round(ms / 1000);
+  const dur = s < 60 ? s + 's' : s < 3600 ? Math.floor(s / 60) + 'm ' + (s % 60) + 's' : Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm';
+  const verb = r.end === 'cancelled' ? 'Stopped after ' : r.end === 'error' ? 'Ended after ' : 'Worked for ';
+  const bits = [verb + dur];
+  const c = Number(r.cost) || 0;
+  if (c > 0) bits.push(c < 0.01 ? '<$0.01' : '$' + c.toFixed(2));
+  const t = Number(r.tokens) || 0;
+  if (t > 0) bits.push((t >= 1e6 ? (t / 1e6).toFixed(1) + 'M' : t >= 1e3 ? Math.round(t / 1e3) + 'k' : t) + ' tokens');
+  return el('div', 'run-took', esc(bits.join(' \u00b7 ')));
 }
 
 /** The goal loop's steps, sent by main.js goalStep. */

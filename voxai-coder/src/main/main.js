@@ -760,7 +760,7 @@ app.whenReady().then(() => {
     // questions come from agent:live instead).
     const running = [...controllers.keys()].some((k) => k.startsWith(id + ':'));
     const ask = running ? null : pendingAsk(sess);
-    return { id: sess.id, title: sess.title, workdir: sess.workdir, model: sess.model, messages: sess.messages, todos: sess.todos, usage: sess.usage, stats: sess.stats, stops: sess.stops || [], context, pendingAsk: ask };
+    return { id: sess.id, title: sess.title, workdir: sess.workdir, model: sess.model, messages: sess.messages, todos: sess.todos, usage: sess.usage, stats: sess.stats, stops: sess.stops || [], runLog: sess.runLog || [], context, pendingAsk: ask };
   });
   // To the Recycle Bin, not erased: one misclick on Delete lost a whole conversation
   // for good. If the bin refuses, nothing is deleted and the user is told why.
@@ -997,9 +997,10 @@ app.whenReady().then(() => {
     if (!resume && sess.title === 'New session') sess.title = text.slice(0, 60);
     // A message from you while a goal is paused picks it back up ("continue" works).
     if (!goalContinue && sess.goal && sess.goal.status === 'active') { sess.goal.paused = false; sess.goal.pausedReason = ''; sess.goal.idle = 0; }
-    let runEnd = 'error', runTools = 0, runCost = 0;   // for the goal loop (goalStep)
+    let runEnd = 'error', runTools = 0, runCost = 0, runTokens = 0;   // for the goal loop (goalStep) and the run's summary
 
     const runKey = `${sessionId}:${Date.now()}`;
+    const runT0 = Date.now();   // for "Worked for ..." when it ends
     const ctl = new AbortController();
     controllers.set(runKey, ctl);
     const w = win();
@@ -1087,9 +1088,18 @@ app.whenReady().then(() => {
         try {
           const ru = sess._runUsage;
           runCost = (ru && Number(ru.cost)) || 0;
+          runTokens = ru ? (Number(ru.input) || 0) + (Number(ru.output) || 0) : 0;
           if (ru && (ru.input || ru.output || ru.cost)) store.recordUsage(sess, ru);
           delete sess._runUsage;
         } catch { /* ledger write is best-effort */ }
+        // How long it took and what it cost, under the answer -- a finished build said nothing of
+        // either (the user: "no end recorded time lapsed"). Kept, so a reopened session shows it too.
+        if (!store.isDeleted(sess)) {
+          const took = { at: sess.messages.length, ms: Date.now() - runT0, cost: runCost, tokens: runTokens, end: runEnd };
+          const log = sess.runLog || (sess.runLog = []);
+          log.push(took); if (log.length > 300) log.splice(0, log.length - 300);
+          const c3 = chatWebContents(); c3 && c3.send('agent:event', { sessionId, runKey, event: { type: 'run_summary', ...took } });
+        }
         try { await store.saveSession(userData(), sess); } catch { /* disk full? surface next time */ }
         if (sess.goal && sess.goal.status === 'active' && !store.isDeleted(sess)) goalStep(sessionId, runEnd, { tools: runTools, cost: runCost }).catch(() => {});
       }
