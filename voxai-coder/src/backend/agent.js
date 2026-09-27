@@ -1379,7 +1379,7 @@ async function* runAgent(opts) {
           const subs = (result.task_results && Array.isArray(result.task_results))
             ? result.task_results
             : [result];
-          if (coderModel) teamRun.coderFails += subs.filter((s) => !s || s.ok === false).length;
+          if (coderModel) { teamRun.coderFails += subs.filter((s) => !s || s.ok === false).length; teamRun.refused = 0; }
           let subIn = 0, subOut = 0, subCR = 0, subCost = 0;
           for (const s of subs) {
             const u = s && s.usage || {};

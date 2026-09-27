@@ -2403,7 +2403,15 @@ async function drain(gen) {
     const five = [1, 2, 3, 4, 5].map(() => T.teamGuard('write', { content: ten }, st));
     check('small pieces add up: about 40 lines a run, then the rest is the coder\'s (a planner wrote a refused file ten lines at a time)', five.slice(0, 4).every((x) => x === '') && /splitting work into small pieces/.test(five[4]), five.map((x) => !!x));
     check('the agent applies the rule to the planner only, and counts coder runs that did not finish', A.includes('if (coderModel && !isSubAgent) {\n        const msg = teamGuard(tc.name, args, teamRun);')
-      && A.includes("if (coderModel) teamRun.coderFails += subs.filter((s) => !s || s.ok === false).length;") && /refused: that is the coder's/.test(T.teamPrompt('x/y')), 'agent');
+      && A.includes("if (coderModel) { teamRun.coderFails += subs.filter((s) => !s || s.ok === false).length; teamRun.refused = 0; }") && /refused: that is the coder's/.test(T.teamPrompt('x/y')), 'agent');
+    const rf = { coderFails: 0, written: 0, looks: 3 }; const r1 = T.teamGuard('computer', {}, rf), r2 = T.teamGuard('computer', {}, rf);
+    check('a second refusal in a row is said plainly: the next call must be spawn_agent (a planner kept trying the browser)', !/refused \d+ times/.test(r1) && /refused 2 times in a row\. Stop trying/.test(r2), [r1.slice(0, 40), r2.slice(0, 40)]);
+    check('a model OpenRouter refuses to VoxAI is remembered a week, greyed in the picker with why, kept off the coder list; a run on it that works clears it',
+      M.includes('function noteRefusedModel(model, why) {') && M.includes("if (ev.type === 'error' && /^OpenRouter refused this request/.test(String(ev.message || ''))) { try { noteRefusedModel(")
+      && M.includes('refusedModels: raw.refusedModels && typeof raw.refusedModels') && H.includes('function refusedWhy(id){') && H.includes("const b = el('span', 'shr', 'refused');")
+      && H.includes('m.tools !== false && !refusedWhy(m.id) && m.id !== activeModel()'), 'refused');
+    check('Recent offers only models that can do the job (a tool-less one led to "Couldn\'t send that")', H.includes("const recent = [cur].concat(RECENT_MODELS).filter((x, i, a) => x && a.indexOf(x) === i && usable(x)).slice(0, 5);"), 'recent');
+    check('a toast sits over the chat, not the window\'s middle where the preview covered it', H.includes("const col = $('thread'), r = col && col.getBoundingClientRect();") && H.includes('t.style.left = Math.round(r.left + r.width / 2)'), 'toast');
     check('a free model\'s error offers: try again (busy), the paid version, another free model', H.includes('function freeWayOut(msg){') && H.includes("actions: live ? freeWayOut(msg) : []")
       && H.includes("acts.push({ label: 'Try again', onClick: continueRun });") && H.includes("label: 'Use the paid version'") && H.includes("acts.push({ label: 'Pick another free model'"), 'wayout');
     check('free requests are counted per UTC day when OpenRouter takes them, kept on disk, shown with the day\'s cap', O.includes('function noteFree(model) {') && (O.match(/noteFree\(model\);/g) || []).length === 2

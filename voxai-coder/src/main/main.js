@@ -142,6 +142,8 @@ function getSettings(redacted = true) {
     trayOnClose: raw.trayOnClose === true,
     // Projects you said may be shared with a data-sharing model's maker (backend/team.js): folder key -> { at }.
     dataShareOk: raw.dataShareOk && typeof raw.dataShareOk === 'object' ? raw.dataShareOk : {},
+    // Models OpenRouter refused to this app (not the key): id -> { why, at }. The picker greys them.
+    refusedModels: raw.refusedModels && typeof raw.refusedModels === 'object' ? raw.refusedModels : {},
     // The Team hint ("let a cheap model code"): times you said Not now, by model. Two and it stops.
     teamHintNo: raw.teamHintNo && typeof raw.teamHintNo === 'object' ? raw.teamHintNo : {},
     webSearchEnabled: raw.webSearchEnabled !== false && raw.webSearchEnabled !== 'false',
@@ -1090,6 +1092,24 @@ app.whenReady().then(() => {
     return true;
   });
   // You agreed that this project may be shared with a data-sharing model's maker (or took it back).
+  /**
+   * A model OpenRouter will not run for this app ("only available on agentic harnesses", a 403 that
+   * is not about the key): remembered for a week, so the picker can say so before it is picked
+   * again. A later run on it that works clears it.
+   */
+  function noteRefusedModel(model, why) {
+    const id = String(model || '').trim();
+    if (!id) return;
+    const raw = readSettingsFile();
+    const all = raw.refusedModels && typeof raw.refusedModels === 'object' ? raw.refusedModels : {};
+    const weekAgo = Date.now() - 7 * 24 * 3600 * 1000;
+    for (const k of Object.keys(all)) if (!(Date.parse(all[k] && all[k].at) > weekAgo)) delete all[k];
+    if (why) all[id] = { why: String(why).slice(0, 300), at: new Date().toISOString() };
+    else if (all[id]) delete all[id];
+    else return;
+    raw.refusedModels = all;
+    writeSettingsFile(raw);
+  }
   ipcMain.handle('datashare:set', (_e, { workdir, ok }) => {
     const key = team.projectKey(workdir);
     if (!key) return false;
@@ -1346,7 +1366,9 @@ app.whenReady().then(() => {
               if (stops.length > 20) stops.splice(0, stops.length - 20);
               scheduleSessionSave(sessionId);
             } catch {}
+            if (ev.type === 'error' && /^OpenRouter refused this request/.test(String(ev.message || ''))) { try { noteRefusedModel(sess.model || s.openrouterModel, ev.message); } catch {} }
           }
+          if (ev.type === 'done') { try { const m = sess.model || s.openrouterModel; if (s.refusedModels && s.refusedModels[m]) noteRefusedModel(m, ''); } catch {} }
           if (ev.type === 'tool_end' || ev.type === 'tool_start' || ev.type === 'permission') {
             scheduleSessionSave(sessionId);
           }

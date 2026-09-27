@@ -88,8 +88,8 @@ function teamGuard(name, args, st) {
   const a = args || {};
   if (BROWSER_TOOLS.has(name)) {
     if ((run.looks || 0) < TEAM_RUN_LOOKS) { run.looks = (run.looks || 0) + 1; return ''; }
-    return 'TEAM: testing in the browser is the coder\'s job, not yours (each screenshot you read costs many times more). Call spawn_agent (role "build") '
-      + 'with what to open, what to click and what should happen, and ask it to report what it saw. Do not retry this call.';
+    return refuse(run, 'TEAM: testing in the browser is the coder\'s job, not yours (each screenshot you read costs many times more). Call spawn_agent (role "build") '
+      + 'with what to open, what to click and what should happen, and ask it to report what it saw. Do not retry this call.');
   }
   let text = null;
   if (name === 'write') text = String(a.content || '');
@@ -101,8 +101,18 @@ function teamGuard(name, args, st) {
   if (small && (run.written || 0) + lines <= TEAM_RUN_LINES) { run.written = (run.written || 0) + lines; return ''; }
   const why = small ? `you have already written ${run.written} lines yourself in this run, and splitting work into small pieces does not change whose it is`
     : `this ${name} is ${lines} lines`;
-  return `TEAM: ${why}; that is the coder's job, not yours. Call spawn_agent (role "build") and tell the coder `
-    + 'which file to change, what to change, and how to check it. Make only small fixes (a few lines) yourself. Do not retry this call.';
+  return refuse(run, `TEAM: ${why}; that is the coder's job, not yours. Call spawn_agent (role "build") and tell the coder `
+    + 'which file to change, what to change, and how to check it. Make only small fixes (a few lines) yourself. Do not retry this call.');
+}
+/**
+ * A refusal, said more plainly each time: told once, a planner still tried the browser four more
+ * times, each a turn at its own price. spawn_agent resets the count (agent.js).
+ */
+function refuse(run, msg) {
+  run.refused = (run.refused || 0) + 1;
+  if (run.refused < 2) return msg;
+  return `TEAM: refused ${run.refused} times in a row. Stop trying to do this yourself: your next call must be spawn_agent (role "build") with the task. `
+    + 'Every write, edit, patch or browser action like this one will be refused the same way. ' + msg.replace(/^TEAM: /, '');
 }
 
 /**

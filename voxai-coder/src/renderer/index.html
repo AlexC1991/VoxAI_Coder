@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-/ZE9HcUk8RjLcSEy9x4sI8V+W0DFD9DwwJaTAh3BJeI='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-+/4YZbzPk6uf9R9Eh1hwNZen5FotnObw1ScRrCe3nLM='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -3893,6 +3893,12 @@ const isExpensiveModel = (id) => (outPerM(id) || 0) >= 5;
 // (It was a hand-picked list of four; the user: "pull all under $3 for incoming and outgoing".)
 const TEAM_PROVEN = 'deepseek/deepseek-v4.1-flash';
 const TEAM_MAX_PER_M = 3;
+/** Why OpenRouter refused this model to VoxAI lately ('' if it has not): see noteRefusedModel in main. */
+function refusedWhy(id){
+  const r = S && S.refusedModels && S.refusedModels[id];
+  if (!r || !(Date.parse(r.at) > Date.now() - 7 * 24 * 3600 * 1000)) return '';
+  return String(r.why || 'OpenRouter refused this model.');
+}
 function teamCoders(){
   if (!ALL_MODELS.length) return [];
   if (!PK_BROWSE) PK_BROWSE = browseModelIds(ALL_MODELS);
@@ -3902,7 +3908,7 @@ function teamCoders(){
   // send the code to data-sharing models without saying so -- so only real models are offered.
   // Models that share your data come after the rest, so a free one is never picked by accident.
   const rank = (m) => (m.id === TEAM_PROVEN ? 0 : shareInfo(m.id) ? 2 : 1);
-  return ALL_MODELS.filter((m) => m.tools !== false && m.id !== activeModel() && PK_BROWSE.has(m.id) && !/^~|^openrouter\//.test(m.id)
+  return ALL_MODELS.filter((m) => m.tools !== false && !refusedWhy(m.id) && m.id !== activeModel() && PK_BROWSE.has(m.id) && !/^~|^openrouter\//.test(m.id)
       && m.promptCents != null && m.completionCents != null && perM(m.promptCents) >= 0 && perM(m.completionCents) >= 0
       && perM(m.promptCents) < TEAM_MAX_PER_M && perM(m.completionCents) < TEAM_MAX_PER_M)
     .sort((a, b) => (rank(a) - rank(b)) || (cost(a) - cost(b)) || modelLabel(a.id).localeCompare(modelLabel(b.id)))
@@ -4163,6 +4169,12 @@ function renderModelMenu(){
     const sh = shareInfo(m.id);
     if (sh) { const b = el('span', 'shr', 'shares data'); b.title = shareSentence(m.id, sh); r.querySelector('.nm').after(b); }
     if (m.tools === false) r.style.opacity = '.6';
+    const no = refusedWhy(m.id);
+    if (no) {
+      // Inkling ":free" runs only in apps OpenRouter lists, and was offered here all the same.
+      r.style.opacity = '.55';
+      const b = el('span', 'shr', 'refused'); b.title = no.replace(/ Other models may still work.*$/, ''); r.querySelector('.nm').after(b);
+    }
     r.onmouseenter = () => { box.querySelectorAll('.hot').forEach((x) => x.classList.remove('hot')); r.classList.add('hot'); pkFoot(m.id); };
     r.onclick = async (e) => { e.stopPropagation(); await pick(m.id); };
     return r;
@@ -4186,7 +4198,10 @@ function renderModelMenu(){
     box.appendChild(all);
     [TEAM_PROVEN, cur].filter((x, i, a) => x && a.indexOf(x) === i && OK.has(x)).forEach((id) => box.appendChild(rowFor(modelEntry(id))));
   } else {
-    const recent = [cur].concat(RECENT_MODELS).filter((x, i, a) => x && a.indexOf(x) === i).slice(0, 5);
+    // A past session's model that cannot do this job (no tools, gone from the catalogue) is not
+    // offered again: picking one only led to "Couldn't send that". The one in use always shows.
+    const usable = (id) => id === cur || !ALL_MODELS.length || (() => { const m = modelEntry(id); return !!m && m.tools !== false; })();
+    const recent = [cur].concat(RECENT_MODELS).filter((x, i, a) => x && a.indexOf(x) === i && usable(x)).slice(0, 5);
     box.appendChild(el('div', 'mp-label', '<span>Recent</span><span>per 1M tokens, in \u00b7 out</span>'));
     recent.forEach((id) => {
       const m = modelEntry(id);
@@ -4993,6 +5008,10 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
     clearStatus();
     if (event.type === 'cancelled') { const r = RR(); if (r) r.appendChild(el('div', 'fold', 'stopped')); }
     else { const r = RR(); if (r) { r.appendChild(stopNotice(event, true)); followThread(); } }
+    if (event.type === 'error' && /^OpenRouter refused this request/.test(String(event.message || '')) && S) {
+      const mid = (v && v.model) || activeModel();
+      S.refusedModels = Object.assign({}, S.refusedModels, { [mid]: { why: String(event.message), at: new Date().toISOString() } });
+    }
     v.busy = false; v.activity = '';
     v.runKeys.delete(runKey);
     if (sid === activeId) { $('runDot').style.display = 'none'; updateSendState(); paintShelf(); }
@@ -6914,6 +6933,11 @@ function toast(text, action){
   t.appendChild(el('span', 'toast-t', esc(text)));
   if (action) { const b = el('button', 'toast-a', esc(action.label)); b.type = 'button'; b.onclick = () => { try { action.onClick(); } catch {} hide(); }; t.appendChild(b); }
   const hide = () => { t.hidden = true; };
+  // Over the chat, not the middle of the window: with the preview or a side-by-side session open
+  // the middle is at their edge, and they are laid over this page, so the toast went under them.
+  const col = $('thread'), r = col && col.getBoundingClientRect();
+  if (r && r.width > 240) { t.style.left = Math.round(r.left + r.width / 2) + 'px'; t.style.maxWidth = Math.min(560, Math.round(r.width) - 32) + 'px'; }
+  else { t.style.left = ''; t.style.maxWidth = ''; }
   t.hidden = false;
   clearTimeout(t._timer); t._timer = setTimeout(hide, 7000);
 }
