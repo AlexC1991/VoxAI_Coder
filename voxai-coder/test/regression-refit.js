@@ -2396,6 +2396,8 @@ async function drain(gen) {
     check('the planner\'s big write, edit or patch is refused with where to send it; a small fix is not', /spawn_agent/.test(T.teamGuard('write', { content: big }, 0))
       && !!T.teamGuard('edit', { after: big }, 0) && !!T.teamGuard('patch', { edits: [{ old: 'a', new: big }] }, 0)
       && T.teamGuard('edit', { after: 'x = 1;' }, 0) === '' && T.teamGuard('shell', { command: 'npm test' }, 0) === '', 'guard');
+    const lk = { coderFails: 0, written: 0, looks: 0 }; const looks = [1, 2, 3, 4].map(() => T.teamGuard('computer', { action: 'screenshot' }, lk));
+    check('the planner gets a few browser actions; testing past that is the coder\'s (Sonnet took nine screenshots itself)', looks.slice(0, 3).every((x) => x === '') && /testing in the browser is the coder/.test(looks[3]) && /test in the browser and report/.test(T.teamPrompt('x/y')), looks.map((x) => !!x));
     check('after the coder fails twice the planner may do the work itself', T.teamGuard('write', { content: big }, 2) === '', 'fails');
     const st = { coderFails: 0, written: 0 }, ten = 'a\n'.repeat(9) + 'a';
     const five = [1, 2, 3, 4, 5].map(() => T.teamGuard('write', { content: ten }, st));

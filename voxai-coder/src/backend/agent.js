@@ -604,7 +604,7 @@ async function* runAgent(opts) {
     if (emitWake) { const w = emitWake; emitWake = null; try { w(); } catch {} }
   };
   let planApproved = planMode ? false : true;
-  const teamRun = { coderFails: 0, written: 0 };   // Team: coder runs that did not finish (after two the planner may do the work), lines the planner wrote
+  const teamRun = { coderFails: 0, written: 0, looks: 0 };   // Team: coder runs that did not finish (after two the planner may do the work), lines the planner wrote, its browser actions
   const resolveIn = (wd, p) => {
     const pathMod = require('path');
     const full = pathMod.resolve(wd, p);

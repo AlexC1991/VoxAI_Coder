@@ -77,10 +77,20 @@ function explainProviderError(message, model) {
  * `st` is the run's { coderFails, written }; '' when the call may go ahead.
  */
 const TEAM_SMALL_CHARS = 600, TEAM_SMALL_LINES = 12, TEAM_RUN_LINES = 40;
+// Testing in the browser is the coder's too: a Sonnet planner took nine screenshots itself to check
+// a stopwatch page, and those, read at the planner's price, were most of the run's cost. It keeps
+// a few looks of its own for a last check.
+const TEAM_RUN_LOOKS = 3;
+const BROWSER_TOOLS = new Set(['computer', 'browser_open', 'browser_act', 'browser_screenshot']);
 function teamGuard(name, args, st) {
   const run = st && typeof st === 'object' ? st : { coderFails: Number(st) || 0, written: 0 };
   if ((run.coderFails || 0) >= 2) return '';
   const a = args || {};
+  if (BROWSER_TOOLS.has(name)) {
+    if ((run.looks || 0) < TEAM_RUN_LOOKS) { run.looks = (run.looks || 0) + 1; return ''; }
+    return 'TEAM: testing in the browser is the coder\'s job, not yours (each screenshot you read costs many times more). Call spawn_agent (role "build") '
+      + 'with what to open, what to click and what should happen, and ask it to report what it saw. Do not retry this call.';
+  }
   let text = null;
   if (name === 'write') text = String(a.content || '');
   else if (name === 'edit') text = String(a.after != null ? a.after : (a.new_string || ''));
@@ -106,6 +116,7 @@ function teamPrompt(coderModel) {
 - Give each step to the coder with spawn_agent (role "build"; the coder model is already chosen): say exactly what to change, in which files, and how to check it (the command to run and what should happen). Name files; do not paste whole files.
 - When it reports back, check the work before the next step: read the changed parts or run git diff and the check. If it is wrong, send it back with the specific fix. If a step fails twice, do it yourself.
 - Make one- or two-line fixes yourself rather than handing them over. A bigger write, edit or patch from you is refused: that is the coder's.
+- Have the coder test in the browser and report what it saw; you get only a few browser actions yourself.
 - Keep your own messages short. Your tokens cost many times the coder's.`;
 }
 
