@@ -189,7 +189,7 @@ const PROJECT_CMDS = [
   // One project file by name (no wildcards, not the whole tree).
   /^(del|erase)\s+(\/[fq]\s+)*(?!.*[*?])(?!.*\s\/s\b)[\w.\/\\ -]+$/i,
   // Build output, installed packages and caches: made again by the next build or install.
-  /^(rd|rmdir)\s+(\/[sq]\s+)*"?(\.\\)?(dist|build|out|node_modules|\.next|\.nuxt|\.cache|\.parcel-cache|\.vite|coverage|__pycache__|\.pytest_cache|target|bin|obj)"?$/i,
+  /^(rd|rmdir)\s+(\/[sq]\s+)*"?(\.\\)?(dist|build|out|node_modules|\.next|\.nuxt|\.cache|\.parcel-cache|\.vite|coverage|__pycache__|\.pytest_cache|target|bin|obj|te?mp([_.-][\w.-]*)?|[\w.-]+[_-]te?mp)"?$/i,
 ];
 function isProjectCommand(cmd, workdir) {
   const s = String(cmd || '').trim();
@@ -233,7 +233,9 @@ const RISKY = [
   [/\b(del|erase|rd|rmdir|remove-item|rm)\b[^&|;]*(\s\/s\b|\s-r|\s-recurse)[^&|;]*(\*|\s\.(\s|$)|\s\.\\?\*)/i, 'it deletes everything in the folder'],
 ];
 // Folders a build or an install makes again: deleting them loses nothing.
-const DISPOSABLE = /^\.?\\?(dist|build|out|node_modules|\.next|\.nuxt|\.cache|\.parcel-cache|\.vite|coverage|__pycache__|\.pytest_cache|target|bin|obj|\.turbo|\.svelte-kit|tmp|temp)[\\/]?$/i;
+// Scratch folders too (tmp_check, temp-build, test_tmp): the agent makes them to try something
+// and clears them after, and asking about that was noise (seen in a live run).
+const DISPOSABLE = /^\.?\\?(dist|build|out|node_modules|\.next|\.nuxt|\.cache|\.parcel-cache|\.vite|coverage|__pycache__|\.pytest_cache|target|bin|obj|\.turbo|\.svelte-kit|te?mp([_.-][\w.-]*)?|[\w.-]+[_-]te?mp)[\\/]?$/i;
 function riskyCommand(cmd, workdir) {
   const s = String(cmd || '');
   if (SECRET_PATH.test(s)) return 'it touches a key, token or credentials file';

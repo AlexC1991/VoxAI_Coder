@@ -1375,7 +1375,7 @@ async function drain(gen) {
     check('the mark follows the question as it opens and closes', HTML.includes("if (waitWas !== waitNow) { clearTimeout(setActivity._t); setActivity._t = setTimeout(renderSessionList, 0); }"), 'stale mark');
     check('two monitors side by side stay readable (fit 2560 x 1600, not 1280 wide)', AG.includes('const scale = Math.min(1, 2560 / width, 1600 / height);') && !AG.includes('img.resize({ width: 1280'), 'squeezed to 1280 x 360');
     const CU = read('src/backend/cu/index.js');
-    check('a closed preview is said at once, not waited on for ten seconds', MAIN.includes('onAttachAtlas: () => { try { return (atlasOpen || (split && split.active())) && browserV') && CU.includes("if (!wc) throw new Error('Nothing is open in the preview"), 'waits 10 s');
+    check('a closed preview is said at once, not waited on for ten seconds', MAIN.includes('onAttachAtlas: () => { try { const bv = browserFor(sessionId); return bv && (hasPage(bv) || (bv === browserV && atlasOpen)') && CU.includes("if (!wc) throw new Error('Nothing is open in the preview"), 'waits 10 s');
     // One window, drawn by itself, whatever covers it.
     const NAT = read('src/backend/cu/native.js'), TIX = read('src/backend/tools/index.js');
     check('a window is captured by itself (PrintWindow), not copied off the screen', NAT.includes('$printed = [CU32]::PrintWindow($h, $hdc, 2)') && NAT.includes('$bmp = $full.Clone('), 'covered parts show');
@@ -1393,7 +1393,7 @@ async function drain(gen) {
     const got = ppAddress && ['example.com', 'localhost:5173/x', 'index.html', 'set up wrangler', 'https://a.b/c', 'C:' + B + 'p' + B + 'a.html'].map((x) => ppAddress(x, 'C:' + B + 'proj'));
     check('the address bar understands what is typed', !!got && JSON.stringify(got) === JSON.stringify(['https://example.com', 'http://localhost:5173/x', 'file:///C:/proj/index.html', 'https://duckduckgo.com/?q=set%20up%20wrangler', 'https://a.b/c', 'file:///C:/p/a.html']), got);
     check('the address is a field you can type in', HTML.includes('<input class="pp-urlmono" id="ppUrl" type="text"') && HTML.includes("if (u && document.activeElement !== u) u.value ="), 'read-only');
-    check('a new-tab link opens in the preview; a sign-in pop-up is a window over the app', /browserV\.webContents\.setWindowOpenHandler\(\(\{ url, disposition \}\) => \{[\s\S]{0,300}if \(disposition !== 'new-window'\) \{ try \{ browserV\.webContents\.loadURL\(url\)[\s\S]{0,200}action: 'allow'[\s\S]{0,120}parent: win\(\)/.test(MAIN) && /sandbox: true, webSecurity: true/.test(MAIN), 'bare windows');
+    check('a new-tab link opens in the preview; a sign-in pop-up is a window over the app', /wc\.setWindowOpenHandler\(\(\{ url, disposition \}\) => \{[\s\S]{0,300}if \(disposition !== 'new-window'\) \{ try \{ wc\.loadURL\(url\)[\s\S]{0,200}action: 'allow'[\s\S]{0,120}parent: win\(\)/.test(MAIN) && /sandbox: true, webSecurity: true/.test(MAIN), 'bare windows');
     check('the app\'s window is never mistaken for a pop-up', MAIN.includes('const w = mainWindow = new BrowserWindow({') && MAIN.includes("function win() { return (mainWindow && !mainWindow.isDestroyed()) ? mainWindow"), 'first window');
     // The user: "Auto is just for dangerous stuff" -- in Auto, browser actions go to the check, the
     // agent's own local page just runs; the other modes keep their fixed rules.
@@ -2175,9 +2175,9 @@ async function drain(gen) {
     check('what happens in a session reaches every pane; an answer in one clears the others', (MAIN.match(/allRenderers\(\)/g) || []).length >= 12
       && MAIN.includes("allRenderers().send('agent:perm-done', { permId, allowed: !!allowed })") && MAIN.includes("allRenderers().send('agent:input-done', { inputId })")
       && HTMLs.includes('if (window.voxai.onInputDone) window.voxai.onInputDone('), 'wiring');
-    check('side by side the preview never opens: the agent\'s page loads under the window\'s own page', MAIN.includes('  if (split && split.active()) {\n    const ok0 = previewableUrl(')
+    check('side by side the preview never opens: the agent\'s page loads under the window\'s own page', MAIN.includes("if ((split && split.active()) || v !== browserV) { layoutAtlas(); broadcastTabs(); return; }")
       && MAIN.includes("if (split && split.active()) return { ok: false, error: 'the preview is off while sessions are side by side' };")
-      && MAIN.includes('browserUnder(sideBySide);') && MAIN.includes('(atlasOpen || (split && split.active()))')
+      && MAIN.includes('stackBrowser(v, false);') && MAIN.includes('(hasPage(bv) || (bv === browserV && atlasOpen) || (split && split.active()))')
       && HTMLs.includes("  if (splitOn()) { toast('The preview is off while sessions are side by side.'); return; }"), 'preview');
     check('layouts: 2 columns, 3 = one left and two stacked, 4 = two by two', HTMLs.includes('html[data-split="3"] .split-slot[data-i="1"]{grid-column:3;grid-row:2;')
       && HTMLs.includes('html[data-split="4"] .split-slot[data-i="1"]{grid-column:2;grid-row:2;') && HTMLs.includes('html[data-split="4"] .work{grid-row:1}'), 'css');
@@ -2344,6 +2344,20 @@ async function drain(gen) {
     check('Team uses the model picker itself: same owners and search, only models under $3 in and out, routers left out', HTMLt.includes("wireChip('chipTeam', () => openPicker($('chipTeam'), 'coder'));")
       && HTMLt.includes("const OK = forCoder ? new Set(teamCoders()) : null;") && HTMLt.includes('perM(m.promptCents) < TEAM_MAX_PER_M && perM(m.completionCents) < TEAM_MAX_PER_M')
       && HTMLt.includes("!/^~|^openrouter\\//.test(m.id)") && !HTMLt.includes('TEAM_CODERS') && !HTMLt.includes('renderTeamMenu'), 'picker');
+  }
+
+  // ------------------------------------------------------------------ [BR]
+  console.log('\n[BR] one browser per session; the preview has a tab for each');
+  {
+    const M = read('src/main/main.js'), H = read('src/renderer/index.html'), CUi = read('src/backend/cu/index.js');
+    check('each session has its own browser; a run opens its pages there', M.includes('function browserFor(sid) {') && M.includes('sessionBrowsers.set(sid, v);')
+      && M.includes('onOpenUrl: (url) => { try { atlasOpenUrl(url, sess.workdir, sessionId); } catch {} },') && M.includes('const bv = browserFor(sessionId);'), 'per session');
+    check('the preview shows the main pane\'s session; the others draw under the page, unseen', M.includes('split.setMain(sid); saveSplitLayout(); showBrowserOf(sid);')
+      && M.includes('stackBrowser(v, false);') && M.includes('v.setVisible(hasPage(v));'), 'shown');
+    check('a deleted session\'s browser goes with it', M.includes('    if (split) split.remove(id);\n    dropBrowser(id);'), 'drop');
+    check('the preview lists a tab per session page and switches on a click', M.includes('tabs: previewTabs()') && M.includes("ipcMain.on('preview:tab'")
+      && H.includes('function paintPreviewTabs(tabs){') && H.includes('id="ppTabs"'), 'tabs');
+    check('computer actions from different sessions take turns (one page at a time in cdp.js)', CUi.includes('run(name, args, ctx) { return exclusive(() => this.runOne(name, args, ctx)); },'), 'lock');
   }
 
   // ------------------------------------------------------------------ [PV]

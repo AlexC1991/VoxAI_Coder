@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-kNQ/kJYADL9Pt651Lbi0rHinZuXFkKMGAri+prnJK/8='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-mgTgEnGt9YtO0225bKDOoYhyaQga9fVvECJbwMBh7zQ='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -413,6 +413,14 @@ tests"). Scroll the row instead of breaking words:
 .pp-btn{width:26px;height:24px;border:0;border-radius:5px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:14px}
 .pp-btn:hover{background:var(--sel);color:var(--ink)}
 .pp-nav{flex:none;display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--edge)}
+/* One tab per session with a page open: each agent has its own browser (main.js). */
+.pp-tabs{flex:none;display:flex;gap:4px;padding:6px 8px 0;border-bottom:1px solid var(--edge);overflow-x:auto;scrollbar-width:none}
+.pp-tabs[hidden]{display:none}
+.pp-tab{flex:0 1 200px;min-width:90px;display:flex;flex-direction:column;align-items:flex-start;gap:1px;padding:5px 10px 6px;border:1px solid transparent;border-bottom:0;border-radius:8px 8px 0 0;background:transparent;color:var(--sub);cursor:pointer;text-align:left;font:inherit}
+.pp-tab:hover{background:var(--panel2);color:var(--ink)}
+.pp-tab.on{background:var(--panel2);border-color:var(--edge);color:var(--ink);margin-bottom:-1px;padding-bottom:7px}
+.pp-tab b{font:600 12px Chivo,sans-serif;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pp-tab span{font:11px "Sometype Mono",monospace;color:var(--faint);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pp-urlmono{flex:1;min-width:0;border:1px solid var(--edge2);border-radius:6px;padding:4px 9px;font-family:"Sometype Mono",monospace;font-size:13px;color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:var(--panel2);outline:0}
 .pp-urlmono:hover{border-color:var(--edge3,var(--edge2))}
 .pp-urlmono:focus{color:var(--ink);border-color:var(--goldedge)}
@@ -1142,6 +1150,7 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
       <button class="pp-btn ic" id="ppClose" title="Close"></button>
     </span>
   </div>
+  <div class="pp-tabs" id="ppTabs" hidden role="tablist" aria-label="Pages open in sessions"></div>
   <div class="pp-nav">
     <input class="pp-urlmono" id="ppUrl" type="text" spellcheck="false" autocomplete="off" aria-label="Address" placeholder="Type an address or search" value="">
   </div>
@@ -2076,6 +2085,26 @@ function hasRealPreview(){
   return !!(window.voxai && window.voxai.preview && window.voxai.preview.onState);
 }
 
+/** Tabs: one per session with a page open, when there is more than the one on show. */
+function paintPreviewTabs(tabs){
+  const box = $('ppTabs'); if (!box) return;
+  const show = tabs.length > 1 || (tabs.length === 1 && !tabs[0].on);
+  box.hidden = !show;
+  box.innerHTML = '';
+  if (!show) { syncViewport(); return; }
+  for (const t of tabs) {
+    const b = el('button', 'pp-tab' + (t.on ? ' on' : ''));
+    b.type = 'button'; b.setAttribute('role', 'tab'); b.setAttribute('aria-selected', String(!!t.on));
+    let host = ''; try { const u = new URL(t.url); host = u.protocol === 'file:' ? decodeURIComponent(u.pathname.split('/').pop()) : u.host; } catch { host = t.url; }
+    b.innerHTML = '<b></b><span></span>';
+    b.querySelector('b').textContent = t.session || t.title || 'Session';
+    b.querySelector('span').textContent = t.title && t.title !== host ? t.title + ' · ' + host : host;
+    b.title = (t.session ? t.session + '\n' : '') + t.url;
+    b.onclick = () => { if (!t.on && window.voxai.preview.tab) window.voxai.preview.tab(t.sid); };
+    box.appendChild(b);
+  }
+  syncViewport();
+}
 function ppSyncState(st){
   const open = !!(st && st.open);
   const p = $('previewPanel');
@@ -2090,6 +2119,7 @@ function ppSyncState(st){
   // they cost the transcript no horizontal space.
   // Address bar + host label follow the real navigation reported by main.
   if (st && st.url !== undefined) ppSetUrl(st.url);
+  if (st && Array.isArray(st.tabs)) paintPreviewTabs(st.tabs);
   const bar = $('pvBar');
   if (bar) {
     // The panel carries its own header and address bar again, so the stop-gap strip
@@ -2969,7 +2999,14 @@ function subEvent(rec, event){
     W.state = ev === 'done' ? 'done' : 'failed'; W.end = ev; W.t1 = Date.now(); W.cur = null; W.live = '';
     W.report = String(event.content || '');
   }
-  if (rec.view && rec.view === actView() && W.state === 'running' && rec.subs.size === 1) setActivity(rec.view, W.role + ': ' + subDoing(W));
+  // The line above the box says what the workers are doing -- it said nothing while two ran
+  // at once, and a planner waiting on its coders looked stuck (the user stopped one).
+  if (rec.view && rec.view === actView()) {
+    const running = [...rec.subs.values()].filter((x) => x.state === 'running');
+    const coder = !!rec.view.coderModel;
+    if (running.length === 1) setActivity(rec.view, (coder ? 'Coder' : running[0].role) + ': ' + subDoing(running[0]));
+    else if (running.length > 1) setActivity(rec.view, running.length + (coder ? ' coders' : ' sub-agents') + ' working · ' + running.reduce((n, x) => n + x.acts.length, 0) + ' actions so far');
+  }
   subTick(rec);
   // An open row follows along, at most a few times a second.
   const g = rec.group;
@@ -4662,6 +4699,12 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
   if (typeof DELETED_SIDS !== 'undefined' && DELETED_SIDS.has(sid)) return;   // deleted: its stopped run's last words
   const v = viewOf(sid);        // register session even if we haven't opened it yet
   T = v;
+  // A run started in another page (a split pane) is still running here: this page only set
+  // busy when it sent the message itself, so the list and the page called it done.
+  if (!v.busy && ['token', 'turn', 'reasoning', 'tool_start', 'tool_end', 'sub'].includes(event.type) && !['manual', 'goal', 'loop'].includes(runKey)) {
+    v.busy = true; if (runKey) v.runKeys.add(runKey); if (!v.runT0) v.runT0 = Date.now();
+    clearTimeout(onAgentEvt._list); onAgentEvt._list = setTimeout(refreshSessionList, 200);
+  }
   if (event.type === 'user_input' && event.inputId) (v.shownInputs || (v.shownInputs = new Set())).add(event.inputId);
   if (event.type === 'goal') { onGoalEvent(v, event); T = null; return; }
   if (event.type === 'loop') { onLoopEvent(v, event); T = null; return; }

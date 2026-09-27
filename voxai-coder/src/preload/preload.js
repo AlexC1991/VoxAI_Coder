@@ -42,6 +42,7 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
     close: () => ipcRenderer.send('preview:close'),
     setBounds: (frac) => ipcRenderer.send('preview:set-bounds', frac),
     viewport: (rect) => ipcRenderer.send('preview:viewport', rect),
+    tab: (sid) => ipcRenderer.send('preview:tab', sid),
     state: () => ipcRenderer.invoke('preview:state'),
     back: () => ipcRenderer.send('preview:back'),
     forward: () => ipcRenderer.send('preview:forward'),

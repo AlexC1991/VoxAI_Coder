@@ -48,6 +48,13 @@ function emitImage(ctx, dataUrl, title) {
   }
 }
 
+let cuChain = Promise.resolve();
+function exclusive(fn) {
+  const next = cuChain.then(fn, fn);
+  cuChain = next.catch(() => {});
+  return next;
+}
+
 function makeComputerUseTool(opts) {
   const showInApp = opts && opts.showInApp;
   const attachAtlas = opts && opts.attachAtlas;
@@ -187,7 +194,11 @@ function makeComputerUseTool(opts) {
       },
     ],
 
-    async run(name, args, ctx) {
+    // One action at a time across every session: the browser layer (cdp.js) drives one page at
+    // a time, and two agents side by side switched it under each other mid-action.
+    run(name, args, ctx) { return exclusive(() => this.runOne(name, args, ctx)); },
+
+    async runOne(name, args, ctx) {
       // Infer the surface from what was actually passed. A model asked to "open" a
       // local PNG sent { nativePath: "A:\\...\\preview.png" } with no backend; the
       // default was browser, which reads only `url`, so it failed with "needs a url"

@@ -495,9 +495,11 @@ function attachSplitViews(w) {
   };
   rootV = new View();
   chatV = new WebContentsView({ webPreferences: chatPrefs });
-  browserV = new WebContentsView({ webPreferences: browserPrefs });
+  BROWSER_PREFS = browserPrefs;
+  browserV = defaultBrowser = makeBrowserView();
   rootV.addChildView(chatV, 0);
   rootV.addChildView(browserV, 1);
+  browserV._onTop = true;
   w.setContentView(rootV);
   // Split panes: more copies of this page, one session each, over the preview (which shuts).
   split = require('./split').createSplit({
@@ -508,41 +510,6 @@ function attachSplitViews(w) {
 
   chatV.webContents.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   guardTrustedView(chatV.webContents);
-  browserV.webContents.loadURL('about:blank');
-  // Keep the preview strip's URL honest as the page navigates (links, redirects).
-  try {
-    browserV.webContents.on('did-navigate', () => broadcastPreviewState());
-    browserV.webContents.on('did-navigate-in-page', () => broadcastPreviewState());
-    // The preview sits inside the app's own chrome, so its scrollbars have to look
-    // like the app's. They belong to the loaded document, not to us, so the only way
-    // to reach them is to inject -- and injected CSS dies with the document, so this
-    // runs for every navigation, not once at startup.
-    browserV.webContents.on('dom-ready', () => {
-      try { browserV.webContents.insertCSS(PREVIEW_SCROLLBAR_CSS); } catch {}
-    });
-    // A link meant for a new tab opens here, in the preview. A sign-in window (a
-    // window.open with a size: "Sign in with GitHub" and the like) opens as a real
-    // window over the app, so the page that opened it gets its answer. Both used to
-    // come up as a bare, separate window the agent could not see.
-    browserV.webContents.setWindowOpenHandler(({ url, disposition }) => {
-      if (!/^https?:\/\//i.test(String(url || '')) && url !== 'about:blank') return { action: 'deny' };
-      if (disposition !== 'new-window') { try { browserV.webContents.loadURL(url); } catch {} return { action: 'deny' }; }
-      return {
-        action: 'allow',
-        overrideBrowserWindowOptions: {
-          parent: win(), width: 520, height: 720, autoHideMenuBar: true, backgroundColor: '#ffffff',
-          icon: path.join(__dirname, '..', '..', 'resources', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
-          webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true },
-        },
-      };
-    });
-    browserV.webContents.on('did-create-window', (child) => {
-      try { child.setMenuBarVisibility(false); } catch {}
-      // The pop-up's own links stay in the pop-up; it does not spawn more windows.
-      try { child.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//i.test(String(url || ''))) { try { child.webContents.loadURL(url); } catch {} } return { action: 'deny' }; }); } catch {}
-    });
-  } catch {}
-  browserV.setVisible(false);
 
   // keep the split correct when the window is resized/maximized
   // 'resized' fires only once the drag ENDS, so the split lagged the window the whole
@@ -602,7 +569,7 @@ function previewState() {
   let url = '';
   try { url = (browserV && browserV.webContents && browserV.webContents.getURL()) || ''; } catch {}
   if (url === 'about:blank') url = '';
-  return { open: atlasOpen, chatFraction: atlasFrac, url };
+  return { open: atlasOpen, chatFraction: atlasFrac, url, tabs: previewTabs() };
 }
 
 function broadcastPreviewState() {
@@ -631,13 +598,109 @@ const PREVIEW_SCROLLBAR_CSS = [
 // The renderer measures its own DOM and reports it; main just honours it.
 let previewRect = null;
 
-// The browser view's place in the stack: above the window's page (the preview) or below it
-// (side by side, where it keeps painting for the agent's tools but is never seen).
-let browserBelow = false;
-function browserUnder(below) {
-  if (!rootV || !browserV || browserBelow === below) return;
-  try { rootV.removeChildView(browserV); rootV.addChildView(browserV, below ? 0 : 1); browserBelow = below; } catch { /* stays where it was */ }
+/*
+ * One browser per session. There was one for the whole app, and two agents testing their own
+ * games side by side kept navigating it -- each saw the other's page (the user stopped both).
+ * The preview shows the browser of the session in the main pane (shownSid); the others keep
+ * their pages, laid out under the window's own page where they still draw, so the agent's
+ * browser tools and screenshots work on them unseen. browserV is always the one on show.
+ */
+let BROWSER_PREFS = null;
+let defaultBrowser = null;              // before any session has its own
+const sessionBrowsers = new Map();      // session id -> WebContentsView
+let shownSid = '';
+function makeBrowserView() {
+  const v = new WebContentsView({ webPreferences: BROWSER_PREFS });
+  const wc = v.webContents;
+  wc.loadURL('about:blank');
+  try {
+    // Keep the preview's address bar and tabs honest as the page navigates (links, redirects).
+    const told = () => { if (v === browserV) broadcastPreviewState(); else broadcastTabs(); };
+    wc.on('did-navigate', told);
+    wc.on('did-navigate-in-page', told);
+    wc.on('page-title-updated', () => broadcastTabs());
+    // The preview sits inside the app's own chrome, so its scrollbars have to look like the
+    // app's. Injected CSS dies with the document, so this runs for every navigation.
+    wc.on('dom-ready', () => { try { wc.insertCSS(PREVIEW_SCROLLBAR_CSS); } catch {} });
+    // A link meant for a new tab opens here, in the same browser. A sign-in window (a
+    // window.open with a size: "Sign in with GitHub" and the like) opens as a real window
+    // over the app, so the page that opened it gets its answer.
+    wc.setWindowOpenHandler(({ url, disposition }) => {
+      if (!/^https?:\/\//i.test(String(url || '')) && url !== 'about:blank') return { action: 'deny' };
+      if (disposition !== 'new-window') { try { wc.loadURL(url); } catch {} return { action: 'deny' }; }
+      return {
+        action: 'allow',
+        overrideBrowserWindowOptions: {
+          parent: win(), width: 520, height: 720, autoHideMenuBar: true, backgroundColor: '#ffffff',
+          icon: path.join(__dirname, '..', '..', 'resources', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
+          webPreferences: { contextIsolation: true, nodeIntegration: false, sandbox: true, webSecurity: true },
+        },
+      };
+    });
+    wc.on('did-create-window', (child) => {
+      try { child.setMenuBarVisibility(false); } catch {}
+      // The pop-up's own links stay in the pop-up; it does not spawn more windows.
+      try { child.webContents.setWindowOpenHandler(({ url }) => { if (/^https?:\/\//i.test(String(url || ''))) { try { child.webContents.loadURL(url); } catch {} } return { action: 'deny' }; }); } catch {}
+    });
+  } catch {}
+  v.setVisible(false);
+  return v;
 }
+/** The session's own browser, made the first time it needs one. */
+function browserFor(sid) {
+  if (!sid || !rootV) return browserV;
+  let v = sessionBrowsers.get(sid);
+  if (!v) {
+    v = makeBrowserView();
+    rootV.addChildView(v, 0);   // under the window's page until it is the one on show
+    v._onTop = false;
+    sessionBrowsers.set(sid, v);
+  }
+  return v;
+}
+const hasPage = (v) => { try { const u = v.webContents.getURL(); return !!u && u !== 'about:blank'; } catch { return false; } };
+/** Above the window's page (on show in the preview) or under it (drawing, unseen). */
+function stackBrowser(v, onTop) {
+  if (!rootV || !v || v._onTop === onTop) return;
+  try {
+    rootV.removeChildView(v);
+    const at = onTop ? Math.max(0, (rootV.children || []).indexOf(chatV)) + 1 : 0;
+    rootV.addChildView(v, at);
+    v._onTop = onTop;
+  } catch { /* stays where it was */ }
+}
+/** The main pane now shows this session: the preview shows its browser. */
+function showBrowserOf(sid) {
+  shownSid = String(sid || '');
+  const v = (shownSid && sessionBrowsers.get(shownSid)) || defaultBrowser;
+  if (!v || v === browserV) return;
+  browserV = v;
+  layoutAtlas();
+  broadcastPreviewState();
+}
+/** A deleted session's browser goes with it. */
+function dropBrowser(sid) {
+  const v = sessionBrowsers.get(sid);
+  if (!v) return;
+  sessionBrowsers.delete(sid);
+  if (browserV === v) browserV = defaultBrowser;
+  try { rootV.removeChildView(v); } catch {}
+  try { v.webContents.close(); } catch {}
+  layoutAtlas(); broadcastPreviewState();
+}
+/** The preview's tabs: every session browser with a page in it, and which one is on show. */
+function previewTabs() {
+  const out = [];
+  for (const [sid, v] of sessionBrowsers) {
+    if (!hasPage(v)) continue;
+    let url = '', title = '';
+    try { url = v.webContents.getURL(); title = v.webContents.getTitle(); } catch {}
+    const sess = live.get(sid);
+    out.push({ sid, url, title, session: (sess && sess.title) || '', on: v === browserV });
+  }
+  return out;
+}
+function broadcastTabs() { const c = chatWebContents(); if (c) { try { c.send('preview:state', previewState()); } catch {} } }
 
 function layoutAtlas() {
   try {
@@ -661,25 +724,24 @@ function layoutAtlas() {
     chatV.setBounds({ x: 0, y: 0, width: W, height: H });
 
     const sideBySide = !!(split && split.active());
-    browserUnder(sideBySide);
-    if (sideBySide) {
-      // Side by side the preview does not show, but the agent's browser tools need a page that
-      // paints: a hidden view captures blank, and one laid out past the window's edge never
-      // draws a frame. So it sits UNDER the window's own page, the size a preview would be.
-      browserV.setBounds({ x: 0, y: 0, width: Math.max(320, Math.round(W / 2)), height: H });
-      browserV.setVisible(true);
-    } else if (atlasOpen && previewRect && previewRect.width > 20 && previewRect.height > 20) {
-      const r = previewRect;
-      browserV.setBounds({
-        x: Math.max(0, Math.round(r.x)),
-        y: Math.max(0, Math.round(r.y)),
-        width: Math.max(20, Math.round(r.width)),
-        height: Math.max(20, Math.round(r.height)),
-      });
-      try { if (typeof browserV.setBorderRadius === 'function') browserV.setBorderRadius(6); } catch {}
-      browserV.setVisible(true);
-    } else {
-      browserV.setVisible(false);
+    const showing = !sideBySide && atlasOpen && previewRect && previewRect.width > 20 && previewRect.height > 20;
+    // Out of sight but drawing: a hidden view captures blank, and one laid out past the
+    // window's edge never draws a frame. So the browsers not on show sit UNDER the window's
+    // own page, the size a preview would be -- side by side, all of them.
+    const under = { x: 0, y: 0, width: Math.max(320, Math.round(W / 2)), height: H };
+    for (const v of [defaultBrowser, ...sessionBrowsers.values()]) {
+      if (!v) continue;
+      if (v === browserV && showing) {
+        const r = previewRect;
+        stackBrowser(v, true);
+        v.setBounds({ x: Math.max(0, Math.round(r.x)), y: Math.max(0, Math.round(r.y)), width: Math.max(20, Math.round(r.width)), height: Math.max(20, Math.round(r.height)) });
+        try { if (typeof v.setBorderRadius === 'function') v.setBorderRadius(6); } catch {}
+        v.setVisible(true);
+      } else {
+        stackBrowser(v, false);
+        v.setBounds(under);
+        v.setVisible(hasPage(v));
+      }
     }
   } catch (e) {
     // A layout hiccup must never black-screen the app.
@@ -692,17 +754,15 @@ function atlasSetBounds(frac) {
   layoutAtlas();
 }
 
-function atlasOpenUrl(url, workdir) {
-  // Side by side, the page loads where the agent's browser tools can use it, but does not open.
-  if (split && split.active()) {
-    const ok0 = previewableUrl(url, workdir || getSettings(false).workingDir);
-    if (ok0) { try { browserV.webContents.loadURL(ok0); } catch {} }
-    return;
-  }
+function atlasOpenUrl(url, workdir, sid) {
+  const ok = previewableUrl(url, workdir || getSettings(false).workingDir);
+  const v = sid ? browserFor(sid) : browserV;
+  if (ok) { try { v.webContents.loadURL(ok); } catch {} }
+  // Side by side, or a session not in the main pane: the page loads where the agent's browser
+  // tools can use it (and shows as a tab), but nothing opens over what you are looking at.
+  if ((split && split.active()) || v !== browserV) { layoutAtlas(); broadcastTabs(); return; }
   atlasOpen = true;
   atlasFrac = 0.5;
-  const ok = previewableUrl(url, workdir || getSettings(false).workingDir);
-  if (ok) browserV.webContents.loadURL(ok);
   layoutAtlas();
   broadcastPreviewState();
 }
@@ -710,8 +770,8 @@ function atlasOpenUrl(url, workdir) {
 function atlasClose() {
   atlasOpen = false;
   atlasFrac = 0.5;                 // forget a dragged split, or the next open is lopsided
-  browserV.webContents.loadURL('about:blank');
-  browserV.setVisible(false);
+  // A session's page stays (its agent may still be using it; it is a tab); the loose one clears.
+  if (browserV === defaultBrowser) browserV.webContents.loadURL('about:blank');
   layoutAtlas();
   broadcastPreviewState();
 }
@@ -762,7 +822,14 @@ app.whenReady().then(() => {
   ipcMain.handle('split:add', (_e, a) => (split ? split.add(a && typeof a === 'object' ? a.sid : a, a && a.at) : { ok: false, error: 'not ready' }));
   ipcMain.handle('split:swap', (_e, { at, sid } = {}) => (split ? split.swap(at, sid) : { ok: false, error: 'not ready' }));
   ipcMain.on('split:hold', (e, on) => { if (split && e.sender === chatWebContents()) split.hold(!!on); });
-  ipcMain.on('split:main', (e, sid) => { if (split && e.sender === chatWebContents()) { split.setMain(sid); saveSplitLayout(); } });
+  ipcMain.on('split:main', (e, sid) => { if (split && e.sender === chatWebContents()) { split.setMain(sid); saveSplitLayout(); showBrowserOf(sid); } });
+  // A tab in the preview: show that session's page (the main pane stays where it is).
+  ipcMain.on('preview:tab', (e, sid) => {
+    if (e.sender !== chatWebContents()) return;
+    const v = sessionBrowsers.get(String(sid || ''));
+    if (!v || v === browserV) return;
+    browserV = v; atlasOpen = true; layoutAtlas(); broadcastPreviewState();
+  });
   ipcMain.handle('split:remove', (e, sid) => !!(split && split.remove(sid || split.paneOf(e.sender))));
   ipcMain.handle('split:state', () => (split ? split.state() : { panes: [], max: 4 }));
   ipcMain.handle('split:focus', (_e, sid) => !!(split && split.focus(sid)));
@@ -870,6 +937,7 @@ app.whenReady().then(() => {
     for (const [k, p] of pendingPerms) if (p.msg && p.msg.sessionId === id) { pendingPerms.delete(k); try { p.resolve(false, false); } catch {} }
     live.delete(id);
     if (split) split.remove(id);
+    dropBrowser(id);
     try { require('../backend/cu/desktop').forget(id); } catch { /* no desktop control here */ }
     // Its sub-agents' sessions go with it: they stayed behind, unlisted, for good.
     let subs = 0;
@@ -1163,10 +1231,11 @@ app.whenReady().then(() => {
           webSearch: { enabled: s.webSearchEnabled, engine: s.webSearchEngine, maxResults: s.webSearchMaxResults },
           onLiveEvent: (le) => { const c = allRenderers(); c && c.send('agent:event', { sessionId, runKey, event: le }); },
           userData: userData(), live,
-          onOpenUrl: (url) => { try { atlasOpenUrl(url); } catch {} },
+          onOpenUrl: (url) => { try { atlasOpenUrl(url, sess.workdir, sessionId); } catch {} },
           // Only while the preview is open: closed, it is hidden and blank, and a
           // screenshot of it waited ten seconds for a frame that never came.
-          onAttachAtlas: () => { try { return (atlasOpen || (split && split.active())) && browserV && browserV.webContents ? browserV.webContents : null; } catch { return null; } },
+          // The session's own browser: once it has a page, or while it is the preview on show.
+          onAttachAtlas: () => { try { const bv = browserFor(sessionId); return bv && (hasPage(bv) || (bv === browserV && atlasOpen) || (split && split.active())) ? bv.webContents : null; } catch { return null; } },
         })) {
           const c = allRenderers(); c && c.send('agent:event', { sessionId, runKey, event: ev });
           // Persist in-flight messages incrementally (debounced) so nothing is
