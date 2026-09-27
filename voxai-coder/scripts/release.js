@@ -74,13 +74,20 @@ console.log(`signed ${file} (${(m.size / 1048576).toFixed(1)} MB) as ${version}`
 
 // ---- 2. the public releases project
 fs.mkdirSync(RELEASES_DIR, { recursive: true });
+// The project page has no releases list, so the installer is linked from here: its public
+// address, which needs no sign-in (checked on a fresh download). The name alone left a
+// visitor on another PC with nothing to click.
+const dl = `${FEED}/${encodeURIComponent(file)}`;
+const mb = (fs.statSync(installer).size / 1048576).toFixed(0);
 const readme = `# VoxAI Coder
 
 Releases of VoxAI Coder, a desktop coding agent for Windows.
 
-Download **${file}** from the latest release and run it. After that the app keeps
-itself up to date: it checks here, downloads new versions in the background and
-offers to restart when one is ready.
+**[Download VoxAI Coder ${version} for Windows](${dl})** (${file}, ${mb} MB) and run it.
+After that the app keeps itself up to date: it checks here, downloads new versions in
+the background and offers to restart when one is ready.
+
+Direct link: ${dl}
 
 Every release carries \`update.json\`, signed with the project's release key. The app
 installs only updates whose signature and checksum match.
