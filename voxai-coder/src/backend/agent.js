@@ -30,6 +30,8 @@ const { chatCompletions, isLocal } = require('./providers/openrouter');
 // A model on this PC (7B-class) is lost in the full prompt's thirty tools, and answered with the code
 // in its reply instead of saving it. It gets the tools a coder needs and three plain rules, last,
 // where a small model looks.
+// Tokens of a local model's context kept for the tool definitions (~2,000) and its answer (a whole file).
+const LOCAL_RESERVE = 6500;
 const LOCAL_TOOLS = ['read', 'write', 'edit', 'patch', 'shell', 'glob', 'grep', 'search', 'fs', 'todo'];
 const LOCAL_RULES = '\n\nRULES FOR THIS MODEL (it runs on this PC):\n'
   + '- Do the work with tool calls. To create or change a file, call write (the whole file) or edit. Never put code or file contents in your reply: code in a reply is NOT saved anywhere.\n'
@@ -797,24 +799,28 @@ async function* runAgent(opts) {
   const systemPrompt = SYSTEM(session.workdir, access, planMode, durable, webSearchOn) + goalPrompt(session.goal) + (isSubAgent ? '' : teamPrompt(coderModel, coderVision))
     + (localModel ? LOCAL_RULES : '');
   const estimatedBefore = estimateSessionTokens(session, systemPrompt);
+  // A model on this PC has a small context (16k for the 30B), and the conversation shares it with
+  // the tool definitions and the answer -- a coder's is a whole file, ~5,000 tokens -- while the
+  // estimate counts 4 characters a token, fewer than code has. So the room it is measured against
+  // is what is left, less a fifth: a resumed 30B coder sent 16,543 tokens into 16,384 and was refused.
+  const room = localModel && Number(contextLimit) > 0 ? Math.max(4000, Math.floor((Number(contextLimit) - LOCAL_RESERVE) * 0.8)) : Number(contextLimit);
   // User-visible compaction notices (like Codex/Claude Code): tell the UI before
   // and after we fold older turns, so compaction is never silent.
   // How full the conversation is, by the same estimate that decides when to summarise,
   // so the meter by Send and the summarising agree.
-  const ctxLimit = Number(contextLimit) > 0 ? Number(contextLimit) : (Number(process.env.VOX_CONTEXT_LIMIT) > 0 ? Number(process.env.VOX_CONTEXT_LIMIT) : 200000);
+  const ctxLimit = room > 0 ? room : (Number(process.env.VOX_CONTEXT_LIMIT) > 0 ? Number(process.env.VOX_CONTEXT_LIMIT) : 200000);
   const ctxThreshold = compactThreshold != null && Number(compactThreshold) > 0 ? Number(compactThreshold) : 0.8;
   const contextEvent = () => ({ type: 'context', tokens: estimateSessionTokens(session, systemPrompt), limit: ctxLimit, threshold: ctxThreshold });
   const willCompact = (() => {
     // cheap pre-check matching compactSession's trigger (budget = limit * threshold)
-    const limit = Number(contextLimit) > 0 ? Number(contextLimit) : (Number(process.env.VOX_CONTEXT_LIMIT) > 0 ? Number(process.env.VOX_CONTEXT_LIMIT) : 200000);
     const th = compactThreshold != null ? Number(compactThreshold) : 0.8;
-    return estimatedBefore > Math.floor(limit * th) || Number(process.env.VOX_FORCE_COMPACT) > 0;
+    return estimatedBefore > Math.floor(ctxLimit * th) || Number(process.env.VOX_FORCE_COMPACT) > 0;
   })();
   if (willCompact) {
-    yield { type: 'compacting', estimatedBefore, contextLimit: Number(contextLimit) > 0 ? Number(contextLimit) : 200000 };
+    yield { type: 'compacting', estimatedBefore, contextLimit: room > 0 ? room : 200000 };
   }
   const comp = compactSession(session, {
-    contextLimit: Number(contextLimit) > 0 ? Number(contextLimit) : undefined,
+    contextLimit: room > 0 ? room : undefined,
     threshold: compactThreshold != null ? Number(compactThreshold) : undefined,
     hardFraction: hardFraction != null ? Number(hardFraction) : undefined,
     systemPrompt,
@@ -986,7 +992,7 @@ async function* runAgent(opts) {
       // A busy or failing provider, or a rate limit, usually passes in seconds; each one
       // used to end the run. Retried twice, a few seconds apart -- only while nothing of
       // the answer has been shown, and never after Stop.
-      let r = null;
+      let r = null, squeezed = false;
       for (let attempt = 0; ; attempt++) {
         let streamed = false;
         try {
@@ -1020,6 +1026,18 @@ async function* runAgent(opts) {
           }
           break;
         } catch (callErr) {
+          // Still too long for the model on this PC (the estimate can be off for code): fold
+          // older turns away harder, once, and ask again, rather than end the step.
+          if (localModel && !squeezed && !streamed && /exceed_context_size|exceeds the available context/.test(String((callErr && callErr.message) || ''))) {
+            squeezed = true;
+            const c2 = compactSession(session, { contextLimit: room > 0 ? room : undefined, force: true, hardFraction: 0.6, keepRecent: 2, systemPrompt });
+            if (c2.compacted) {
+              const h2 = modelVision === false ? withoutImages(session.messages) : session.messages;
+              messages.splice(0, messages.length, { role: 'system', content: systemPrompt }, ...h2);
+              if (onLiveEvent) { try { onLiveEvent({ type: 'warning', code: 'local-context-full', message: 'The conversation was too long for the model on this PC; older turns were summarised and it was asked again.' }); } catch {} }
+              continue;
+            }
+          }
           // A connection dropped before anything arrived passes like a network blip.
           const passing = callErr && (callErr.retryable || /\b(terminated|ECONNRESET|socket hang up|other side closed)\b/i.test(String(callErr.message || '')));
           // The day's free allowance does not come back in seconds: say so at once.

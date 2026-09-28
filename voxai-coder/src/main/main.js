@@ -410,7 +410,7 @@ function localCatalog() {
     id: m.id, name: 'This PC: ' + m.name, context: st.model === m.file && st.ctx ? st.ctx : localEngineMod.WANT_CTX,
     promptCents: 0, completionCents: 0, cacheReadCents: 0, cacheWriteCents: 0,
     tools: true, structuredOutputs: false, reasoning: false, reasoningSpec: null, vision: false,
-    maxCompletion: 8192, sharesData: null, coding: true, local: true, bytes: m.bytes, sidecar: !!m.sidecar,
+    maxCompletion: 8192, sharesData: null, coding: true, local: true, bytes: m.bytes, sidecar: !!m.sidecar, tps: m.tps || 0,
   }));
 }
 const MODEL_CAP_TTL = 60 * 60 * 1000;
@@ -560,6 +560,7 @@ function attachSplitViews(w) {
   w.on('maximize', relayout);
   w.on('unmaximize', relayout);
   w.on('restore', relayout);
+  w.on('minimize', relayout);        // parks the browser on show, so it keeps drawing
   w.on('enter-full-screen', relayout);
   w.on('leave-full-screen', relayout);
   try { w.on('always-on-top-changed', relayout); } catch {}
@@ -718,6 +719,7 @@ const hasPage = (v) => { try { const u = v.webContents.getURL(); return !!u && u
 // Chromium then calls the page hidden again.
 const PARK_AT = -20000;
 let parkSize = { width: 720, height: 900 };
+let lastLayout = null;   // the window's content size when last not minimised
 function parkWindow(v) {
   if (v._park && !v._park.isDestroyed()) return v._park;
   const { BaseWindow } = require('electron');
@@ -810,8 +812,13 @@ function broadcastTabs() { const c = chatWebContents(); if (c) { try { c.send('p
 function layoutAtlas() {
   try {
     if (!rootV || !chatV) return;
-    let cb = null;
-    try { const w0 = win(); cb = w0 && w0.getContentBounds(); } catch { cb = null; }
+    let cb = null, minimised = false;
+    try { const w0 = win(); minimised = !!(w0 && w0.isMinimized()); cb = w0 && w0.getContentBounds(); } catch { cb = null; }
+    // Minimised, the window draws nothing, so the browser on show would stop too: the 30B's
+    // Breakout run got "window is minimised" for every screenshot. Every browser is parked
+    // instead, which keeps drawing, at the size it last had (a minimised window's own is tiny).
+    if (minimised) cb = lastLayout;
+    else if (cb && cb.width > 50 && cb.height > 50) lastLayout = { width: cb.width, height: cb.height };
     // Defensive: never let bad/incomplete geometry kill window setup.
     let W = cb && Number.isFinite(cb.width) && cb.width > 0 ? Math.floor(cb.width) : 1440;
     let H = cb && Number.isFinite(cb.height) && cb.height > 0 ? Math.floor(cb.height) : 900;
@@ -829,7 +836,7 @@ function layoutAtlas() {
     chatV.setBounds({ x: 0, y: 0, width: W, height: H });
 
     const sideBySide = !!(split && split.active());
-    const showing = !sideBySide && atlasOpen && previewRect && previewRect.width > 20 && previewRect.height > 20;
+    const showing = !minimised && !sideBySide && atlasOpen && previewRect && previewRect.width > 20 && previewRect.height > 20;
     // Out of sight but drawing: a hidden view captures blank, and one under the window's page
     // is barely drawn. So the browsers not on show are parked in windows off screen, the size
     // a preview would be (see parkWindow).

@@ -305,15 +305,17 @@ async function showHighlight(x, y, w, h, label, ms) {
 }
 
 /**
- * Is the app's window minimised? Windows draws nothing for a minimised window, so a
- * screenshot request waits for a frame that never comes (2 in 3 went unanswered in a
- * test) -- that is what stalled the agent's page reads. Reading the page still works.
+ * Is the page hidden? A hidden page draws nothing, so a screenshot request waits for a frame that
+ * never comes (2 in 3 went unanswered in a test) -- that stalled the agent's page reads. Asked of
+ * the page, not of the app's windows: a minimised app now parks its browsers off screen, where they
+ * keep drawing (main.js layoutAtlas), and "any window minimised" refused every screenshot of the
+ * 30B's Breakout although the page was being drawn. Reading the page still works either way.
  */
-function windowMinimised() {
+async function pageHidden() {
   if (!C || !C.attachedWC) return false;
   try {
-    const { BrowserWindow } = require('electron');
-    return BrowserWindow.getAllWindows().some((w) => w.isMinimized());
+    const r = await send('Runtime.evaluate', { expression: 'document.visibilityState', returnByValue: true });
+    return !!(r && r.result && r.result.value === 'hidden');
   } catch { return false; }
 }
 
@@ -322,9 +324,9 @@ async function getState(includeScreenshot = true) {
   const res = await send('Runtime.evaluate', { expression: ELEM_SNIPPET, returnByValue: true });
   const snap = (res && res.result && res.result.value) || { title: '', url: '', text: '', elements: [] };
   let screenshot = null;
-  if (includeScreenshot && windowMinimised()) {
+  if (includeScreenshot && await pageHidden()) {
     return { surface: 'browser', title: snap.title, url: snap.url, text: snap.text, elements: snap.elements, screenshot: null,
-      note: 'No screenshot: the VoxAI Coder window is minimised, so the page is not being drawn. The text and elements above are current.' };
+      note: 'No screenshot: the page is hidden, so it is not being drawn. The text and elements above are current.' };
   }
   if (includeScreenshot) {
     try {
@@ -425,7 +427,7 @@ async function windowCenter() {
 async function screenshot() {
   await ensureReady();
   // Minimised, nothing is drawn: say so at once rather than wait out the time limit.
-  if (windowMinimised()) throw new Error('No screenshot: the VoxAI Coder window is minimised, so the page is not being drawn. Read the page state instead, or ask the user to restore the window.');
+  if (await pageHidden()) throw new Error('No screenshot: the page is hidden, so it is not being drawn. Read the page state instead.');
   const shot = await send('Page.captureScreenshot', { format: 'png' });
   return shot && shot.data ? 'data:image/png;base64,' + shot.data : null;
 }

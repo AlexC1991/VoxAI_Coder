@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-7+f5mn2UHzZPhssMFb6pISBnnh4Wl53RLzl9v/Y0nNk='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-5nZzU4F64kWtCkigwGQwX6PJ98jqjqXHCdB6GzKyO9I='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1833,7 +1833,9 @@ function screenshotNote(id){
   if (!helper) return { short: 'Can\u2019t see screenshots', text: 'Can\u2019t see screenshots \u2014 describing them is turned off in Settings, so it works from page text only.' };
   const hm = modelEntry(helper);
   const hn = hm ? describeModel(hm).name : helper;
-  return { short: 'Can\u2019t see screenshots \u2014 routed to ' + hn, text: 'Can\u2019t see screenshots \u2014 they\u2019re routed to ' + hn + ', an image model, which describes them for this model.' };
+  // A model on this PC: the screenshots are the one thing that leaves it.
+  const away = m.local ? ' online (they leave this PC)' : '';
+  return { short: 'Can\u2019t see screenshots \u2014 routed to ' + hn, text: 'Can\u2019t see screenshots \u2014 they\u2019re routed to ' + hn + away + ', an image model, which describes them for this model.' };
 }
 
 /** Images attached, and the model cannot see them: say so now, not after Send. */
@@ -3937,6 +3939,15 @@ function teamCoders(){
     .sort((a, b) => (rank(a) - rank(b)) || (cost(a) - cost(b)) || modelLabel(a.id).localeCompare(modelLabel(b.id)))
     .map((m) => m.id);
 }
+/**
+ * The model on this PC most able to be a Team coder: the biggest one. Size is what decided it in
+ * tests -- the 7B could not build Breakout (it pasted code into the chat); the 30B could.
+ */
+function bestLocalCoder(){
+  const ok = new Set(teamCoders());
+  const locals = ALL_MODELS.filter((m) => m.local && ok.has(m.id)).sort((a, b) => (Number(b.bytes) || 0) - (Number(a.bytes) || 0));
+  return locals.length ? locals[0].id : '';
+}
 function paintTeamChip(){
   const c = $('chipTeam'); if (!c) return;
   const v = actView(), coder = v && v.coderModel;
@@ -4191,6 +4202,8 @@ function renderModelMenu(){
     r.dataset.id = m.id;
     const sh = shareInfo(m.id);
     if (sh) { const b = el('span', 'shr', 'shares data'); b.title = shareSentence(m.id, sh); r.querySelector('.nm').after(b); }
+    // A model on this PC: how fast it writes here, as measured when it was first loaded.
+    if (m.local && m.tps > 0) { const b = el('span', 'shr', esc(m.tps + ' tok/s')); b.title = 'Writes about ' + m.tps + ' tokens a second on this PC (measured when it was first loaded)'; r.querySelector('.nm').after(b); }
     if (m.tools === false) r.style.opacity = '.6';
     const no = refusedWhy(m.id);
     if (no) {
@@ -4219,7 +4232,7 @@ function renderModelMenu(){
     all.onmouseenter = () => pkFoot(activeModel());
     all.onclick = async (e) => { e.stopPropagation(); await pick(''); };
     box.appendChild(all);
-    [TEAM_PROVEN, cur].filter((x, i, a) => x && a.indexOf(x) === i && OK.has(x)).forEach((id) => box.appendChild(rowFor(modelEntry(id))));
+    [TEAM_PROVEN, bestLocalCoder(), cur].filter((x, i, a) => x && a.indexOf(x) === i && OK.has(x)).forEach((id) => box.appendChild(rowFor(modelEntry(id))));
   } else {
     // A past session's model that cannot do this job (no tools, gone from the catalogue) is not
     // offered again: picking one only led to "Couldn't send that". The one in use always shows.
@@ -4299,8 +4312,18 @@ async function setModel(id){
   refreshChips();
   pkFoot(id);
   paintShelf();
+  // Once per model, not on every pick: the shelf line keeps saying it while the model is selected.
   const en = screenshotNote(id);
-  if (en) toast(en.text);
+  if (en && !seenNote('eyes:' + id)) toast(en.text);
+}
+/** Has this been said before, here? Remembered in this window's storage; unknown counts as no. */
+function seenNote(key){
+  try {
+    const all = JSON.parse(localStorage.getItem('voxSeenNotes') || '[]');
+    if (all.includes(key)) return true;
+    all.push(key); localStorage.setItem('voxSeenNotes', JSON.stringify(all.slice(-200)));
+  } catch {}
+  return false;
 }
 
 function initModelPicker(){

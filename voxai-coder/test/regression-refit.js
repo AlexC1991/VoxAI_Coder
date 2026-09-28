@@ -1039,8 +1039,11 @@ async function drain(gen) {
     check('a step you stopped is titled "Stopped"', ss5({}, { stopped: 1 }).head === 'Stopped', ss5({}, { stopped: 1 }).head);
     check('a stopped action reads "stopped", not failed', read('src/renderer/index.html').includes("if (rec.stopped) return { html: 'stopped' };"), 'failed');
     const CDPSRC = read('src/backend/cu/cdp.js');
-    check('minimised, a page read skips the screenshot instead of stalling', CDPSRC.includes('if (includeScreenshot && windowMinimised()) {') && CDPSRC.includes("return BrowserWindow.getAllWindows().some((w) => w.isMinimized());"), 'waits for a frame');
-    check('and a screenshot says so at once', CDPSRC.includes("if (windowMinimised()) throw new Error('No screenshot: the VoxAI Coder window is minimised"), 'stalls');
+    check('a hidden page: a page read skips the screenshot instead of stalling (asked of the page, not of the app windows)', CDPSRC.includes('if (includeScreenshot && await pageHidden()) {') && CDPSRC.includes("{ expression: 'document.visibilityState', returnByValue: true }") && !CDPSRC.includes('isMinimized()'), 'waits for a frame');
+    check('and a screenshot says so at once', CDPSRC.includes("if (await pageHidden()) throw new Error('No screenshot: the page is hidden"), 'stalls');
+    const MAINmin = read('src/main/main.js');
+    check('minimised, every browser is parked off screen and keeps drawing, at the last real size (the Breakout run with the 30B could take no screenshot)', MAINmin.includes("w.on('minimize', relayout);") && MAINmin.includes('if (minimised) cb = lastLayout;')
+      && MAINmin.includes('const showing = !minimised && !sideBySide && atlasOpen'), 'minimised');
     check('the agent is told why there is no picture', read('src/backend/cu/index.js').includes('...(st.note ? { note: st.note } : {})'), 'silent');
     check('every browser command goes through the limit', read('src/backend/cu/cdp.js').includes('return withTimeout(C.attachedWC.debugger.sendCommand(method, params)'), 'no limit');
     // A page the user put in the preview, read without an `open` first: it read a
@@ -1876,7 +1879,7 @@ async function drain(gen) {
     const off = make('')('text/only');
     check('describing turned off says so', off && /describing them is turned off in Settings/.test(off.text), off);
     check('it shows above the box, and when the model is picked', HTML.includes('id="shEyes"') && HTML.includes("const eyes = $('shEyes'), en = screenshotNote();")
-      && HTML.includes('  const en = screenshotNote(id);\n  if (en) toast(en.text);'), 'places');
+      && HTML.includes("  const en = screenshotNote(id);\n  if (en && !seenNote('eyes:' + id)) toast(en.text);"), 'places');
     check('the picker footer is one fixed line with the model\'s full name, nothing else', HTML.includes('<span class="pk-foot" id="modelMenuFoot" aria-live="polite"><span class="fid" id="pkId"></span></span>')
       && HTML.includes("$('pkId').textContent = id ? ((m && m.name) || id) : '';") && HTML.includes('.pk-foot{display:flex;align-items:center;border-top:1px solid var(--edge);padding:0 12px;height:30px;')
       && !HTML.includes('pkFacts') && !HTML.includes('function modelFacts('), 'footer');
@@ -2600,6 +2603,38 @@ async function drain(gen) {
       const errC = evC.find((e) => e.type === 'error');
       check('a Team coder on a starved engine stops with that reason (the planner reads it), not after 15 minutes, and not called a dropped connection', errC && /tokens\/s \(13\.5 is usual on this PC\)/.test(errC.message || errC.content || '') && !/connection dropped/.test(errC.message || ''), evC.map((e) => e.type + ':' + String(e.message || '').slice(0, 80)));
       const Ms = read('src/main/main.js'), Hs = read('src/renderer/index.html');
+      {
+        // A local model's small context: long history is folded before the request, and an
+        // engine that still says "too long" gets a shorter conversation once, not a failed step.
+        const long = []; for (let i = 0; i < 30; i++) long.push({ role: i % 2 ? 'assistant' : 'user', content: 'step ' + i + ' ' + 'x'.repeat(1800) });
+        const bodiesC = [], liveX = []; let calls = 0;
+        global.fetch = async (u, init) => {
+          if (String(u).endsWith('/slots')) return { ok: true, json: async () => [{ is_processing: false }] };
+          calls++; const body = JSON.parse(init.body); bodiesC.push(body);
+          if (calls === 1) return { ok: false, status: 400, text: async () => '{"error":{"code":400,"message":"request (16543 tokens) exceeds the available context size (16384 tokens), try increasing it","type":"exceed_context_size_error"}}' };
+          const enc = new TextEncoder();
+          return { ok: true, body: new ReadableStream({ start(c) { c.enqueue(enc.encode('data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n')); c.close(); } }) };
+        };
+        ORl.localEndpoint.url = () => 'http://127.0.0.1:5996';
+        const evX = await drain(runAgent({ session: { id: 'lm-ctx', workdir: WD, messages: long.slice() }, userText: 'go on', apiKey: '', model: 'local/m.gguf', access: 'full', askPermission: async () => true, maxTurns: 2, contextLimit: 16384, onLiveEvent: (e) => liveX.push(e) }));
+        global.fetch = fetch2; ORl.localEndpoint.url = () => null;
+        const chars = (b) => JSON.stringify(b.messages).length;
+        check('a local model\'s long conversation is folded before it is sent: measured against what its 16k leaves after tools and the answer', evX.some((e) => e.type === 'compacted') && bodiesC[0] && chars(bodiesC[0]) < 40000, { compacted: evX.some((e) => e.type === 'compacted'), chars: bodiesC[0] && chars(bodiesC[0]) });
+        check('and "exceeds the available context" folds it harder and asks once more (a resumed 30B coder sent 16,543 into 16,384)', calls === 2 && liveX.some((e) => e.type === 'warning' && e.code === 'local-context-full')
+          && evX.some((e) => e.type === 'done') && chars(bodiesC[1]) <= chars(bodiesC[0]), { calls, types: evX.map((e) => e.type + (e.code ? ':' + e.code : '')).slice(-6) });
+        const { compactSession } = require(path.join(ROOT, 'src/backend/compact.js'));
+        const withTools = [];
+        for (let i = 0; i < 40; i++) { withTools.push({ role: 'assistant', content: '', tool_calls: [{ id: 'c' + i, type: 'function', function: { name: 'read', arguments: '{}' } }] }); withTools.push({ role: 'tool', tool_call_id: 'c' + i, content: 'y'.repeat(900) }); }
+        const cs = { messages: withTools.slice() };
+        compactSession(cs, { contextLimit: 8000, force: true });
+        check('compacting never keeps a tool result without the call it answers', cs.messages[1] && cs.messages[1].role !== 'tool', cs.messages.slice(0, 3).map((m) => m.role));
+      }
+      const Hp = read('src/renderer/index.html');
+      check('the picker shows how fast a local model writes here, and offers the biggest one as the Team coder (the 7B could not build Breakout, the 30B could)',
+        Hp.includes("if (m.local && m.tps > 0) { const b = el('span', 'shr', esc(m.tps + ' tok/s'));") && Hp.includes('[TEAM_PROVEN, bestLocalCoder(), cur]')
+        && read('src/main/main.js').includes('sidecar: !!m.sidecar, tps: m.tps || 0,') && read('src/main/local-engine.js').includes("tps: (t && t.tg) || 0 };"), 'picker');
+      check('"Cannot see screenshots" is a toast once per model, and for a local model says they leave this PC', Hp.includes("if (en && !seenNote('eyes:' + id)) toast(en.text);")
+        && Hp.includes("const away = m.local ? ' online (they leave this PC)' : '';"), 'toast');
       check('a coder on this PC gets 30 minutes a step, not 15 (the 30B wrote a whole Breakout in 12 and ran out before reporting)', read('src/backend/agent.js').includes('defaultSubTimeoutMs: coderModel ? Math.max((isLocal(coderModel) ? 30 : 15) * 60 * 1000,'), 'timeout');
       check('the planner is told to stop and tell you, not re-send the step or do it itself', read('src/backend/agent.js').includes("/something else is using the CPU or graphics card/.test(String(s.error || ''))")
         && /something else is using the CPU or graphics card/.test((errC && (errC.message || errC.content)) || ''), 'note');

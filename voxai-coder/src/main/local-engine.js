@@ -191,6 +191,9 @@ function createLocalEngine({ baseDir, log = () => {}, onState = () => {} }) {
   /** The .gguf files in a folder (vision projectors aside), each with its sidecar if it has one. */
   function models(folders) {
     const out = [], seen = new Set();
+    const tuned = readTune();
+    // Its speed as measured on this PC (any card), for the picker; 0 until it has been loaded once.
+    const speedOf = (f, bytes) => { const k = Object.keys(tuned).find((x) => x.startsWith(`${f}|${bytes}|${ENGINE.build}|`)); return k ? tuned[k] : null; };
     for (const folder of (Array.isArray(folders) ? folders : [folders]).filter(Boolean)) {
     let files = [];
     try { files = fs.readdirSync(folder).filter((f) => /\.gguf$/i.test(f) && !/mmproj/i.test(f) && !seen.has(f)); } catch { continue; }
@@ -199,7 +202,8 @@ function createLocalEngine({ baseDir, log = () => {}, onState = () => {} }) {
       let sidecar = null;
       try { sidecar = JSON.parse(fs.readFileSync(path.join(folder, f + '.offload.json'), 'utf8')); } catch {}
       let bytes = 0; try { bytes = fs.statSync(path.join(folder, f)).size; } catch {}
-      return { id: 'local/' + f, file: f, folder, name: labelOf(f), bytes, sidecar };
+      const t = speedOf(f, bytes);
+      return { id: 'local/' + f, file: f, folder, name: labelOf(f), bytes, sidecar, tps: (t && t.tg) || 0 };
     }));
     }
     return out;

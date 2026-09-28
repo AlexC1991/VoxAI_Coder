@@ -102,7 +102,7 @@ function estimateSessionTokens(session, systemPrompt = '') {
 }
 
 /** Walk messages from the tail, return how many newest messages fit `recentTokensMax`. */
-function splitPoint(msgs, recentTokensMax) {
+function splitPoint(msgs, recentTokensMax, keepMin = COMPACT_KEEP_RECENT) {
   let splitAt = 0;
   let keptChars = 0;
   for (let i = msgs.length - 1; i >= 0; i--) {
@@ -111,7 +111,7 @@ function splitPoint(msgs, recentTokensMax) {
     if (splitAt > 0 && (keptChars / 4) > recentTokensMax) break;
     keptChars += t;
     splitAt += 1;
-    if ((msgs.length - splitAt) <= COMPACT_KEEP_RECENT - 1) break; // always keep at least RECENT msgs
+    if ((msgs.length - splitAt) <= keepMin - 1) break; // always keep at least RECENT msgs
   }
   return splitAt;
 }
@@ -170,6 +170,8 @@ function compactSession(session, opts = {}) {
   const keepTokens = opts.keepTokens != null ? Number(opts.keepTokens) : defaultKeepTokens();
   const hardFraction = opts.hardFraction != null ? Number(opts.hardFraction) : defaultHardFraction();
   const systemPrompt = opts.systemPrompt || '';
+  // Fewer may be kept when asked: a model on this PC with a 16k context could not fit even 16.
+  const keepMin = Number(opts.keepRecent) > 0 ? Number(opts.keepRecent) : COMPACT_KEEP_RECENT;
 
   const msgs = session.messages || [];
   const estimatedBefore = opts.estimatedBefore != null ? opts.estimatedBefore : estimateSessionTokens(session, systemPrompt);
@@ -183,7 +185,7 @@ function compactSession(session, opts = {}) {
   if (!needsCompact) {
     return { compacted: false, estimatedBefore, budget, hardLimit, reason: 'under-budget', fitsHardLimit: estimatedBefore <= hardLimit };
   }
-  if (msgs.length <= COMPACT_KEEP_RECENT + 2) {
+  if (msgs.length <= keepMin + 2) {
     return { compacted: false, estimatedBefore, budget, hardLimit, reason: 'too-few-messages', fitsHardLimit: estimatedBefore <= hardLimit };
   }
 
@@ -194,7 +196,10 @@ function compactSession(session, opts = {}) {
   let best = null;
   for (const frac of keepFractions) {
     const effectiveKeepTokens = Math.max(256, Math.floor(budget * frac));
-    const splitAt = splitPoint(msgs, effectiveKeepTokens);
+    let splitAt = splitPoint(msgs, effectiveKeepTokens, keepMin);
+    // Never keep a tool result whose call was folded away: a request that starts with one is
+    // refused by models that check. (Compacting mid-run, for a model on this PC, can cut there.)
+    while (splitAt > 0 && msgs[msgs.length - splitAt] && msgs[msgs.length - splitAt].role === 'tool') splitAt--;
     if (splitAt <= 0) break;
     const old = msgs.slice(0, msgs.length - splitAt);
     const recent = msgs.slice(msgs.length - splitAt);
