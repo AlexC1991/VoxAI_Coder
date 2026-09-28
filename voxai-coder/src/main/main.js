@@ -397,6 +397,10 @@ const localEngine = localEngineMod.createLocalEngine({
   onState: (st) => { try { const c = allRenderers(); c && c.send('local:state', st); } catch {} },
 });
 require('../backend/providers/openrouter').localEndpoint.url = () => localEngine.url();
+// What "slow" is measured against, and where a slow request is said: a toast in every window
+// (a Team coder's own warnings are not shown in the chat).
+require('../backend/providers/openrouter').localEndpoint.expected = () => { const s = localEngine.state(); return { tps: s.tps, pps: s.pps }; };
+require('../backend/providers/openrouter').localEndpoint.onSlow = (info) => { try { const c = allRenderers(); c && c.send('local:slow', info); } catch {} };
 /** Catalogue entries for the models in the local folder: free, tool-calling, no image input. */
 function localCatalog() {
   const dirs = localModelDirs();

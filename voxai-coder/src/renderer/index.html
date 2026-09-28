@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-uEPuddKZGcCHlMXpjCCdHU/x6SN/QhWaAea3b8s0HBk='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-7+f5mn2UHzZPhssMFb6pISBnnh4Wl53RLzl9v/Y0nNk='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -5980,6 +5980,13 @@ async function renderLocal(){
 if ($('btnLocalDir')) $('btnLocalDir').onclick = async () => { const d = await window.voxai.local.pickDir(); if (d) { S = await window.voxai.getSettings(); loadModels(); renderLocal(); } };
 if ($('btnLocalInstall')) $('btnLocalInstall').onclick = async () => { $('btnLocalInstall').disabled = true; await window.voxai.local.install(); $('btnLocalInstall').disabled = false; renderLocal(); };
 if (window.voxai.local) window.voxai.local.onState((st) => { LOCAL_ST = st; paintLocalEngine(); });
+// The local model crawling because the PC is busy: said once every few minutes, not on every request.
+let LOCAL_SLOW_AT = 0;
+if (window.voxai.local && window.voxai.local.onSlow) window.voxai.local.onSlow((info) => {
+  if (!info || Date.now() - LOCAL_SLOW_AT < 180000) return;
+  LOCAL_SLOW_AT = Date.now();
+  toast(info.message);
+});
 $('btnUsageClose').onclick = closeUsage;
 $('btnUsageMore').onclick = () => loadUsage(false);
 $('usageModalBg').addEventListener('click', (e)=>{ if(e.target.id === 'usageModalBg') closeUsage(); });

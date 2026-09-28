@@ -117,7 +117,7 @@ function createLocalEngine({ baseDir, log = () => {}, onState = () => {} }) {
   const dirOf = () => path.join(base(), ENGINE.build);
   const exeOf = () => path.join(dirOf(), 'llama-server.exe');
   let proc = null, tail = [], cores = 0;
-  let st = { state: fs.existsSync(exeOf()) ? 'stopped' : 'missing', model: '', port: 0, ctx: 0, how: '', device: '', error: '', percent: 0, build: ENGINE.build };
+  let st = { state: fs.existsSync(exeOf()) ? 'stopped' : 'missing', model: '', port: 0, ctx: 0, how: '', device: '', error: '', percent: 0, build: ENGINE.build, tps: 0, pps: 0 };
   const set = (patch) => { st = { ...st, ...patch }; try { onState(st); } catch {} };
 
   const run = (args, ms = 30000) => new Promise((resolve) => execFile(exeOf(), args, { cwd: dirOf(), windowsHide: true, timeout: ms }, (_e, out, err) => resolve(String(out || '') + String(err || ''))));
@@ -262,7 +262,7 @@ function createLocalEngine({ baseDir, log = () => {}, onState = () => {} }) {
     let plan = m && m.sidecar ? planLoad(m.sidecar, dev, threads) : null;
     if (!plan || !plan.ctx) {
       const t = await tune(folder, file, dev, threads);
-      if (t) plan = { args: ['-t', String(threads), '--fit', 'off', '-ngl', String(t.ngl), '-c', String(t.ctx)], ctx: t.ctx,
+      if (t) plan = { args: ['-t', String(threads), '--fit', 'off', '-ngl', String(t.ngl), '-c', String(t.ctx)], ctx: t.ctx, tps: t.tg, pps: t.pp,
         how: `tuned for this PC: ${t.ngl === 999 ? 'all' : t.ngl} of ${t.layers} layers on the GPU, ${t.ctx.toLocaleString()} context (${t.tg} tokens/s)` };
     }
     if (!plan) plan = planLoad(null, dev, threads);
@@ -270,7 +270,8 @@ function createLocalEngine({ baseDir, log = () => {}, onState = () => {} }) {
     const args = ['-m', model, '--host', '127.0.0.1', '--port', String(port), '-np', '1', '--jinja', '--no-webui', ...plan.args];
     tail = [];
     log(`starting ${file}: ${plan.how}${dev ? ' on ' + dev.name : ' on the CPU'}`);
-    set({ state: 'loading', model: file, port, ctx: plan.ctx, how: plan.how, device: dev ? dev.name : 'CPU', error: '' });
+    // The speeds measured when tuning (0 when unknown): a request far below them means the PC is busy.
+    set({ state: 'loading', model: file, port, ctx: plan.ctx, how: plan.how, device: dev ? dev.name : 'CPU', error: '', tps: plan.tps || 0, pps: plan.pps || 0 });
     proc = spawn(exeOf(), args, { cwd: dirOf(), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     const keep = (b) => { for (const l of String(b).split(/\r?\n/)) if (l.trim()) { tail.push(l); if (tail.length > 40) tail.shift(); } };
     proc.stdout.on('data', keep); proc.stderr.on('data', keep);

@@ -993,7 +993,11 @@ async function* runAgent(opts) {
             tools: toolList.map((t) => t.def),
             reasoningEffort: effortNext || reasoningEffort, reasoningSpec, maxTokens, signal, cacheTtl,
             sessionId: session.id,   // sticky routing — keeps the cache on one upstream
+            // A Team coder on a starved local engine ends its request with the reason, so the
+            // planner hears why within minutes instead of at the 15-minute step limit.
+            ...(localModel && isSubAgent ? { slowStopMs: Number(process.env.VOX_LOCAL_SLOW_STOP_MS) || 120000 } : {}),
             onEvent: (e) => {
+              if (e.slow && onLiveEvent) { try { onLiveEvent({ type: 'warning', code: 'local-slow', message: e.slow.message }); } catch {} }
               if (e.token) {
                 streamed = true;
                 content += e.token;
@@ -1368,6 +1372,10 @@ async function* runAgent(opts) {
             : [result];
           if (coderModel) {
             teamRun.coderFails += subs.filter((s) => !s || s.ok === false).length; teamRun.refused = 0;
+            // The coder's model on this PC starved by another program: another try crawls the same.
+            // The planner re-sent it in ever smaller pieces for 40 minutes; you can free the PC or switch.
+            if (subs.some((s) => s && s.ok === false && /something else is using the CPU or graphics card/.test(String(s.error || '')))) result.team_note = 'The coder runs on this PC and its model is too slow right now (another program is using the CPU or graphics card). '
+              + 'Do not send it again and do not do its work yourself: stop and tell the user, who can close other programs and say "continue", or pick a cloud coder.';
             // Something you can see, built and never looked at: say so to the planner, which
             // otherwise took "done" on trust (a Breakout game checked on a stubbed canvas).
             const visual = (s) => (s.files_changed || []).some((f) => /\.(html?|css|jsx?|tsx?|vue|svelte)$/i.test(String((f && f.path) || '')));

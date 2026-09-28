@@ -162,6 +162,7 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
     pickDir: () => ipcRenderer.invoke('local:pickDir'),
     removeDir: (dir) => ipcRenderer.invoke('local:removeDir', dir),
     onState: (cb) => { const fn = (_e, st) => cb(st); ipcRenderer.on('local:state', fn); return () => ipcRenderer.removeListener('local:state', fn); },
+    onSlow: (cb) => { const fn = (_e, info) => cb(info); ipcRenderer.on('local:slow', fn); return () => ipcRenderer.removeListener('local:slow', fn); },
   },
   openrouterGenerations: (opts) => ipcRenderer.invoke('openrouter:generations', opts || {}),
   openrouterModels: () => ipcRenderer.invoke('openrouter:models'),

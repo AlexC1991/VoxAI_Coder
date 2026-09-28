@@ -2525,6 +2525,56 @@ async function drain(gen) {
       check('code written in the reply instead of saved is sent back ("call write"), and then the file is written', evL.some((e) => e.type === 'warning' && e.code === 'local-code-in-reply')
         && /call write with the file path/.test(JSON.stringify(bodies[1] && bodies[1].messages.slice(-1))) && fs.existsSync(path.join(WD, 'local-page.html')), evL.filter((e) => e.type === 'warning').map((e) => e.code));
     }
+    {
+      // A busy PC: the engine's /slots shows the answer crawling (0.7 tokens/s against 13.5 when tuned).
+      const fetch2 = global.fetch;
+      const fakeEngine = (perSample) => {
+        let out = 5;
+        return async (u, init) => {
+          if (String(u).endsWith('/slots')) { out += perSample; return { ok: true, json: async () => [{ id_task: 7, is_processing: true, n_prompt_tokens_processed: 900, next_token: [{ n_decoded: out }] }] }; }
+          const sig = init && init.signal;
+          return { ok: true, body: new ReadableStream({ start(c) {
+            // Never finishes on its own: only an abort ends it (the starved 7B took 15 minutes).
+            const end = () => { try { c.error(Object.assign(new Error('This operation was aborted'), { name: 'AbortError' })); } catch {} };
+            if (sig) { if (sig.aborted) end(); else sig.addEventListener('abort', end, { once: true }); }
+          } }) };
+        };
+      };
+      ORl.localEndpoint.url = () => 'http://127.0.0.1:5997';
+      ORl.localEndpoint.slowCheckMs = 40;
+      ORl.localEndpoint.expected = () => ({ tps: 13.5, pps: 326 });
+      const told = []; ORl.localEndpoint.onSlow = (i) => told.push(i);
+      global.fetch = fakeEngine(0);
+      const evS = [];
+      let slowErr = null;
+      try { await ORl.chatCompletions({ model: 'local/m.gguf', messages: [{ role: 'user', content: 'x' }], tools, slowStopMs: 400, onEvent: (e) => evS.push(e) }); } catch (e) { slowErr = e; }
+      check('a local answer crawling far below its tuned speed is said once, with both speeds, in the run and to the window', evS.filter((e) => e.slow).length === 1 && told.length === 1
+        && /writing at 0 tokens\/s \(13\.5 is usual on this PC\): something else is using the CPU or graphics card/.test(told[0].message), told.map((i) => i.message));
+      check('and a request that stays that slow is ended with the reason, not left to a 15-minute limit', slowErr && slowErr.localSlow && /Stopped after 1 min at that speed/.test(slowErr.message), slowErr && slowErr.message);
+      // The same engine at its usual speed: nothing said. (A stream that ends after ~0.4 s.)
+      told.length = 0;
+      const fast = fakeEngine(40);
+      global.fetch = async (u, init) => {
+        if (String(u).endsWith('/slots')) return fast(u, init);
+        const enc = new TextEncoder();
+        return { ok: true, body: new ReadableStream({ start(c) { setTimeout(() => { c.enqueue(enc.encode('data: {"choices":[{"delta":{"content":"ok"}}]}\n\ndata: [DONE]\n\n')); c.close(); }, 400); } }) };
+      };
+      const okOut = await ORl.chatCompletions({ model: 'local/m.gguf', messages: [{ role: 'user', content: 'x' }], tools, slowStopMs: 400, onEvent: () => {} });
+      check('at its usual speed nothing is said', told.length === 0 && okOut.content === 'ok', told);
+      // A Team coder on the starved engine: its step fails fast, with the reason for the planner.
+      global.fetch = fakeEngine(0);
+      process.env.VOX_LOCAL_SLOW_STOP_MS = '400';
+      const evC = await drain(runAgent({ session: { id: 'lm-slow', workdir: WD, messages: [] }, userText: 'make a page', apiKey: '', model: 'local/m.gguf', access: 'full', askPermission: async () => true, maxTurns: 3, isSubAgent: true }));
+      delete process.env.VOX_LOCAL_SLOW_STOP_MS;
+      global.fetch = fetch2; ORl.localEndpoint.url = () => null; ORl.localEndpoint.slowCheckMs = 0; ORl.localEndpoint.expected = null; ORl.localEndpoint.onSlow = null;
+      const errC = evC.find((e) => e.type === 'error');
+      check('a Team coder on a starved engine stops with that reason (the planner reads it), not after 15 minutes', errC && /tokens\/s \(13\.5 is usual on this PC\)/.test(errC.message || errC.content || ''), evC.map((e) => e.type + ':' + String(e.message || '').slice(0, 80)));
+      const Ms = read('src/main/main.js'), Hs = read('src/renderer/index.html');
+      check('the planner is told to stop and tell you, not re-send the step or do it itself', read('src/backend/agent.js').includes("/something else is using the CPU or graphics card/.test(String(s.error || ''))")
+        && /something else is using the CPU or graphics card/.test((errC && (errC.message || errC.content)) || ''), 'note');
+      check('the app measures against the tuned speeds and shows a slow engine as a toast, at most every 3 minutes', Ms.includes("localEndpoint.expected = () => { const s = localEngine.state(); return { tps: s.tps, pps: s.pps }; };")
+        && Ms.includes("c.send('local:slow', info)") && Hs.includes('if (!info || Date.now() - LOCAL_SLOW_AT < 180000) return;') && read('src/main/local-engine.js').includes('tps: plan.tps || 0, pps: plan.pps || 0'), 'wiring');
+    }
     check('a model on this PC shares nothing, however free it is', require(path.join(ROOT, 'src/backend/team.js')).sharesData('local/m.gguf', { prompt: 0, completion: 0 }) === null, 'shares');
     const Ml = read('src/main/main.js');
     check('the app loads the local model a run needs (one at a time), gives it the engine\'s context, lists local models free, and stops the engine on quit',

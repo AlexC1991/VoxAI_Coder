@@ -141,6 +141,56 @@ async function postLocal(body, signal) {
 }
 
 /**
+ * Watches a local request's real speed through the engine's /slots. Another program using the CPU
+ * took the 7B from 13.5 to 0.7 tokens/s: its Team coder sat 15 minutes, wrote nothing, and nobody
+ * was told why. Far below the speed measured when tuning (localEndpoint.expected) for 20 s says so
+ * once (onSlow); with stopAfterMs, still that slow after that long calls stop.
+ */
+function watchLocalSpeed({ onSlow, stop, stopAfterMs = 0 } = {}) {
+  const base = typeof localEndpoint.url === 'function' ? localEndpoint.url() : null;
+  if (!base) return { stop() {} };
+  const every = Number(localEndpoint.slowCheckMs) || 5000;
+  let exp = {}; try { exp = (typeof localEndpoint.expected === 'function' && localEndpoint.expected()) || {}; } catch {}
+  // Unmeasured (a sidecar plan, or the CPU only): low floors, so a slow PC's usual speed is not "slow".
+  const floorOut = exp.tps > 0 ? Math.max(1.5, exp.tps * 0.3) : 1.5;
+  const floorIn = exp.pps > 0 ? Math.max(10, exp.pps * 0.15) : 15;
+  const seen = [];
+  let slowSince = 0, told = false, ended = false, busy = false;
+  const t = setInterval(async () => {
+    if (busy || ended) return;
+    busy = true;
+    try {
+      let s = null;
+      try { const r = await fetch(base + '/slots', { signal: AbortSignal.timeout(Math.max(1000, every)) }); s = r.ok ? (await r.json())[0] : null; } catch { /* no reading this time */ }
+      if (ended) return;
+      if (!s || !s.is_processing) { seen.length = 0; slowSince = 0; return; }
+      const nt = (Array.isArray(s.next_token) ? s.next_token[0] : s.next_token) || {};
+      const now = { at: Date.now(), task: s.id_task, out: Number(nt.n_decoded) || 0, inDone: Number(s.n_prompt_tokens_processed) || 0 };
+      // Only this request, in this phase (reading the prompt, or writing), over the last ~30 s.
+      while (seen.length && (seen[0].task !== now.task || (seen[0].out > 0) !== (now.out > 0) || now.at - seen[0].at > every * 6.5)) seen.shift();
+      seen.push(now);
+      const first = seen[0];
+      if (now.at - first.at < every * 4) return;
+      const writing = now.out > 0;
+      const span = (now.at - first.at) / 1000;
+      const rate = writing ? (now.out - first.out) / span : (now.inDone - first.inDone) / span;
+      if (rate >= (writing ? floorOut : floorIn)) { slowSince = 0; return; }
+      if (!slowSince) slowSince = first.at;
+      const usual = writing ? exp.tps : exp.pps;
+      const info = {
+        phase: writing ? 'writing' : 'reading', rate: Math.round(rate * 10) / 10, usual: usual || 0,
+        message: `The local model is ${writing ? 'writing' : 'reading its prompt'} at ${Math.round(rate * 10) / 10} tokens/s`
+          + (usual ? ` (${usual} is usual on this PC)` : '')
+          + ': something else is using the CPU or graphics card. Close heavy programs, or pick a cloud model.',
+      };
+      if (!told) { told = true; try { onSlow && onSlow(info); } catch { /* listener gone */ } }
+      if (stopAfterMs > 0 && now.at - slowSince >= stopAfterMs) { ended = true; clearInterval(t); try { stop && stop(info); } catch { /* already ended */ } }
+    } finally { busy = false; }
+  }, every);
+  return { stop() { ended = true; clearInterval(t); } };
+}
+
+/**
  * A local model that writes its tool call as text instead of making one. Qwen2.5-Coder-7B answered
  * a write request with ```xml {{"name": "write", "arguments": {...}}} ```, copying the template's
  * own example. A JSON object naming one of the offered tools, with arguments, is taken as the call.
@@ -179,15 +229,38 @@ function scanToolCalls(text, names) {
 
 async function chatCompletions(opts) {
   if (isLocal(opts && opts.model)) {
-    const { model, messages, tools, maxTokens = 16384, temperature, signal, onEvent } = opts;
-    const res = await postLocal({
-      model, messages, stream: true, stream_options: { include_usage: true },
-      max_tokens: Math.min(maxTokens, 8192),
-      ...(temperature !== undefined ? { temperature } : {}),
-      ...(tools && tools.length ? { tools } : {}),
-    }, signal);
-    // Reading a long prompt on this PC can take minutes before the first token: a longer wait.
-    return recoverToolCalls(await consumeSSE(res.body, onEvent, 600000), tools);
+    const { model, messages, tools, maxTokens = 16384, temperature, signal, onEvent, slowStopMs = 0 } = opts;
+    // Its own abort, so a request too slow to finish can be ended here and say why.
+    const own = new AbortController();
+    const onOuter = () => own.abort();
+    if (signal) { if (signal.aborted) own.abort(); else signal.addEventListener('abort', onOuter, { once: true }); }
+    let tooSlow = null;
+    const watch = watchLocalSpeed({
+      onSlow: (info) => {
+        try { onEvent && onEvent({ slow: info }); } catch { /* listener gone */ }
+        try { typeof localEndpoint.onSlow === 'function' && localEndpoint.onSlow(info); } catch { /* no window */ }
+      },
+      stopAfterMs: slowStopMs,
+      stop: (info) => { tooSlow = info; own.abort(); },
+    });
+    try {
+      const res = await postLocal({
+        model, messages, stream: true, stream_options: { include_usage: true },
+        max_tokens: Math.min(maxTokens, 8192),
+        ...(temperature !== undefined ? { temperature } : {}),
+        ...(tools && tools.length ? { tools } : {}),
+      }, own.signal);
+      // Reading a long prompt on this PC can take minutes before the first token: a longer wait.
+      return recoverToolCalls(await consumeSSE(res.body, onEvent, 600000), tools);
+    } catch (e) {
+      if (tooSlow && !(signal && signal.aborted)) {
+        throw Object.assign(new Error(`${tooSlow.message} Stopped after ${Math.round(slowStopMs / 60000) || 1} min at that speed.`), { status: 0, localSlow: tooSlow });
+      }
+      throw e;
+    } finally {
+      watch.stop();
+      if (signal) signal.removeEventListener('abort', onOuter);
+    }
   }
   const {
     apiKey, host = DEFAULT_HOST, model, messages, tools,
@@ -538,4 +611,4 @@ async function chatOnce({ apiKey, host = DEFAULT_HOST, model, messages, maxToken
   return JSON.parse(text);
 }
 
-module.exports = { chatCompletions, chatOnce, responseError, freeUse, localEndpoint, isLocal, recoverToolCalls, DEFAULT_HOST, applyCacheBreakpoints, cacheMode, reasoningParam, normalizeReasoning, nearestEffort, EFFORTS };
+module.exports = { chatCompletions, chatOnce, responseError, freeUse, localEndpoint, isLocal, recoverToolCalls, watchLocalSpeed, DEFAULT_HOST, applyCacheBreakpoints, cacheMode, reasoningParam, normalizeReasoning, nearestEffort, EFFORTS };
