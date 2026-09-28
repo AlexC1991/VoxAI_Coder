@@ -229,7 +229,15 @@ const RISKY = [
   [/\b(curl|wget)(\.exe)?\s[^|]*(\s-F\b|--form\b|\s-T\b|--upload-file|--data-binary\s+@|\s-d\s+@)/i, 'it uploads a file'],
   [/\|\s*(sh|bash|zsh|iex|invoke-expression|powershell|pwsh|cmd)(\.exe)?\b|\biex\s*\(|invoke-expression/i, 'it downloads and runs a script'],
   [/\b(setx|reg(\.exe)?\s+(add|delete|import)|schtasks|sc(\.exe)?\s+(create|config|delete|stop|start)|net\s+(user|localgroup|share|stop|start)|netsh\b|bcdedit|set-executionpolicy|new-service|set-service|icacls|takeown|attrib\s+.*\+s)/i, 'it changes system settings, services, accounts or permissions'],
-  [/\b(shutdown|restart-computer|stop-computer|format(\.com)?\s+[a-z]:|diskpart|cipher\s+\/w)\b/i, 'it restarts the PC or wipes a drive'],
+  [/\b(shutdown|restart-computer|stop-computer|diskpart|cipher\s+\/w)\b|\bformat(\.com)?\s+[a-z]:/i, 'it restarts the PC or wipes a drive'],
+  // Since 2026-09-28 nothing checks what these rules do not name (Auto is the leading model's
+  // call), and scripts/auto-battery.js found these ran with nobody asked.
+  [/\bdocker(\.exe)?\s+(system\s+prune|volume\s+(rm|prune)|image\s+prune|rmi\b|push\b|login\b)|\bdocker(-|\s+)compose\s+down\b[^&|;]*(\s-v\b|--volumes)/i, 'it deletes Docker images or volumes, or pushes an image'],
+  [/\b(kubectl\s+(apply|delete|create|replace|patch|scale|rollout|drain|cordon)|helm\s+(install|upgrade|uninstall|delete|rollback)|terraform\s+(apply|destroy|import)|pulumi\s+(up|destroy)|firebase\s+deploy|netlify\s+deploy|fly(ctl)?\s+deploy|wrangler\s+(deploy|publish)|serverless\s+deploy|sls\s+deploy|eb\s+deploy|heroku\s+\S)|\bvercel\b[^&|;]*(--prod|\sdeploy\b)|\bgcloud\s[^&|;]*\b(deploy|delete|create)\b|\baz\s[^&|;]*\b(create|delete|deploy)\b|\baws\s+(s3\s+(cp|mv|rm|sync|rb)\b|[a-z0-9-]+\s+(create|delete|put|update|terminate|run)-)/i, 'it deploys or changes cloud infrastructure'],
+  [/\b(mysql|psql|mongo|mongosh|redis-cli|sqlcmd)(\.exe)?\b[^&|;]*\s(-h|--host|-S)[= ]?(?!localhost\b|127\.0\.0\.1\b|\.\b|\(local\))[\w.-]+|\b(postgres(ql)?|mysql|mongodb(\+srv)?|redis):\/\/(?![^\/\s]*@?(localhost|127\.0\.0\.1)\b)/i, 'it works on a database on another machine'],
+  [/\bssh(\.exe)?\s+(?!-V\b)/i, 'it runs commands on another machine'],
+  [/\b(invoke-webrequest|iwr|curl|wget|start-bitstransfer)(\.exe)?\b[^|&;]*(-outfile|\s-o\b|--output|\s>)\s*\S+\.(exe|msi|ps1|bat|cmd|vbs|sh|scr)\b/i, 'it downloads a program or script to run'],
+  [/\b(npm|pnpm|yarn)(\.cmd)?\s+config\s+(set|delete|edit)\b|\bnpm\s+set\s|\bpip3?\s+config\s+(set|unset)\b/i, 'it changes tool settings for the whole machine'],
   [/\b(del|erase|rd|rmdir|remove-item|rm)\b[^&|;]*(\s\/s\b|\s-r|\s-recurse)[^&|;]*(\*|\s\.(\s|$)|\s\.\\?\*)/i, 'it deletes everything in the folder'],
 ];
 // Folders a build or an install makes again: deleting them loses nothing.
@@ -253,6 +261,9 @@ function riskyCommand(cmd, workdir) {
     if (targets.some((t) => /[*?]/.test(t))) return 'it deletes many files at once';
     if (recursive && targets.some((t) => !DISPOSABLE.test(t))) return 'it deletes a whole folder';
   }
+  // A script from somewhere else (Downloads, another folder): the project's own scripts are its work.
+  const file = /\b(powershell|pwsh)(\.exe)?\b[^&|;]*\s-(file|f)\s+("([^"]+)"|(\S+))/i.exec(s);
+  if (file && touchesOutside(file[5] || file[6], workdir)) return 'it runs a script from outside the project';
   // Deleting or overwriting outside the project.
   if (/\b(del|erase|rd|rmdir|remove-item|rm|move|ren|copy|xcopy|robocopy)\b/i.test(s) && touchesOutside(s, workdir)) return 'it deletes or changes files outside the project folder';
   return '';

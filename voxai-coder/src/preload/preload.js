@@ -150,6 +150,7 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
 
   // OpenRouter account usage / credits
   openrouterUsage: () => ipcRenderer.invoke('openrouter:usage'),
+  openrouterKeys: () => ipcRenderer.invoke('openrouter:keys'),   // each key on the account and its spend (no secrets)
   openrouterGenerations: (opts) => ipcRenderer.invoke('openrouter:generations', opts || {}),
   openrouterModels: () => ipcRenderer.invoke('openrouter:models'),
   openrouterTestMgmt: (key) => ipcRenderer.invoke('openrouter:testMgmt', { key }),

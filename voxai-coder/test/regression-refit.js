@@ -1266,6 +1266,9 @@ async function drain(gen) {
     const MAIN2 = read('src/main/main.js');
     check('one copy of the app at a time', /if \(!app\.requestSingleInstanceLock\(\)\) \{\s*app\.quit\(\);\s*return;/.test(MAIN2) && MAIN2.includes("app.on('second-instance'"), 'copies pile up');
     check('focus reaches the updater', MAIN2.includes("app.on('browser-window-focus', () => { try { updater && updater.onFocus(); } catch {} });"), 'never on focus');
+    check('the updater keeps update.log (a Restart that did not install left nothing to read), logs each Restart and why it was refused, and the pill says so',
+      MAIN2.includes("const f = path.join(userData(), 'update.log');") && UP.includes('log(`restart pressed (state ${st.state}')
+      && read('src/renderer/index.html').includes("if (!ok) { $('updTxt').textContent = 'Could not restart into the update'; setTimeout(paintUpdate, 3000); }"), 'update.log');
     const REL = read('scripts/release.js');
     check('a release is named only after its files are attached', REL.indexOf("['attach', manifestPath]") < REL.indexOf("['release', `v${version}`"), 'named first');
     check('the release script checks the feed like an installed copy', REL.includes("if (bad.length) die(`the feed does not check out"), 'version string only');
@@ -2416,6 +2419,14 @@ async function drain(gen) {
     check('Team works in small steps with the same coder (one step ran 170 messages; each new coder re-read the whole game), and a stuck coder asks',
       /Keep steps small: one feature or one file at a time/.test(T.teamPrompt('x/y')) && /continue the same coder: spawn_agent with resume set to its subId/.test(T.teamPrompt('x/y'))
       && /stop and '\s*\+ 'report back with your question instead of guessing/.test(SPw) && A.includes('defaultSubMaxTurns: coderModel ? Math.max(30, Number(subagentMaxTurns) || 0) : subagentMaxTurns,'), 'steps');
+    check('text that piled up while the window was covered catches up fast and shows at once on return (it typed out for a minute)',
+      H.includes('const take = Math.min(left, Math.max(2, Math.ceil(left / 30)));') && H.includes("document.addEventListener('visibilitychange', () => {\n  if (document.visibilityState !== 'visible') return;"), 'typing');
+    check('a Team planner gets no mid-run plan nudges and does its bookkeeping alongside other calls (each lone update was a turn at its price)',
+      A.includes('else if (!(coderModel && !isSubAgent) && Array.isArray(session.todos) && session.todos.some((t) => t && !t.done)) {')
+      && /update the plan \(todo\) in the same turn as another call/.test(T.teamPrompt('x/y')), 'bookkeeping');
+    check('Account lists every key on the account with its spend today, this week and all time, VoxAI\'s marked (spending VoxAI did not do showed nowhere)',
+      read('src/main/main.js').includes("ipcMain.handle('openrouter:keys', async () => {") && read('src/preload/preload.js').includes("openrouterKeys: () => ipcRenderer.invoke('openrouter:keys'),")
+      && H.includes('id="btnKeys"') && H.includes('async function showKeys(){') && H.includes("if (k.voxai) name.appendChild(el('span', 'kt', 'VoxAI'));"), 'keys');
     const TP = T.teamPrompt('x/y');
     check('the planner trusts the coder\'s report and finishes: no re-reading whole files, listing or tidying, one look, no extra notes (its turns were most of Team\'s cost)',
       /Trust its report\. Do not re-read whole files it wrote, list folders or tidy up after it/.test(TP) && /Use one look of your own at the end, then finish/.test(TP)

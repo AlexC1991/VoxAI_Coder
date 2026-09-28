@@ -1755,6 +1755,30 @@ ipcMain.handle('openrouter:testMgmt', async (_e, { key } = {}) => {
   return out;
 });
 
+// Every key on the account and what each has spent (management key; read-only). Spending that
+// VoxAI's own numbers did not account for came from another key on the same account, and
+// nothing showed which one. OpenRouter lists names and masked labels, never the keys themselves.
+ipcMain.handle('openrouter:keys', async () => {
+  const auth = orAuth();
+  if (!auth || !auth.mgmt) return { ok: false, error: 'no-management-key' };
+  try {
+    const r = await fetch(auth.host + '/api/v1/keys', { headers: { Authorization: 'Bearer ' + auth.mgmt } });
+    if (!r.ok) return { ok: false, error: 'HTTP ' + r.status };
+    const list = ((await r.json()) || {}).data || [];
+    let mine = '';
+    if (auth.key) {
+      try { const k = await fetch(auth.host + '/api/v1/auth/key', { headers: { Authorization: 'Bearer ' + auth.key } }); if (k.ok) mine = String((((await k.json()) || {}).data || {}).label || ''); } catch {}
+    }
+    const num = (x) => (x == null || x === '' ? null : Number(x));
+    return { ok: true, keys: list.map((k) => ({
+      name: String(k.name || ''), label: String(k.label || ''), disabled: !!k.disabled,
+      usage: num(k.usage), daily: num(k.usage_daily), weekly: num(k.usage_weekly), monthly: num(k.usage_monthly),
+      limit: num(k.limit), created: k.created_at || '', updated: k.updated_at || '',
+      voxai: !!mine && String(k.label || '') === mine,
+    })) };
+  } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+});
+
 // Usage history — via the analytics API (management key). The older
 // /generation endpoint needs a generation id (list call gets 400), so we use
 // POST /api/v1/analytics/query which supports account-level spend by model.
@@ -2021,7 +2045,16 @@ ipcMain.handle('openrouter:generations', async (_e, { limit = 40, cursor } = {})
     updater = require('./updater').initUpdater({
       app,
       send: (st) => { const c = chatWebContents(); c && c.send('update:state', st); },
-      log: (m) => { try { console.log('[update] ' + m); } catch {} },
+      // Kept in a file too: a Restart that did not install (0.2.74, once) left nothing to look at,
+      // because the installed app's console goes nowhere. Cut back to its last half when it passes 200 KB.
+      log: (m) => {
+        try { console.log('[update] ' + m); } catch {}
+        try {
+          const f = path.join(userData(), 'update.log');
+          fs.appendFileSync(f, `${new Date().toISOString()} ${m}\n`);
+          if (fs.statSync(f).size > 200 * 1024) { const s = fs.readFileSync(f, 'utf8'); fs.writeFileSync(f, s.slice(s.length >> 1)); }
+        } catch { /* logging must never break updating */ }
+      },
     });
   } catch (e) { try { console.error('updater failed to start:', e && e.message); } catch {} }
   app.on('browser-window-focus', () => { try { updater && updater.onFocus(); } catch {} });

@@ -206,7 +206,8 @@ function initUpdater({ app, send, log = () => {} }) {
     // Back at the window after a while: a release may have landed since.
     onFocus: () => { if (Date.now() - lastCheck >= FOCUS_GAP) check(); },
     install: () => {
-      if (st.state !== 'ready' || test) return false;
+      log(`restart pressed (state ${st.state}${st.next ? ', ' + st.next : ''}${test ? ', test mode' : ''})`);
+      if (st.state !== 'ready' || test) { log('not installing: ' + (test ? 'test mode never installs' : 'no update is ready')); return false; }
       // Silent install, then start the new version.
       setImmediate(() => autoUpdater.quitAndInstall(true, true));
       // Still running well after that: the installer did not start. 0.2.27 shipped a

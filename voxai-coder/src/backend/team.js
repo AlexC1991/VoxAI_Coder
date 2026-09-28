@@ -133,6 +133,7 @@ function teamPrompt(coderModel, coderVision) {
 - Trust its report. Do not re-read whole files it wrote, list folders or tidy up after it: every turn of yours re-sends your whole context at your price. Read only the part in question when something is wrong, then send it back with the specific fix. If a step fails twice, do it yourself.
 - Make one- or two-line fixes yourself rather than handing them over. A bigger write, edit or patch from you is refused: that is the coder's.
 ${eyes}
+- Bookkeeping costs you turns: update the plan (todo) in the same turn as another call, such as spawn_agent or your look, never on its own; record build_state in the same turn as your last check.
 - Keep your own messages short. Your tokens cost many times the coder's.`;
 }
 

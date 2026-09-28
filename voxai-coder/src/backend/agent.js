@@ -1435,7 +1435,8 @@ async function* runAgent(opts) {
         // 7 ticked through two minutes of work), and the user follows it on the input bar.
         // After a few actions with open steps and no update, say so -- once per stretch.
         if (tc.name === 'todo') session._sincePlan = 0;
-        else if (Array.isArray(session.todos) && session.todos.some((t) => t && !t.done)) {
+        // Not for a Team planner: it mostly waits on the coder, and each nudge bought a turn at its price.
+        else if (!(coderModel && !isSubAgent) && Array.isArray(session.todos) && session.todos.some((t) => t && !t.done)) {
           session._sincePlan = (session._sincePlan || 0) + 1;
           if (session._sincePlan === PLAN_NUDGE_AFTER) {
             text += `\n\n[plan check] Your plan still shows open steps and has not been updated for ${PLAN_NUDGE_AFTER} actions. `

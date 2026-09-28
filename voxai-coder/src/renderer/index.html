@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-wQdZBVA9jraeYWvvIlWhbvVOaup+oKaiJngYMFXoP4U='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-bTKLwkOBoV8UxPEXg/7JamkY4cx84kTEn+CTgfTqD6U='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -205,6 +205,7 @@ tests"). Scroll the row instead of breaking words:
 /* Usage opens from Settings, so it goes on top of it: at the same level it opened
    underneath, half-hidden. Found in a live test. */
 #usageModalBg{z-index:60}
+.acct-keys{padding:4px 14px 12px;overflow-x:auto}.acct-keys table{width:100%;border-collapse:collapse;font-size:12px}.acct-keys th{color:var(--mut);font-weight:500;text-align:right;padding:4px 6px}.acct-keys th:first-child,.acct-keys td:first-child{text-align:left}.acct-keys td{padding:5px 6px;text-align:right;border-top:1px solid var(--edge);font-variant-numeric:tabular-nums}.acct-keys .kt{font-size:10px;color:var(--gold);margin-left:6px}.acct-keys .ks{color:var(--mut);font-family:"Sometype Mono",monospace;font-size:11px}.acct-keys .ke{color:var(--mut);padding:6px 0}
 .modal-bg.show{display:flex}
 /* ---- Settings: a sheet with sections ----
    It was one 560px column of 17 fields: API keys next to "hard limit fraction",
@@ -1226,7 +1227,7 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
       <header class="set-top"><h3>Account</h3><p>Your OpenRouter keys. Stored in the OS keychain when available and only ever sent to OpenRouter.</p></header>
       <div class="set-scroll">
         <div class="set-group"><div class="set-row wide"><div class="set-txt"><div class="set-lbl">OpenRouter key</div><div class="set-desc">Every model call and web search is billed to this key.</div></div><div class="set-ctl"><div class="keyrow"><input id="fKey" type="password" placeholder="sk-or-v1-…" autocomplete="off" aria-label="OpenRouter key"><button class="btn ghost" id="btnTest" type="button">Test</button></div><div class="set-state" id="keyState">not set</div></div></div><div class="set-row wide"><div class="set-txt"><div class="set-lbl">Management key <span class="opt">optional</span></div><div class="set-desc">Adds your full account usage history. Not needed to run the agent.</div></div><div class="set-ctl"><div class="keyrow"><input id="fMgmtKey" type="password" placeholder="sk-or-v1-…" autocomplete="off" aria-label="Management key"><button class="btn ghost" id="btnTestMgmt" type="button">Test</button></div><div class="set-state" id="mgmtKeyState">not set</div></div></div><div class="set-actions"><span class="set-hint">Keys are saved only when you press Save keys.</span><button class="btn" id="btnSave" type="button">Save keys</button></div></div>
-        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Balance</div><div class="set-desc">Read from OpenRouter when the app starts and after each run.</div></div><div class="set-ctl"><div class="bal"><b id="acctBalance">—</b></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Usage history</div><div class="set-desc">Per-model spend on this key.</div></div><div class="set-ctl"><button class="btn ghost" id="btnUsage" type="button">Open usage</button></div></div></div>
+        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Balance</div><div class="set-desc">Read from OpenRouter when the app starts and after each run.</div></div><div class="set-ctl"><div class="bal"><b id="acctBalance">—</b></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Usage history</div><div class="set-desc">Per-model spend on this key.</div></div><div class="set-ctl"><button class="btn ghost" id="btnUsage" type="button">Open usage</button></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Keys on this account</div><div class="set-desc">What each key has spent, to spot spending that is not VoxAI’s. Needs the management key.</div></div><div class="set-ctl"><button class="btn ghost" id="btnKeys" type="button">Show keys</button></div></div><div class="acct-keys" id="acctKeys" hidden></div></div>
         <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Updates</div><div class="set-desc" id="updDesc">Checks for new versions shortly after the app starts, every 30 minutes, and when you come back to the window.</div></div><div class="set-ctl"><button class="btn ghost" id="btnUpdCheck" type="button">Check now</button></div></div></div>
       </div>
     </section>
@@ -2442,7 +2443,11 @@ function startTyping(v){
   if(v.typeTimer) return;
   v.typeTimer = setInterval(function(){
     if(!v.curStream || !v.pending){ stopTyping(v); return; }
-    const take = Math.min(2, v.pending.length - v.pi);
+    // 2 a tick reads as typing; behind by more than that it catches up in about half a second.
+    // With the window covered, Chromium slows this timer to once a second or less, and a long
+    // answer then typed itself out for a minute after you came back to it.
+    const left = v.pending.length - v.pi;
+    const take = Math.min(left, Math.max(2, Math.ceil(left / 30)));
     v.shown += v.pending.slice(v.pi, v.pi + take);
     v.pi += take;
     if(v.pi >= v.pending.length){ v.pending = ''; v.pi = 0; }
@@ -2457,6 +2462,11 @@ function flushTyping(v){
   stopTyping(v);
   if(v.pending){ v.shown += v.pending.slice(v.pi); v.pending = ''; v.pi = 0; }
 }
+// Back at the window: whatever arrived while it was covered shows at once, not typed out.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  for (const v of viewStore.values()) if (v && v.pending && v.curStream) { flushTyping(v); try { paintTyped(v); } catch {} }
+});
 function paintStream(){ const v = RT(); if(v && v.curStream) paintTyped(v); }
 // A block that only ever got whitespace (a model's "\n\n" before a tool call) is
 // removed, not kept: empty, it still took a slot in the thread's spacing and left a
@@ -5857,6 +5867,37 @@ function openUsage(){
 }
 function closeUsage(){ $('usageModalBg').classList.remove('show'); }
 if ($('btnUsage')) $('btnUsage').onclick = openUsage;
+/** Each key on the account and its spend, VoxAI's marked: the rest is spending VoxAI did not do. */
+async function showKeys(){
+  const box = $('acctKeys'); if (!box) return;
+  box.hidden = false; box.innerHTML = '<div class="ke">Loading…</div>';
+  let r = null;
+  try { r = await window.voxai.openrouterKeys(); } catch (e) { r = { ok: false, error: String((e && e.message) || e) }; }
+  if (!r || !r.ok) {
+    box.innerHTML = '';
+    box.appendChild(el('div', 'ke', r && r.error === 'no-management-key' ? 'Add a management key above to see every key on the account.' : 'Could not load the keys (' + esc((r && r.error) || 'no answer') + ').'));
+    return;
+  }
+  const money = (x) => (x == null ? '—' : '$' + Number(x).toFixed(Number(x) < 1 ? 3 : 2));
+  const keys = (r.keys || []).slice().sort((a, b) => (Number(b.daily) || 0) - (Number(a.daily) || 0) || (Number(b.usage) || 0) - (Number(a.usage) || 0));
+  const t = el('table');
+  t.innerHTML = '<thead><tr><th>Key</th><th>Today</th><th>This week</th><th>All time</th></tr></thead>';
+  const tb = el('tbody');
+  for (const k of keys) {
+    const tr = el('tr');
+    const name = el('td');
+    name.appendChild(document.createTextNode(k.name || '(no name)'));
+    if (k.voxai) name.appendChild(el('span', 'kt', 'VoxAI'));
+    if (k.disabled) name.appendChild(el('span', 'kt', 'off'));
+    const lab = el('div', 'ks'); lab.textContent = k.label || ''; name.appendChild(lab);
+    tr.appendChild(name);
+    for (const v of [k.daily, k.weekly, k.usage]) { const td = el('td'); td.textContent = money(v); tr.appendChild(td); }
+    tb.appendChild(tr);
+  }
+  t.appendChild(tb);
+  box.innerHTML = ''; box.appendChild(t);
+}
+if ($('btnKeys')) $('btnKeys').onclick = showKeys;
 $('btnUsageClose').onclick = closeUsage;
 $('btnUsageMore').onclick = () => loadUsage(false);
 $('usageModalBg').addEventListener('click', (e)=>{ if(e.target.id === 'usageModalBg') closeUsage(); });
@@ -7424,7 +7465,8 @@ async function restartIntoUpdate(){
   if (anyRunBusy()) { $('updTxt').textContent = 'Stop or finish the run first'; setTimeout(paintUpdate, 2500); return; }
   $('updTxt').textContent = 'Restarting\u2026';
   const ok = await window.voxai.updates.install();
-  if (!ok) paintUpdate();
+  // It said "ready" and then quietly went back to "ready": say it did not go ahead (update.log says why).
+  if (!ok) { $('updTxt').textContent = 'Could not restart into the update'; setTimeout(paintUpdate, 3000); }
 }
 if (window.voxai && window.voxai.updates) {
   $('updPill').onclick = () => { if (UPD.state === 'ready') restartIntoUpdate(); else if (UPD.state === 'refused') $('updPill').hidden = true; };
