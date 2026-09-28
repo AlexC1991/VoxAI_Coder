@@ -2485,9 +2485,17 @@ async function drain(gen) {
     const gguf = path.join(WD, 'test-layers.gguf');
     fs.writeFileSync(gguf, Buffer.concat([head, kv('general.architecture', 8, sv('qwen2')), kv('qwen2.block_count', 4, u32(28))]));
     check('the layer count comes from the GGUF header, so tuning works for any model', LE.ggufLayers(gguf) === 28, LE.ggufLayers(gguf));
+    const moeHead = Buffer.from(head); moeHead.writeBigUInt64LE(3n, 16);
+    const moe = path.join(WD, 'test-moe.gguf');
+    fs.writeFileSync(moe, Buffer.concat([moeHead, kv('general.architecture', 8, sv('qwen3moe')), kv('qwen3moe.block_count', 4, u32(48)), kv('qwen3moe.expert_count', 4, u32(128))]));
+    const mi = LE.ggufInfo(moe);
+    check('a mixture-of-experts model is told apart by its header (Qwen3-Coder-30B-A3B: 48 layers, 128 experts)', mi.layers === 48 && mi.experts === 128 && LE.ggufInfo(gguf).experts === 0, mi);
     const LS = read('src/main/local-engine.js');
+    check('it is tuned by how many layers\' experts stay in RAM, every layer on the GPU, and loaded that way',
+      LS.includes("const r = await trial(model, 999, ctx, threads, cmoe);") && LS.includes("'-c', String(t.ctx), ...moeArgs(t.cmoe)]")
+      && LE.moeArgs(36).join(' ') === '--n-cpu-moe 36' && LE.moeArgs(0).length === 0 && LE.moeArgs(undefined).length === 0, 'moe');
     check('with no plan it tunes once on this PC: from all layers down at the real context, fastest turn kept (the RX 6600 spilled at all 28, ran best at 26)',
-      LS.includes('const tries = [999, n - 2, n - 4, n - 6, n - 10, n - 14]') && LS.includes('else if (best && r && r.turn > best.turn * 1.25) break;') && LS.includes("const tuneFile = () => path.join(base(), 'tune.json');")
+      LS.includes('const tries = experts > 0 ? [] : [999, n - 2, n - 4, n - 6, n - 10, n - 14]') && LS.includes('else if (best && r && r.turn > best.turn * 1.25) break;') && LS.includes("const tuneFile = () => path.join(base(), 'tune.json');")
       && LS.includes("let plan = m && m.sidecar ? planLoad(m.sidecar, dev, threads) : null;"), 'tune');
     check('the engine lives beside your first models folder (not C:), checks free space first, and unpacks with Windows tar', LS.includes("const exeOf = () => path.join(dirOf(), 'llama-server.exe');") && LS.includes("'System32', 'tar.exe')") && !LS.includes('.exeOf()') && LS.includes('if (free < ENGINE.bytes * 5)') && read('src/main/main.js').includes("path.join(localModelDirs()[0], '.voxai-engine')"), 'engine dir');
     const ORl = require(path.join(ROOT, 'src/backend/providers/openrouter.js'));
@@ -2528,12 +2536,13 @@ async function drain(gen) {
     {
       // A busy PC: the engine's /slots shows the answer crawling (0.7 tokens/s against 13.5 when tuned).
       const fetch2 = global.fetch;
-      const fakeEngine = (perSample) => {
+      const fakeEngine = (perSample, said = '') => {
         let out = 5;
         return async (u, init) => {
           if (String(u).endsWith('/slots')) { out += perSample; return { ok: true, json: async () => [{ id_task: 7, is_processing: true, n_prompt_tokens_processed: 900, next_token: [{ n_decoded: out }] }] }; }
           const sig = init && init.signal;
           return { ok: true, body: new ReadableStream({ start(c) {
+            if (said) c.enqueue(new TextEncoder().encode('data: ' + JSON.stringify({ choices: [{ delta: { content: said } }] }) + '\n\n'));
             // Never finishes on its own: only an abort ends it (the starved 7B took 15 minutes).
             const end = () => { try { c.error(Object.assign(new Error('This operation was aborted'), { name: 'AbortError' })); } catch {} };
             if (sig) { if (sig.aborted) end(); else sig.addEventListener('abort', end, { once: true }); }
@@ -2561,15 +2570,37 @@ async function drain(gen) {
       };
       const okOut = await ORl.chatCompletions({ model: 'local/m.gguf', messages: [{ role: 'user', content: 'x' }], tools, slowStopMs: 400, onEvent: () => {} });
       check('at its usual speed nothing is said', told.length === 0 && okOut.content === 'ok', told);
+      // Slow but still getting somewhere (3 of 13.5 tokens/s, as with Brave busy): said, not stopped.
+      const crawl = fakeEngine(0.12);
+      global.fetch = async (u, init) => {
+        if (String(u).endsWith('/slots')) return crawl(u, init);
+        const enc = new TextEncoder();
+        return { ok: true, body: new ReadableStream({ start(c) { setTimeout(() => { c.enqueue(enc.encode('data: {"choices":[{"delta":{"content":"done"}}]}\n\ndata: [DONE]\n\n')); c.close(); }, 900); } }) };
+      };
+      const slowOut = await ORl.chatCompletions({ model: 'local/m.gguf', messages: [{ role: 'user', content: 'x' }], tools, slowStopMs: 300, onEvent: () => {} });
+      check('slow but not starved (3 of 13.5 tokens/s) is said but never stopped: a Team coder was stopped at 3.5 while still getting somewhere', told.length === 1 && /writing at [1-3](\.\d)? tokens\/s/.test(told[0].message) && slowOut.content === 'done', told.map((i) => i.message));
+      told.length = 0;
+      // Reading a prompt: the engine's count jumps in 2,048-token chunks, showing 0 in between.
+      let polls = 0;
+      global.fetch = async (u, init) => {
+        if (String(u).endsWith('/slots')) { polls++; return { ok: true, json: async () => [{ id_task: 9, is_processing: true, n_prompt_tokens_processed: polls > 12 ? 2048 : 0, next_token: [{ n_decoded: 0 }] }] }; }
+        const enc = new TextEncoder();
+        return { ok: true, body: new ReadableStream({ start(c) { setTimeout(() => { c.enqueue(enc.encode('data: {"choices":[{"delta":{"content":"read"}}]}\n\ndata: [DONE]\n\n')); c.close(); }, 700); } }) };
+      };
+      ORl.localEndpoint.expected = () => ({ tps: 6.4, pps: 79 });
+      const readOut = await ORl.chatCompletions({ model: 'local/m.gguf', messages: [{ role: 'user', content: 'x' }], tools, slowStopMs: 300, onEvent: () => {} });
+      ORl.localEndpoint.expected = () => ({ tps: 13.5, pps: 326 });
+      check('a prompt read in 2,048-token chunks (0 shown between them) is not called slow: the 30B read at 79 tokens/s was told "0 tokens/s"', told.length === 0 && readOut.content === 'read' && polls > 12, { told: told.map((i) => i.message), polls });
       // A Team coder on the starved engine: its step fails fast, with the reason for the planner.
-      global.fetch = fakeEngine(0);
+      global.fetch = fakeEngine(0, 'Writing the page');
       process.env.VOX_LOCAL_SLOW_STOP_MS = '400';
       const evC = await drain(runAgent({ session: { id: 'lm-slow', workdir: WD, messages: [] }, userText: 'make a page', apiKey: '', model: 'local/m.gguf', access: 'full', askPermission: async () => true, maxTurns: 3, isSubAgent: true }));
       delete process.env.VOX_LOCAL_SLOW_STOP_MS;
       global.fetch = fetch2; ORl.localEndpoint.url = () => null; ORl.localEndpoint.slowCheckMs = 0; ORl.localEndpoint.expected = null; ORl.localEndpoint.onSlow = null;
       const errC = evC.find((e) => e.type === 'error');
-      check('a Team coder on a starved engine stops with that reason (the planner reads it), not after 15 minutes', errC && /tokens\/s \(13\.5 is usual on this PC\)/.test(errC.message || errC.content || ''), evC.map((e) => e.type + ':' + String(e.message || '').slice(0, 80)));
+      check('a Team coder on a starved engine stops with that reason (the planner reads it), not after 15 minutes, and not called a dropped connection', errC && /tokens\/s \(13\.5 is usual on this PC\)/.test(errC.message || errC.content || '') && !/connection dropped/.test(errC.message || ''), evC.map((e) => e.type + ':' + String(e.message || '').slice(0, 80)));
       const Ms = read('src/main/main.js'), Hs = read('src/renderer/index.html');
+      check('a coder on this PC gets 30 minutes a step, not 15 (the 30B wrote a whole Breakout in 12 and ran out before reporting)', read('src/backend/agent.js').includes('defaultSubTimeoutMs: coderModel ? Math.max((isLocal(coderModel) ? 30 : 15) * 60 * 1000,'), 'timeout');
       check('the planner is told to stop and tell you, not re-send the step or do it itself', read('src/backend/agent.js').includes("/something else is using the CPU or graphics card/.test(String(s.error || ''))")
         && /something else is using the CPU or graphics card/.test((errC && (errC.message || errC.content)) || ''), 'note');
       check('the app measures against the tuned speeds and shows a slow engine as a toast, at most every 3 minutes', Ms.includes("localEndpoint.expected = () => { const s = localEngine.state(); return { tps: s.tps, pps: s.pps }; };")

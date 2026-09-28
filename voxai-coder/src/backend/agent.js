@@ -954,7 +954,9 @@ async function* runAgent(opts) {
         defaultSubModel: coderModel || subagentModel,
         // Team steps are small (team.js): a coder that ran 170 messages on one step left the planner waiting.
         defaultSubMaxTurns: coderModel ? Math.max(30, Number(subagentMaxTurns) || 0) : subagentMaxTurns,
-        defaultSubTimeoutMs: coderModel ? Math.max(15 * 60 * 1000, Number(subagentTimeoutMs) || 0) : subagentTimeoutMs,
+        // A coder on this PC writes slowly: the 30B wrote a 570-line Breakout in ~12 of its 15
+        // minutes and ran out before reporting, twice. The speed watch stops a starved one sooner.
+        defaultSubTimeoutMs: coderModel ? Math.max((isLocal(coderModel) ? 30 : 15) * 60 * 1000, Number(subagentTimeoutMs) || 0) : subagentTimeoutMs,
         // Sub-agents spend the PARENT's remaining allowance, never a fresh one.
         // Rebuilt each turn so a fan-out later in the run sees the depleted figure.
         budgetRemaining: Math.max(0, budget - spent), priceIn, priceOut, modelVision, visionOf, webSearch, onOpenUrl, onAttachAtlas, localContext },
@@ -1100,7 +1102,9 @@ async function* runAgent(opts) {
       // what it had written. Found in a live run. Keep it, and say what to do.
       if (content) {
         session.messages.push({ role: 'assistant', content });
-        yield { type: 'error', message: `The connection dropped part-way through the answer (${err.message}). What arrived is kept above; send "continue" to pick up from there.` };
+        // A local request stopped for crawling did not drop: say that, as it is (the planner reads it).
+        yield { type: 'error', message: err && err.localSlow ? err.message
+          : `The connection dropped part-way through the answer (${err.message}). What arrived is kept above; send "continue" to pick up from there.` };
         return;
       }
       // OpenRouter's refusals (a data policy, a free model's daily limit), said so they can be acted on.

@@ -84,14 +84,20 @@ function planLoad(sidecar, device, threads) {
   return { args, ctx: 0, how: 'sized by llama-server to the memory that is free (--fit)' };
 }
 
+/** llama-server arguments keeping the experts of the first N layers in RAM (none for a dense model). */
+const moeArgs = (cmoe) => (Number(cmoe) > 0 ? ['--n-cpu-moe', String(Number(cmoe))] : []);
+
 /**
  * A model's layer count, from its GGUF header ("<arch>.block_count"). Read from the first few MB:
  * the architecture keys come before the tokenizer's long arrays. 0 when it cannot tell.
  */
-function ggufLayers(file) {
+function ggufLayers(file) { return ggufInfo(file).layers; }
+/** { layers, experts } from a GGUF header: experts > 0 is a mixture-of-experts model (Qwen3-Coder-30B-A3B: 48 layers, 128 experts). */
+function ggufInfo(file) {
+  const info = { layers: 0, experts: 0 };
   let buf;
-  try { const fd = fs.openSync(file, 'r'); buf = Buffer.alloc(4 * 1024 * 1024); const n = fs.readSync(fd, buf, 0, buf.length, 0); fs.closeSync(fd); buf = buf.subarray(0, n); } catch { return 0; }
-  if (buf.toString('latin1', 0, 4) !== 'GGUF') return 0;
+  try { const fd = fs.openSync(file, 'r'); buf = Buffer.alloc(4 * 1024 * 1024); const n = fs.readSync(fd, buf, 0, buf.length, 0); fs.closeSync(fd); buf = buf.subarray(0, n); } catch { return info; }
+  if (buf.toString('latin1', 0, 4) !== 'GGUF') return info;
   let o = 24;   // magic, version, tensor count
   const kvCount = Number(buf.readBigUInt64LE(16));
   const size = { 0: 1, 1: 1, 2: 2, 3: 2, 4: 4, 5: 4, 6: 4, 7: 1, 10: 8, 11: 8, 12: 8 };
@@ -104,11 +110,14 @@ function ggufLayers(file) {
   try {
     for (let i = 0; i < kvCount && o < buf.length - 16; i++) {
       const key = str(); const t = buf.readUInt32LE(o); o += 4;
-      if (/\.block_count$/.test(key) && (t === 4 || t === 5)) return buf.readUInt32LE(o);
+      if (t === 4 || t === 5) {
+        if (/\.block_count$/.test(key)) info.layers = buf.readUInt32LE(o);
+        else if (/\.expert_count$/.test(key)) info.experts = buf.readUInt32LE(o);
+      }
       skip(t);
     }
   } catch { /* ran past what was read */ }
-  return 0;
+  return info;
 }
 
 function createLocalEngine({ baseDir, log = () => {}, onState = () => {} }) {
@@ -168,7 +177,16 @@ function createLocalEngine({ baseDir, log = () => {}, onState = () => {} }) {
     }
   }
 
-  async function devices() { return fs.existsSync(exeOf()) ? parseDevices(await run(['--list-devices'])) : []; }
+  // Asked right as the app started, it once found no card (0.2 s later it did) and a 30B model was
+  // loaded on the CPU alone. No card is believed only after asking twice more.
+  async function devices() {
+    if (!fs.existsSync(exeOf())) return [];
+    for (let i = 0; ; i++) {
+      const found = parseDevices(await run(['--list-devices']));
+      if (found.length || i >= 2) return found;
+      await sleep(2000);
+    }
+  }
 
   /** The .gguf files in a folder (vision projectors aside), each with its sidecar if it has one. */
   function models(folders) {
@@ -198,10 +216,10 @@ function createLocalEngine({ baseDir, log = () => {}, onState = () => {} }) {
   const readTune = () => { try { return JSON.parse(fs.readFileSync(tuneFile(), 'utf8')); } catch { return {}; } };
   const tuneKey = (file, bytes, dev) => [file, bytes, ENGINE.build, dev ? dev.name + ' ' + dev.totalMiB : 'cpu'].join('|');
   /** One load at `ngl` and `ctx`, timed on a request shaped like an agent turn. null if it failed. */
-  async function trial(model, ngl, ctx, threads) {
+  async function trial(model, ngl, ctx, threads, cmoe = 0) {
     const port = await freePort();
     const p = spawn(exeOf(), ['-m', model, '--host', '127.0.0.1', '--port', String(port), '-np', '1', '--no-webui', '--fit', 'off',
-      '-ngl', String(ngl), '-c', String(ctx), ...(threads ? ['-t', String(threads)] : [])], { cwd: dirOf(), windowsHide: true, stdio: 'ignore' });
+      '-ngl', String(ngl), '-c', String(ctx), ...(threads ? ['-t', String(threads)] : []), ...moeArgs(cmoe)], { cwd: dirOf(), windowsHide: true, stdio: 'ignore' });
     try {
       const t0 = Date.now();
       let up = false;
@@ -211,13 +229,14 @@ function createLocalEngine({ baseDir, log = () => {}, onState = () => {} }) {
         await sleep(500);
       }
       if (!up) return null;
-      const prompt = 'Summarise this in one line.\n' + 'The quick brown fox jumps over the lazy dog near the river bank. '.repeat(60);
+      // ~2,300 tokens, a real turn's size: at ~800 the 30B's reading measured 24 tokens/s, in use 79.
+      const prompt = 'Summarise this in one line.\n' + 'The quick brown fox jumps over the lazy dog near the river bank. '.repeat(180);
       const r = await (await fetch(`http://127.0.0.1:${port}/v1/chat/completions`, { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ model: 'x', messages: [{ role: 'user', content: prompt }], max_tokens: 48, temperature: 0 }) })).json();
       const tm = r && r.timings;
       if (!tm || !(tm.prompt_per_second > 0) || !(tm.predicted_per_second > 0)) return null;
       // Seconds for a typical agent turn: ~2,000 new prompt tokens in, ~200 out.
-      return { ngl, ctx, pp: Math.round(tm.prompt_per_second), tg: Math.round(tm.predicted_per_second * 10) / 10, turn: 2000 / tm.prompt_per_second + 200 / tm.predicted_per_second };
+      return { ngl, ctx, ...(cmoe ? { cmoe } : {}), pp: Math.round(tm.prompt_per_second), tg: Math.round(tm.predicted_per_second * 10) / 10, turn: 2000 / tm.prompt_per_second + 200 / tm.predicted_per_second };
     } catch { return null; } finally { try { p.kill(); } catch { /* gone */ } await sleep(1000); }
   }
   /** The fastest GPU split for this model on this PC: from all layers down, until it gets slower again. */
@@ -228,11 +247,24 @@ function createLocalEngine({ baseDir, log = () => {}, onState = () => {} }) {
     const saved = readTune()[key];
     if (saved) return saved;
     if (!dev) return null;   // no GPU: nothing to split
-    const n = ggufLayers(model) || 32;
+    const { layers, experts } = ggufInfo(model);
+    const n = layers || 32;
     // A model near half the card or more gets 16k of context; a small one 32k.
     const ctx = bytes > dev.totalMiB * 1048576 * 0.45 ? MIN_CTX : WANT_CTX;
-    const tries = [999, n - 2, n - 4, n - 6, n - 10, n - 14].filter((x, i, a) => x > 0 && a.indexOf(x) === i);
     let best = null;
+    if (experts > 0) {
+      // Mixture of experts: every layer on the GPU, the experts (most of the weights, few used per
+      // token) of the first N layers in RAM. From all of them in RAM (always fits) down, until it
+      // no longer fits or gets slower -- the card spilling into shared memory.
+      for (const cmoe of [n, n - 6, n - 12, n - 18, n - 24, n - 30, n - 36].filter((x) => x > 0)) {
+        set({ state: 'tuning', model: file, how: `finding the fastest split for this PC (experts of ${cmoe} of ${n} layers in RAM)` });
+        const r = await trial(model, 999, ctx, threads, cmoe);
+        log(`tune ${file}: experts of ${cmoe} layers in RAM -> ${r ? r.pp + ' in, ' + r.tg + ' out tok/s' : 'failed'}`);
+        if (r && (!best || r.turn < best.turn)) best = r;
+        else if (best && (!r || r.turn > best.turn * 1.25)) break;
+      }
+    }
+    const tries = experts > 0 ? [] : [999, n - 2, n - 4, n - 6, n - 10, n - 14].filter((x, i, a) => x > 0 && a.indexOf(x) === i);
     for (const ngl of tries) {
       set({ state: 'tuning', model: file, how: `finding the fastest GPU split for this PC (trying ${ngl === 999 ? 'all' : ngl} of ${n} layers)` });
       const r = await trial(model, ngl, ctx, threads);
@@ -262,8 +294,9 @@ function createLocalEngine({ baseDir, log = () => {}, onState = () => {} }) {
     let plan = m && m.sidecar ? planLoad(m.sidecar, dev, threads) : null;
     if (!plan || !plan.ctx) {
       const t = await tune(folder, file, dev, threads);
-      if (t) plan = { args: ['-t', String(threads), '--fit', 'off', '-ngl', String(t.ngl), '-c', String(t.ctx)], ctx: t.ctx, tps: t.tg, pps: t.pp,
-        how: `tuned for this PC: ${t.ngl === 999 ? 'all' : t.ngl} of ${t.layers} layers on the GPU, ${t.ctx.toLocaleString()} context (${t.tg} tokens/s)` };
+      if (t) plan = { args: ['-t', String(threads), '--fit', 'off', '-ngl', String(t.ngl), '-c', String(t.ctx), ...moeArgs(t.cmoe)], ctx: t.ctx, tps: t.tg, pps: t.pp,
+        how: `tuned for this PC: ${t.ngl === 999 ? 'all' : t.ngl} of ${t.layers} layers on the GPU`
+          + (t.cmoe ? ` (the experts of ${t.cmoe} in RAM)` : '') + `, ${t.ctx.toLocaleString()} context (${t.tg} tokens/s)` };
     }
     if (!plan) plan = planLoad(null, dev, threads);
     const port = await freePort();
@@ -331,4 +364,4 @@ function createLocalEngine({ baseDir, log = () => {}, onState = () => {} }) {
   };
 }
 
-module.exports = { createLocalEngine, planLoad, parseDevices, labelOf, ggufLayers, isLocalModel, fileOf, ENGINE, MIN_CTX, WANT_CTX };
+module.exports = { createLocalEngine, planLoad, parseDevices, labelOf, ggufLayers, ggufInfo, moeArgs, isLocalModel, fileOf, ENGINE, MIN_CTX, WANT_CTX };

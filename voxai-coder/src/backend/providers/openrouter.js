@@ -146,6 +146,7 @@ async function postLocal(body, signal) {
  * was told why. Far below the speed measured when tuning (localEndpoint.expected) for 20 s says so
  * once (onSlow); with stopAfterMs, still that slow after that long calls stop.
  */
+const READ_CHUNK = 2048;   // llama-server's default batch: how far a prompt's count jumps at a time
 function watchLocalSpeed({ onSlow, stop, stopAfterMs = 0 } = {}) {
   const base = typeof localEndpoint.url === 'function' ? localEndpoint.url() : null;
   if (!base) return { stop() {} };
@@ -154,6 +155,10 @@ function watchLocalSpeed({ onSlow, stop, stopAfterMs = 0 } = {}) {
   // Unmeasured (a sidecar plan, or the CPU only): low floors, so a slow PC's usual speed is not "slow".
   const floorOut = exp.tps > 0 ? Math.max(1.5, exp.tps * 0.3) : 1.5;
   const floorIn = exp.pps > 0 ? Math.max(10, exp.pps * 0.15) : 15;
+  // Stopping takes far worse: a Team coder at 3.5 of 13.5 tokens/s (Brave busy) was still getting
+  // somewhere and was stopped; the starved case was 0.7.
+  const starveOut = exp.tps > 0 ? Math.max(0.8, exp.tps * 0.12) : 0.8;
+  const starveIn = exp.pps > 0 ? Math.max(5, exp.pps * 0.05) : 5;
   const seen = [];
   let slowSince = 0, told = false, ended = false, busy = false;
   const t = setInterval(async () => {
@@ -166,25 +171,32 @@ function watchLocalSpeed({ onSlow, stop, stopAfterMs = 0 } = {}) {
       if (!s || !s.is_processing) { seen.length = 0; slowSince = 0; return; }
       const nt = (Array.isArray(s.next_token) ? s.next_token[0] : s.next_token) || {};
       const now = { at: Date.now(), task: s.id_task, out: Number(nt.n_decoded) || 0, inDone: Number(s.n_prompt_tokens_processed) || 0 };
-      // Only this request, in this phase (reading the prompt, or writing), over the last ~30 s.
-      while (seen.length && (seen[0].task !== now.task || (seen[0].out > 0) !== (now.out > 0) || now.at - seen[0].at > every * 6.5)) seen.shift();
+      const writing = now.out > 0;
+      // Only this request, in this phase: writing over the last ~30 s; reading since it began, as
+      // the engine counts a prompt in chunks of up to 2,048 tokens -- a 30B read at 79 tokens/s
+      // showed 0 read for 18 s, and was called "reading at 0 tokens/s".
+      while (seen.length && (seen[0].task !== now.task || (seen[0].out > 0) !== writing || (writing && now.at - seen[0].at > every * 6.5))) seen.shift();
       seen.push(now);
       const first = seen[0];
       if (now.at - first.at < every * 4) return;
-      const writing = now.out > 0;
       const span = (now.at - first.at) / 1000;
       const rate = writing ? (now.out - first.out) / span : (now.inDone - first.inDone) / span;
-      if (rate >= (writing ? floorOut : floorIn)) { slowSince = 0; return; }
-      if (!slowSince) slowSince = first.at;
+      // Reading is judged generously: as if a whole chunk were already done, unseen.
+      const judged = writing ? rate : (now.inDone - first.inDone + READ_CHUNK) / span;
+      if (judged >= (writing ? floorOut : floorIn)) { slowSince = 0; return; }
+      // Slow but not starved: said, never stopped for.
+      if (judged >= (writing ? starveOut : starveIn)) slowSince = 0;
+      else if (!slowSince) slowSince = first.at;
       const usual = writing ? exp.tps : exp.pps;
       const info = {
         phase: writing ? 'writing' : 'reading', rate: Math.round(rate * 10) / 10, usual: usual || 0,
-        message: `The local model is ${writing ? 'writing' : 'reading its prompt'} at ${Math.round(rate * 10) / 10} tokens/s`
+        message: (writing ? `The local model is writing at ${Math.round(rate * 10) / 10} tokens/s`
+          : `The local model has read its prompt at under ${Math.max(1, Math.round(judged))} tokens/s for ${Math.round(span)} s`)
           + (usual ? ` (${usual} is usual on this PC)` : '')
           + ': something else is using the CPU or graphics card. Close heavy programs, or pick a cloud model.',
       };
       if (!told) { told = true; try { onSlow && onSlow(info); } catch { /* listener gone */ } }
-      if (stopAfterMs > 0 && now.at - slowSince >= stopAfterMs) { ended = true; clearInterval(t); try { stop && stop(info); } catch { /* already ended */ } }
+      if (stopAfterMs > 0 && slowSince && now.at - slowSince >= stopAfterMs) { ended = true; clearInterval(t); try { stop && stop(info); } catch { /* already ended */ } }
     } finally { busy = false; }
   }, every);
   return { stop() { ended = true; clearInterval(t); } };
