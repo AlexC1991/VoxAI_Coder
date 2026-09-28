@@ -115,7 +115,80 @@ function noteFree(model) {
   if (freeUse.onChange) { try { freeUse.onChange({ day: freeUse.day, n: freeUse.n }); } catch {} }
 }
 
+/**
+ * Models on this PC ("local/<file>", main/local-engine.js): llama-server's OpenAI-style endpoint,
+ * with none of OpenRouter's extras (routing, transforms, cache markers, reasoning, cost). main
+ * sets localEndpoint.url to a function giving the engine's address, or null while it is not running.
+ */
+const localEndpoint = { url: () => null };
+const isLocal = (model) => /^local\//.test(String(model || ''));
+async function postLocal(body, signal) {
+  const base = typeof localEndpoint.url === 'function' ? localEndpoint.url() : null;
+  if (!base) throw Object.assign(new Error('The local model is not running. Start it in Settings → Local models, or pick another model.'), { status: 0 });
+  let res;
+  try {
+    res = await fetch(base + '/v1/chat/completions', { method: 'POST', signal, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  } catch (e) {
+    if (e && e.name === 'AbortError') throw e;
+    throw Object.assign(new Error('The local engine stopped answering. Start it again in Settings → Local models.'), { status: 0 });
+  }
+  if (!res.ok || (body.stream && !res.body)) {
+    const text = await res.text().catch(() => '');
+    // 503: still loading, or busy with another request -- that passes.
+    throw Object.assign(new Error(`The local model refused the request (HTTP ${res.status}): ${String(text).replace(/\s+/g, ' ').slice(0, 200)}`), { status: res.status, retryable: res.status === 503 });
+  }
+  return res;
+}
+
+/**
+ * A local model that writes its tool call as text instead of making one. Qwen2.5-Coder-7B answered
+ * a write request with ```xml {{"name": "write", "arguments": {...}}} ```, copying the template's
+ * own example. A JSON object naming one of the offered tools, with arguments, is taken as the call.
+ */
+function recoverToolCalls(result, tools) {
+  if (!result || (result.toolCalls && result.toolCalls.length) || !tools || !tools.length) return result;
+  const names = new Set(tools.map((t) => t && t.function && t.function.name).filter(Boolean));
+  const raw = String(result.content || '');
+  // As written first; then with the template's doubled braces undone. Doing that first broke plain
+  // JSON, whose objects end in "}}" (the 7B's ```json {"name": "write", "arguments": {...}}```).
+  const found = scanToolCalls(raw, names);
+  const calls = found.length ? found : scanToolCalls(raw.replace(/\{\{/g, '{').replace(/\}\}/g, '}'), names);
+  return calls.length ? { ...result, content: '', toolCalls: calls, finishReason: 'tool_calls' } : result;
+}
+function scanToolCalls(text, names) {
+  const calls = [];
+  for (let i = text.indexOf('{'); i >= 0 && i < text.length; i = text.indexOf('{', i + 1)) {
+    let depth = 0, inStr = false, esc = false, end = -1;
+    for (let j = i; j < text.length; j++) {
+      const c = text[j];
+      if (inStr) { if (esc) esc = false; else if (c === '\\') esc = true; else if (c === '"') inStr = false; continue; }
+      if (c === '"') inStr = true; else if (c === '{') depth++; else if (c === '}' && --depth === 0) { end = j; break; }
+    }
+    if (end < 0) break;
+    try {
+      const o = JSON.parse(text.slice(i, end + 1));
+      const args = o && (o.arguments || o.parameters);
+      if (o && names.has(o.name) && args && typeof args === 'object') {
+        calls.push({ id: 'local_' + Date.now().toString(36) + calls.length, name: o.name, arguments: JSON.stringify(args) });
+        i = end;
+      }
+    } catch { /* not JSON: keep looking */ }
+  }
+  return calls;
+}
+
 async function chatCompletions(opts) {
+  if (isLocal(opts && opts.model)) {
+    const { model, messages, tools, maxTokens = 16384, temperature, signal, onEvent } = opts;
+    const res = await postLocal({
+      model, messages, stream: true, stream_options: { include_usage: true },
+      max_tokens: Math.min(maxTokens, 8192),
+      ...(temperature !== undefined ? { temperature } : {}),
+      ...(tools && tools.length ? { tools } : {}),
+    }, signal);
+    // Reading a long prompt on this PC can take minutes before the first token: a longer wait.
+    return recoverToolCalls(await consumeSSE(res.body, onEvent, 600000), tools);
+  }
   const {
     apiKey, host = DEFAULT_HOST, model, messages, tools,
     reasoningEffort = 'default', reasoningSpec, maxTokens = 16384, temperature,
@@ -341,7 +414,7 @@ function supportsReasoning(model) {
 }
 
 /** Minimal SSE consumer → accumulates content + tool_calls, forwards deltas. */
-async function consumeSSE(body, onEvent) {
+async function consumeSSE(body, onEvent, idleMs) {
   const reader = body.getReader();
   const decoder = new TextDecoder();
   let buf = '';
@@ -357,7 +430,7 @@ async function consumeSSE(body, onEvent) {
   // comments, so nothing ever timed out and the run waited for ever (a Muse Spark coder sat on
   // "Thinking" for 8+ minutes with the whole game's code attached). No real data -- text,
   // thinking, a tool call, usage -- for this long ends the request as a retryable error.
-  const IDLE_MS = Number(process.env.VOX_STREAM_IDLE_MS) || 180000;
+  const IDLE_MS = Number(process.env.VOX_STREAM_IDLE_MS) || idleMs || 180000;
   let lastReal = Date.now();
   const stall = () => {
     try { reader.cancel(); } catch { /* already closed */ }
@@ -447,6 +520,7 @@ async function consumeSSE(body, onEvent) {
 // `extra` merges into the request body (plugins, usage accounting, ...); `signal`
 // lets a caller abort. Both optional, so existing callers are unchanged.
 async function chatOnce({ apiKey, host = DEFAULT_HOST, model, messages, maxTokens = 64, extra = null, signal = undefined }) {
+  if (isLocal(model)) return JSON.parse(await (await postLocal({ model, messages, max_tokens: maxTokens, stream: false }, signal)).text());
   const res = await post(host, {
     method: 'POST',
     headers: {
@@ -464,4 +538,4 @@ async function chatOnce({ apiKey, host = DEFAULT_HOST, model, messages, maxToken
   return JSON.parse(text);
 }
 
-module.exports = { chatCompletions, chatOnce, responseError, freeUse, DEFAULT_HOST, applyCacheBreakpoints, cacheMode, reasoningParam, normalizeReasoning, nearestEffort, EFFORTS };
+module.exports = { chatCompletions, chatOnce, responseError, freeUse, localEndpoint, isLocal, recoverToolCalls, DEFAULT_HOST, applyCacheBreakpoints, cacheMode, reasoningParam, normalizeReasoning, nearestEffort, EFFORTS };

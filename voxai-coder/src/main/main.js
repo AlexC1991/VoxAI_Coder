@@ -120,6 +120,10 @@ function getSettings(redacted = true) {
     visionHelperModel: typeof raw.visionHelperModel === 'string' ? raw.visionHelperModel : 'deepseek/deepseek-v4.1-flash',
     // Auto's check of each action: a short yes/no, on a cheap model. '' = the session's own model.
     autoCheckModel: typeof raw.autoCheckModel === 'string' ? raw.autoCheckModel : 'deepseek/deepseek-v4.1-flash',
+    // Where the .gguf models for this PC are (local-engine.js), first one first. The engine lives in the
+    // first one too (.voxai-engine), on whatever drive you keep your models on, not C:.
+    localModelsDirs: Array.isArray(raw.localModelsDirs) ? raw.localModelsDirs.filter((d) => typeof d === 'string' && d.trim())
+      : (typeof raw.localModelsDir === 'string' && raw.localModelsDir.trim() ? [raw.localModelsDir] : []),
     // Claude keeps the conversation cached for an hour instead of five minutes (writes cost more).
     claudeCacheHour: raw.claudeCacheHour === true,
     splitLayout: raw.splitLayout && typeof raw.splitLayout === 'object' ? raw.splitLayout : null,
@@ -381,6 +385,30 @@ let atlasFrac = 0.5; // share of width given to chat (0..1)
 // Capability cache for the OpenRouter catalogue, populated by the `openrouter:models`
 // handler and consulted before a run starts. See assertModelUsable().
 let modelCapCache = { at: 0, byId: new Map() };
+
+// Models on this PC (local-engine.js): llama-server, started on demand. Its address goes to the
+// model code, which sends "local/..." model ids there instead of to OpenRouter.
+const localEngineMod = require('./local-engine');
+const localModelDirs = () => getSettings(false).localModelsDirs || [];
+const localEngine = localEngineMod.createLocalEngine({
+  // Beside your models (the first folder), not on C: -- that drive was nearly full. Nowhere else to go: app data.
+  baseDir: () => (localModelDirs()[0] ? path.join(localModelDirs()[0], '.voxai-engine') : path.join(process.env.LOCALAPPDATA || require('os').tmpdir(), 'voxai-coder-engine')),
+  log: (m) => { try { console.log('[local] ' + m); } catch {} },
+  onState: (st) => { try { const c = allRenderers(); c && c.send('local:state', st); } catch {} },
+});
+require('../backend/providers/openrouter').localEndpoint.url = () => localEngine.url();
+/** Catalogue entries for the models in the local folder: free, tool-calling, no image input. */
+function localCatalog() {
+  const dirs = localModelDirs();
+  if (!dirs.length) return [];
+  const st = localEngine.state();
+  return localEngine.models(dirs).map((m) => ({
+    id: m.id, name: 'This PC: ' + m.name, context: st.model === m.file && st.ctx ? st.ctx : localEngineMod.WANT_CTX,
+    promptCents: 0, completionCents: 0, cacheReadCents: 0, cacheWriteCents: 0,
+    tools: true, structuredOutputs: false, reasoning: false, reasoningSpec: null, vision: false,
+    maxCompletion: 8192, sharesData: null, coding: true, local: true, bytes: m.bytes, sidecar: !!m.sidecar,
+  }));
+}
 const MODEL_CAP_TTL = 60 * 60 * 1000;
 
 /**
@@ -1289,6 +1317,16 @@ app.whenReady().then(() => {
         throw new Error(`DATA_SHARE_CONSENT: ${m} shares your coding data with ${sh.who}. Choose it again in the model picker and agree for this project, or pick another model.`);
       }
     }
+    // A model on this PC (as the model or as Team's coder) is loaded before the run starts. One at a time.
+    const locals = [sess.model || s.openrouterModel, sess.coderModel || ''].filter(localEngineMod.isLocalModel);
+    let localCtx = 0;
+    if (locals.length) {
+      if (new Set(locals).size > 1) throw new Error('Only one model on this PC can run at a time, and this session uses two. Pick a cloud model for one of them.');
+      const dirs = s.localModelsDirs || [];
+      if (!dirs.length) throw new Error('Choose the folder your local models are in: Settings → Local models.');
+      const c1 = allRenderers(); c1 && c1.send('agent:event', { sessionId, runKey: 'local', event: { type: 'warning', code: 'local-loading', message: 'Loading ' + localEngineMod.labelOf(localEngineMod.fileOf(locals[0])) + ' on this PC…' } });
+      localCtx = Number((await localEngine.start(dirs, localEngineMod.fileOf(locals[0]))).ctx) || 0;
+    }
     if (!resume && sess.title === 'New session') sess.title = text.slice(0, 60);
     // A message from you while a goal is paused picks it back up ("continue" works).
     if (!goalContinue && sess.goal && sess.goal.status === 'active') { sess.goal.paused = false; sess.goal.pausedReason = ''; sess.goal.idle = 0; }
@@ -1327,7 +1365,10 @@ app.whenReady().then(() => {
           reasoningEffort: s.reasoningEffort, access: readOnly ? 'ask' : s.access, planMode: s.planMode,
           ...(readOnly ? { allowTools: require('../backend/tools/spawn').READ_TOOLS.concat(['shell']) } : {}),
           signal: ctl.signal, askPermission, userInput: askUserInput,
-          compactThreshold: s.compactThreshold, toolResultMaxChars: s.toolResultMaxChars, contextLimit: s.contextLimit, hardFraction: s.hardFraction,
+          compactThreshold: s.compactThreshold, toolResultMaxChars: s.toolResultMaxChars, hardFraction: s.hardFraction,
+          // A model on this PC has the context it was loaded with, not a cloud model's 200k.
+          contextLimit: localCtx && localEngineMod.isLocalModel(sess.model || s.openrouterModel) ? localCtx : s.contextLimit,
+          localContext: localCtx,
           budgetUsd: Number(s.runBudgetUsd) > 0 ? Number(s.runBudgetUsd) : 1,
           // $/token from the catalogue, used only as a fallback when the provider
           // does not report real cost — otherwise the cap cannot be enforced.
@@ -1758,6 +1799,35 @@ ipcMain.handle('openrouter:testMgmt', async (_e, { key } = {}) => {
 // Every key on the account and what each has spent (management key; read-only). Spending that
 // VoxAI's own numbers did not account for came from another key on the same account, and
 // nothing showed which one. OpenRouter lists names and masked labels, never the keys themselves.
+// ---- models on this PC (local-engine.js) ----
+ipcMain.handle('local:state', () => localEngine.state());
+ipcMain.handle('local:install', () => localEngine.install());
+ipcMain.handle('local:devices', () => localEngine.devices());
+ipcMain.handle('local:models', () => {
+  const dirs = localModelDirs();
+  return { dirs, engineDir: localEngine.engineDir(), models: localEngine.models(dirs).map((m) => ({ id: m.id, file: m.file, folder: m.folder, name: m.name, bytes: m.bytes, sidecar: !!m.sidecar })) };
+});
+ipcMain.handle('local:start', async (_e, file) => {
+  const dirs = localModelDirs();
+  if (!dirs.length) return { ok: false, error: 'Add the folder your models are in first.' };
+  try { return { ok: true, state: await localEngine.start(dirs, String(file || '')) }; } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+});
+ipcMain.handle('local:stop', async () => { await localEngine.stop(); return localEngine.state(); });
+ipcMain.handle('local:pickDir', async () => {
+  const r = await require('electron').dialog.showOpenDialog(win(), { title: 'Folder with your .gguf models', properties: ['openDirectory'] });
+  if (r.canceled || !r.filePaths[0]) return null;
+  const dirs = localModelDirs();
+  if (!dirs.some((d) => d.toLowerCase() === r.filePaths[0].toLowerCase())) saveSettings({ localModelsDirs: [...dirs, r.filePaths[0]] });
+  modelCapCache.at = 0;   // the picker should see the new folder's models
+  return r.filePaths[0];
+});
+// Out of the list (the files stay where they are). The first folder also holds the engine.
+ipcMain.handle('local:removeDir', (_e, dir) => {
+  saveSettings({ localModelsDirs: localModelDirs().filter((d) => d !== dir) });
+  modelCapCache.at = 0;
+  return localModelDirs();
+});
+
 ipcMain.handle('openrouter:keys', async () => {
   const auth = orAuth();
   if (!auth || !auth.mgmt) return { ok: false, error: 'no-management-key' };
@@ -1881,6 +1951,8 @@ ipcMain.handle('openrouter:generations', async (_e, { limit = 40, cursor } = {})
       });
       // Every model stays known for capability checks (an older session may name one),
       // but the picker is offered only the ones that can code.
+      // The models on this PC join the list, free.
+      try { models.push(...localCatalog()); } catch { /* no folder, or unreadable */ }
       modelCapCache = { at: Date.now(), byId: new Map(models.map((m) => [m.id, m])) };
       return { ok: true, models: models.filter((m) => m.coding) };
     } catch (e) {
@@ -2066,4 +2138,4 @@ ipcMain.handle('openrouter:generations', async (_e, { limit = 40, cursor } = {})
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 // Servers and watchers the agent left running end with the app, not after it. A
 // python http.server started for a preview was still listening once the app was gone.
-app.on('will-quit', () => { try { require('../backend/tools/procs').stopAll(); } catch {} });
+app.on('will-quit', () => { try { require('../backend/tools/procs').stopAll(); } catch {} try { localEngine.stop(); } catch {} });

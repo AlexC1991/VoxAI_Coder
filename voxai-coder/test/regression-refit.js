@@ -1015,7 +1015,7 @@ async function drain(gen) {
       await new Promise((r) => setTimeout(r, 1500));
       const stillAlive = pids.filter((p) => { try { process.kill(p, 0); return true; } catch { return false; } });
       check('closing the app ends them all', stillAlive.length === 0 && procs.list().length === 0, stillAlive);
-      check('the app does that when it quits', read('src/main/main.js').includes("app.on('will-quit', () => { try { require('../backend/tools/procs').stopAll(); } catch {} });"), 'left running');
+      check('the app does that when it quits', read('src/main/main.js').includes("app.on('will-quit', () => { try { require('../backend/tools/procs').stopAll(); } catch {}"), 'left running');
       check('the row says it is running in the background', read('src/renderer/index.html').includes("if (o.background && o.running) return { html: 'running in background' };"), 'silent');
     }
     // Stop ends the command itself, not only the run: a stopped `ping -n 40` kept going.
@@ -2328,7 +2328,7 @@ async function drain(gen) {
     const AGt = read('src/backend/agent.js'), MAINt = read('src/main/main.js'), HTMLt = read('src/renderer/index.html');
     check('with a coder: it is the default worker, starting it needs no approval, and its cost is "Coder"', AGt.includes('defaultSubModel: coderModel || subagentModel,')
       && AGt.includes("if (coderModel && (kind === 'spawn_agent' || kind === 'spawn_parallel')) return true;") && AGt.includes("addExtra(session, coderModel ? 'Coder' : 'Sub-agents', subCost);")
-      && AGt.includes("+ (isSubAgent ? '' : teamPrompt(coderModel, coderVision));"), 'agent');
+      && AGt.includes("+ (isSubAgent ? '' : teamPrompt(coderModel, coderVision))"), 'agent');
     check('Auto sends your commands to no second model at all (so none that shares data)', !AGt.includes('const autoCheck = async') && !AGt.includes('await ask(checkModel'), 'checker');
     check('a sharing model runs only in a project you agreed to share (checked before every run)', MAINt.includes('if (sh && !s.dataShareOk[team.projectKey(sess.workdir)]) {')
       && MAINt.includes('for (const m of [sess.model || s.openrouterModel, sess.coderModel || \'\']) {'), 'guard');
@@ -2393,7 +2393,7 @@ async function drain(gen) {
     const SPw = read('src/backend/tools/spawn.js');
     check('the coder can use the session\'s browser and is told to try what it built like a person would (it had no browser, so Team\'s "the coder tests it" could not happen)',
       SPw.includes("const WRITE_TOOLS = READ_TOOLS.concat(['write', 'edit', 'patch', 'shell', 'node_repl', 'memory', 'computer']);")
-      && SPw.includes('onAttachAtlas: agentOpts.onAttachAtlas || null,') && A.includes('priceIn, priceOut, modelVision, visionOf, webSearch, onOpenUrl, onAttachAtlas },')
+      && SPw.includes('onAttachAtlas: agentOpts.onAttachAtlas || null,') && A.includes('priceIn, priceOut, modelVision, visionOf, webSearch, onOpenUrl, onAttachAtlas, localContext },')
       && /open it with the computer tool and use it the way a/.test(SPw) && SPw.includes('browser_checks: browserChecks,'), 'coder browser');
     check('visual work the coder never opened is flagged to the planner, to send it back', A.includes("else if (subs.some((s) => s && s.ok !== false && !s.browser_checks && visual(s))) result.team_note =") && A.includes('/\\.(html?|css|jsx?|tsx?|vue|svelte)$/i.test('), 'unseen');
     const blind = { coderFails: 0, written: 0, looks: 0, blindCoder: true }; const bl = [...Array(9)].map(() => T.teamGuard('computer', {}, blind));
@@ -2405,13 +2405,13 @@ async function drain(gen) {
       H.includes('if (v && !v.opened) { keepPerm = v.perm ?') && H.includes('if (keepPerm) { v.perm = keepPerm.perm; v.permQueue = keepPerm.permQueue; }'), 'history');
     check('a worker on another model is asked about its own eyes (Muse Spark got its screenshots as V4.1 descriptions)',
       SPw.includes("(typeof agentOpts.visionOf === 'function' ? (() => { try { const v = agentOpts.visionOf(task.model || sub.model || agentOpts.defaultSubModel);")
-      && A.includes('priceIn, priceOut, modelVision, visionOf, webSearch, onOpenUrl, onAttachAtlas },') && read('src/main/main.js').includes('visionOf: (id) => modelVision(id),'), 'visionOf');
+      && A.includes('priceIn, priceOut, modelVision, visionOf, webSearch, onOpenUrl, onAttachAtlas, localContext },') && read('src/main/main.js').includes('visionOf: (id) => modelVision(id),'), 'visionOf');
     {
       // A provider that hangs: OpenRouter's ": PROCESSING" keep-alives kept the request open for ever.
       const ORs = require(path.join(ROOT, 'src/backend/providers/openrouter.js'));
       const was = process.env.VOX_STREAM_IDLE_MS, fetch0 = global.fetch; process.env.VOX_STREAM_IDLE_MS = '600';
       const enc = new TextEncoder(); let tk;
-      global.fetch = async () => ({ ok: true, body: new ReadableStream({ start(c) { tk = setInterval(() => c.enqueue(enc.encode(': OPENROUTER PROCESSING\n\n')), 100); }, cancel() { clearInterval(tk); } }) });
+      global.fetch = async () => ({ ok: true, body: new ReadableStream({ start(c) { tk = setInterval(() => { try { c.enqueue(enc.encode(': OPENROUTER PROCESSING\n\n')); } catch { clearInterval(tk); } }, 100); }, cancel() { clearInterval(tk); } }) });
       const e = await Promise.race([ORs.chatCompletions({ apiKey: 'k', model: 'm', messages: [{ role: 'user', content: 'hi' }] }).then(() => null, (x) => x), new Promise((r) => setTimeout(() => r('hung'), 5000))]);
       clearInterval(tk); global.fetch = fetch0; if (was === undefined) delete process.env.VOX_STREAM_IDLE_MS; else process.env.VOX_STREAM_IDLE_MS = was;
       check('a request that only gets keep-alives ends as a retryable stall instead of waiting for ever (a coder sat on "Thinking" for 8+ minutes)', e && e !== 'hung' && e.retryable === true && /stopped responding/.test(e.message), e && e.message || e);
@@ -2462,6 +2462,75 @@ async function drain(gen) {
     check('the session on show gets its own browser in the preview as soon as it has one (it showed a blank page)', M.includes('    if (sid === shownSid) showBrowserOf(sid);'), 'shown');
     check('a parked browser sleeps when no run uses it and wakes for a run or when shown', M.includes('function napBrowser(v, asleep) {') && M.includes('napBrowser(v, !browserInUse(v));')
       && M.includes('        stackBrowser(v, true);\n        napBrowser(v, false);') && M.includes('    napBrowsers();   // this session\'s browser wakes for the run') && M.includes('        napBrowsers();   // and sleeps again once nothing is using it'), 'nap');
+  }
+
+  // ------------------------------------------------------------------ [LM]
+  console.log('\n[LM] models on this PC: llama-server, the handshake and offload plans, tuning, tool-call recovery');
+  {
+    const LE = require(path.join(ROOT, 'src/main/local-engine.js'));
+    check('the engine is one pinned llama.cpp build, checked against its published SHA-256', LE.ENGINE.build === 'b11223' && /^[0-9a-f]{64}$/.test(LE.ENGINE.sha256)
+      && LE.ENGINE.url === 'https://github.com/ggml-org/llama.cpp/releases/download/b11223/llama-b11223-bin-win-vulkan-x64.zip', LE.ENGINE);
+    check('devices are read from llama-server --list-devices', JSON.stringify(LE.parseDevices('Available devices:\n  Vulkan0: AMD Radeon RX 6600 (8176 MiB, 7378 MiB free)'))
+      === JSON.stringify([{ id: 'Vulkan0', name: 'AMD Radeon RX 6600', totalMiB: 8176, freeMiB: 7378 }]), 'devices');
+    check('model files get readable names', LE.labelOf('qwen2.5-coder-7b-instruct-q4_k_m.gguf') === 'Qwen2.5 Coder 7B Instruct (Q4_K_M)' && LE.labelOf('qwen2_5-3b-instruct.Q4_K_M.gguf') === 'Qwen2.5 3B Instruct (Q4_K_M)', LE.labelOf('qwen2_5-3b-instruct.Q4_K_M.gguf'));
+    const sc = { kv_cache_mb_per_1k: 27, profiles: { vram_8gb: { n_gpu_layers: -1, n_ctx: 8192, fits: true, vram_used_mb: 1439 }, vram_4gb: { n_gpu_layers: 20, n_ctx: 8192, fits: true } } };
+    const p8 = LE.planLoad(sc, { totalMiB: 8176, freeMiB: 7378 }, 4), p4 = LE.planLoad(sc, { totalMiB: 4096, freeMiB: 3500 }, 4);
+    check('a ModelMaker offload plan picks the card\'s VRAM tier and grows the context toward 32k while it fits', p8.args.join(' ') === '-t 4 -ngl 999 -c 32768' && p4.args.includes('20') && p4.ctx >= LE.MIN_CTX, [p8.args, p4.args]);
+    check('no plan: llama-server sizes it (--fit), at least 16k of context', LE.planLoad(null, { totalMiB: 8176, freeMiB: 7378 }, 4).args.join(' ') === '-t 4 --fit on --fit-ctx 16384', 'fit');
+    // A GGUF header with <arch>.block_count after a string key, as real files have it.
+    const kv = (k, t, v) => { const kb = Buffer.from(k); const h = Buffer.alloc(8); h.writeBigUInt64LE(BigInt(kb.length)); const tb = Buffer.alloc(4); tb.writeUInt32LE(t); return Buffer.concat([h, kb, tb, v]); };
+    const sv = (s) => { const b = Buffer.from(s); const h = Buffer.alloc(8); h.writeBigUInt64LE(BigInt(b.length)); return Buffer.concat([h, b]); };
+    const u32 = (n) => { const b = Buffer.alloc(4); b.writeUInt32LE(n); return b; };
+    const head = Buffer.alloc(24); head.write('GGUF', 0, 'latin1'); head.writeUInt32LE(3, 4); head.writeBigUInt64LE(0n, 8); head.writeBigUInt64LE(2n, 16);
+    const gguf = path.join(WD, 'test-layers.gguf');
+    fs.writeFileSync(gguf, Buffer.concat([head, kv('general.architecture', 8, sv('qwen2')), kv('qwen2.block_count', 4, u32(28))]));
+    check('the layer count comes from the GGUF header, so tuning works for any model', LE.ggufLayers(gguf) === 28, LE.ggufLayers(gguf));
+    const LS = read('src/main/local-engine.js');
+    check('with no plan it tunes once on this PC: from all layers down at the real context, fastest turn kept (the RX 6600 spilled at all 28, ran best at 26)',
+      LS.includes('const tries = [999, n - 2, n - 4, n - 6, n - 10, n - 14]') && LS.includes('else if (best && r && r.turn > best.turn * 1.25) break;') && LS.includes("const tuneFile = () => path.join(base(), 'tune.json');")
+      && LS.includes("let plan = m && m.sidecar ? planLoad(m.sidecar, dev, threads) : null;"), 'tune');
+    check('the engine lives beside your first models folder (not C:), checks free space first, and unpacks with Windows tar', LS.includes("const exeOf = () => path.join(dirOf(), 'llama-server.exe');") && LS.includes("'System32', 'tar.exe')") && !LS.includes('.exeOf()') && LS.includes('if (free < ENGINE.bytes * 5)') && read('src/main/main.js').includes("path.join(localModelDirs()[0], '.voxai-engine')"), 'engine dir');
+    const ORl = require(path.join(ROOT, 'src/backend/providers/openrouter.js'));
+    const tools = [{ type: 'function', function: { name: 'write' } }];
+    const rec = ORl.recoverToolCalls({ content: '```xml\n{{"name": "write", "arguments": {"path": "hello.txt", "content": "hi"}}}\n```', toolCalls: [] }, tools);
+    check('a local model\'s tool call written as text becomes the call (Qwen2.5-Coder-7B wrote ```xml {{"name": "write", ...}}```)', rec.toolCalls.length === 1 && rec.toolCalls[0].name === 'write' && JSON.parse(rec.toolCalls[0].arguments).path === 'hello.txt' && rec.content === ''
+      && ORl.recoverToolCalls({ content: 'a {"x":1} b', toolCalls: [] }, tools).toolCalls.length === 0, rec);
+    const plain = ORl.recoverToolCalls({ content: '```json\n{"name": "write", "arguments": {"path": "hello.txt", "content": "Hello"}}\n```', toolCalls: [] }, tools);
+    check('and as plain JSON, whose closing }} the brace fix-up used to break (the call was lost, no file written)', plain.toolCalls.length === 1 && JSON.parse(plain.toolCalls[0].arguments).content === 'Hello', plain);
+    // Local requests go to the engine, plain, with no key.
+    const fetch0 = global.fetch; let seen = null;
+    ORl.localEndpoint.url = () => 'http://127.0.0.1:5999';
+    global.fetch = async (u, init) => { seen = { u, body: JSON.parse(init.body), auth: init.headers.Authorization }; const enc = new TextEncoder();
+      return { ok: true, body: new ReadableStream({ start(c) { c.enqueue(enc.encode('data: {"choices":[{"delta":{"content":"hi"}}]}\n\ndata: [DONE]\n\n')); c.close(); } }) }; };
+    const out = await ORl.chatCompletions({ model: 'local/m.gguf', messages: [{ role: 'user', content: 'x' }], tools, onEvent: () => {} });
+    global.fetch = fetch0; ORl.localEndpoint.url = () => null;
+    check('a "local/..." model goes to the engine\'s /v1 endpoint with no key and none of OpenRouter\'s extras', seen && seen.u === 'http://127.0.0.1:5999/v1/chat/completions' && !seen.auth && !seen.body.provider && !seen.body.transforms && !seen.body.session_id && out.content === 'hi', seen && Object.keys(seen.body));
+    {
+      // A local model that answers with the code in the chat instead of saving it (the 7B did, often).
+      const bodies = []; let turn = 0;
+      const fetch1 = global.fetch;
+      ORl.localEndpoint.url = () => 'http://127.0.0.1:5998';
+      global.fetch = async (_u, init) => {
+        const body = JSON.parse(init.body); bodies.push(body); turn++;
+        const chunks = turn === 1 ? say('Here it is:\n```html\n<p>hi</p>\n```') : turn === 2 ? call('w1', 'write', { path: 'local-page.html', content: '<p>hi</p>' }) : say('Saved local-page.html.');
+        const enc = new TextEncoder();
+        return { ok: true, body: new ReadableStream({ start(c) { for (const ch of chunks) c.enqueue(enc.encode('data: ' + JSON.stringify(ch) + '\n\n')); c.enqueue(enc.encode('data: [DONE]\n\n')); c.close(); } }) };
+      };
+      try { fs.rmSync(path.join(WD, 'local-page.html'), { force: true }); } catch {}
+      const evL = await drain(runAgent({ session: { id: 'lm-code', workdir: WD, messages: [] }, userText: 'make local-page.html', apiKey: '', model: 'local/m.gguf', access: 'full', askPermission: async () => true, maxTurns: 5 }));
+      global.fetch = fetch1; ORl.localEndpoint.url = () => null;
+      const names = (bodies[0] && bodies[0].tools || []).map((t) => t.function.name);
+      check('a local model gets a coder\'s tools only and three plain rules at the end of its prompt', names.includes('write') && names.includes('shell') && !names.includes('computer') && !names.includes('spawn_agent') && names.length <= 10
+        && /RULES FOR THIS MODEL/.test(bodies[0].messages[0].content) && /code in a reply is NOT saved/.test(bodies[0].messages[0].content), names);
+      check('code written in the reply instead of saved is sent back ("call write"), and then the file is written', evL.some((e) => e.type === 'warning' && e.code === 'local-code-in-reply')
+        && /call write with the file path/.test(JSON.stringify(bodies[1] && bodies[1].messages.slice(-1))) && fs.existsSync(path.join(WD, 'local-page.html')), evL.filter((e) => e.type === 'warning').map((e) => e.code));
+    }
+    check('a model on this PC shares nothing, however free it is', require(path.join(ROOT, 'src/backend/team.js')).sharesData('local/m.gguf', { prompt: 0, completion: 0 }) === null, 'shares');
+    const Ml = read('src/main/main.js');
+    check('the app loads the local model a run needs (one at a time), gives it the engine\'s context, lists local models free, and stops the engine on quit',
+      Ml.includes('const locals = [sess.model || s.openrouterModel, sess.coderModel || \'\'].filter(localEngineMod.isLocalModel);') && Ml.includes('localCtx = Number((await localEngine.start(dirs, localEngineMod.fileOf(locals[0]))).ctx) || 0;')
+      && Ml.includes('contextLimit: localCtx && localEngineMod.isLocalModel(sess.model || s.openrouterModel) ? localCtx : s.contextLimit,') && Ml.includes('try { models.push(...localCatalog()); } catch')
+      && Ml.includes('try { localEngine.stop(); } catch {} });') && read('src/renderer/index.html').includes('<section class="set-page" data-set="local" hidden>'), 'main');
   }
 
   // ------------------------------------------------------------------ [SZ]

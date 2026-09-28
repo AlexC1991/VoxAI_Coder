@@ -26,7 +26,15 @@
  *   'full access'          → everything auto (still confined to workdir)
  */
 
-const { chatCompletions } = require('./providers/openrouter');
+const { chatCompletions, isLocal } = require('./providers/openrouter');
+// A model on this PC (7B-class) is lost in the full prompt's thirty tools, and answered with the code
+// in its reply instead of saving it. It gets the tools a coder needs and three plain rules, last,
+// where a small model looks.
+const LOCAL_TOOLS = ['read', 'write', 'edit', 'patch', 'shell', 'glob', 'grep', 'search', 'fs', 'todo'];
+const LOCAL_RULES = '\n\nRULES FOR THIS MODEL (it runs on this PC):\n'
+  + '- Do the work with tool calls. To create or change a file, call write (the whole file) or edit. Never put code or file contents in your reply: code in a reply is NOT saved anywhere.\n'
+  + '- One step at a time: call a tool, read its result, then decide the next call.\n'
+  + '- When the task is done, reply with one short sentence saying what you changed.';
 const tools = require('./tools');
 const { compactSession, estimateSessionTokens } = require('./compact');
 const crypto = require('crypto');
@@ -543,6 +551,7 @@ async function* runAgent(opts) {
     onLiveEvent = null,
     userData = null, live = null,
     compactThreshold = null, contextLimit = null, hardFraction = null,
+    localContext = 0,   // the context a model on this PC was loaded with (a local coder works within it)
     // Cap on a single tool result, in characters. Replaces the old `toolCutoff`,
     // whose retroactive condensation was removed because it re-broke the cache
     // on every send; bounding at write time does the same job cache-safely.
@@ -784,7 +793,9 @@ async function* runAgent(opts) {
   // Search off means the tool is not offered at all, and the prompt must not tell the
   // model to use it -- an instruction naming a missing tool invites made-up calls.
   const webSearchOn = !(webSearch && webSearch.enabled === false);
-  const systemPrompt = SYSTEM(session.workdir, access, planMode, durable, webSearchOn) + goalPrompt(session.goal) + (isSubAgent ? '' : teamPrompt(coderModel, coderVision));
+  const localModel = isLocal(model);
+  const systemPrompt = SYSTEM(session.workdir, access, planMode, durable, webSearchOn) + goalPrompt(session.goal) + (isSubAgent ? '' : teamPrompt(coderModel, coderVision))
+    + (localModel ? LOCAL_RULES : '');
   const estimatedBefore = estimateSessionTokens(session, systemPrompt);
   // User-visible compaction notices (like Codex/Claude Code): tell the UI before
   // and after we fold older turns, so compaction is never silent.
@@ -884,6 +895,7 @@ async function* runAgent(opts) {
   // after one (see the finishReason === 'length' handling below).
   let cutoffs = 0;
   let planClosed = false;   // the finishing plan reminder, once per run
+  let codeNudges = 0, savedThisRun = false;   // a local model that wrote its code in the reply (twice at most)
   let effortNext = null;
   // Auto and Full access are the "let it work" modes: pausing every 60 turns there
   // only meant someone typing "continue" seven times through one build. The spend
@@ -945,7 +957,7 @@ async function* runAgent(opts) {
         defaultSubTimeoutMs: coderModel ? Math.max(15 * 60 * 1000, Number(subagentTimeoutMs) || 0) : subagentTimeoutMs,
         // Sub-agents spend the PARENT's remaining allowance, never a fresh one.
         // Rebuilt each turn so a fan-out later in the run sees the depleted figure.
-        budgetRemaining: Math.max(0, budget - spent), priceIn, priceOut, modelVision, visionOf, webSearch, onOpenUrl, onAttachAtlas },
+        budgetRemaining: Math.max(0, budget - spent), priceIn, priceOut, modelVision, visionOf, webSearch, onOpenUrl, onAttachAtlas, localContext },
       // mcpServers were never passed, so no configured MCP server could be seen.
       getSettings: () => ({ access, mcpServers: mcpServers || {} }),
       getAccess: () => access,
@@ -955,7 +967,8 @@ async function* runAgent(opts) {
     const toolList = (Array.isArray(allowTools) && allowTools.length
       ? builtTools.filter((t) => allowTools.includes(t.def.function.name))
       : builtTools
-    ).filter((t) => webSearchOn || t.def.function.name !== 'web_search');
+    ).filter((t) => webSearchOn || t.def.function.name !== 'web_search')
+      .filter((t) => !localModel || LOCAL_TOOLS.includes(t.def.function.name));
 
     // A turn boundary. Without it the UI had no signal that one inference ended and
     // the next began: a model that calls tools for six turns straight, emitting no
@@ -1123,6 +1136,14 @@ async function* runAgent(opts) {
     }
 
     if (!toolCalls.length) {
+      // A local model that answered with the code instead of saving it: say so, as you would.
+      if (localModel && !savedThisRun && codeNudges < 2 && /```[^\n]*\n[\s\S]*?```/.test(String(content || ''))) {
+        codeNudges++;
+        session.messages.push({ role: 'assistant', content });
+        session.messages.push({ role: 'user', content: '[VOX] You wrote code in your reply, but code in a reply is not saved. Save it now: call write with the file path and the complete file contents. Do not paste code in replies.' });
+        yield { type: 'warning', code: 'local-code-in-reply', message: 'The local model wrote code in its reply instead of saving it; asked it to use the write tool.' };
+        continue;
+      }
       // About to finish with steps still open in its plan (seen: a long build stopped at
       // 10 of 13 ticked). Once per run: tick off what was done, or say what was not and why.
       const open = Array.isArray(session.todos) ? session.todos.filter((t) => t && !t.done) : [];
@@ -1328,6 +1349,7 @@ async function* runAgent(opts) {
         ctx.callApproved = false;
         if (outcome.error) throw outcome.error;
         const result = outcome.value;
+        if (['write', 'edit', 'patch'].includes(tc.name)) savedThisRun = true;
         // PLAN MODE: an approved ask_confirm unlocks mutating tools for the run.
         if (planMode && tc.name === 'ask_confirm' && result && result.confirmed) planApproved = true;
         // An answer from the user lifts a desktop pause that their moving the mouse caused.

@@ -30,6 +30,8 @@ function sharesData(id, cap) {
   const s = String(id || '').toLowerCase();
   if (!s) return null;
   const prefix = s.split('/')[0];
+  // A model on this PC (main/local-engine.js) sends nothing anywhere, however free it is.
+  if (prefix === 'local') return null;
   const who = MAKER[prefix] || (prefix ? prefix.charAt(0).toUpperCase() + prefix.slice(1) : 'the model\'s maker');
   if (/-contributor(\b|$)|:contributor$/.test(s)) return { how: 'yes', who };
   // Anonymous "stealth" models: their prompts and replies are logged for the lab behind them.

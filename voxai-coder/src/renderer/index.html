@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-bTKLwkOBoV8UxPEXg/7JamkY4cx84kTEn+CTgfTqD6U='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-uEPuddKZGcCHlMXpjCCdHU/x6SN/QhWaAea3b8s0HBk='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -205,6 +205,7 @@ tests"). Scroll the row instead of breaking words:
 /* Usage opens from Settings, so it goes on top of it: at the same level it opened
    underneath, half-hidden. Found in a live test. */
 #usageModalBg{z-index:60}
+.local-models,.local-dirs{padding:6px 14px 12px}.local-dirs:empty{display:none}.lm-row{display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--edge)}.lm-row:first-child{border-top:0}.lm-name{flex:1;min-width:0}.lm-name b{font-weight:500;color:var(--ink)}.lm-sub{color:var(--mut);font-size:11px;font-family:"Sometype Mono",monospace}.lm-on{color:var(--gold);font-size:11px;margin-left:6px}
 .acct-keys{padding:4px 14px 12px;overflow-x:auto}.acct-keys table{width:100%;border-collapse:collapse;font-size:12px}.acct-keys th{color:var(--mut);font-weight:500;text-align:right;padding:4px 6px}.acct-keys th:first-child,.acct-keys td:first-child{text-align:left}.acct-keys td{padding:5px 6px;text-align:right;border-top:1px solid var(--edge);font-variant-numeric:tabular-nums}.acct-keys .kt{font-size:10px;color:var(--gold);margin-left:6px}.acct-keys .ks{color:var(--mut);font-family:"Sometype Mono",monospace;font-size:11px}.acct-keys .ke{color:var(--mut);padding:6px 0}
 .modal-bg.show{display:flex}
 /* ---- Settings: a sheet with sections ----
@@ -1215,6 +1216,7 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
     <button type="button" data-set="web"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16" y2="16"/></svg>Web search</button>
     <button type="button" data-set="notify"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>Notifications</button>
     <button type="button" data-set="subs"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="14" width="7" height="7" rx="1.5"/></svg>Sub-agents</button>
+    <button type="button" data-set="local"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>Local models</button>
     <button type="button" data-set="ctx"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/></svg>Context</button>
     <button type="button" data-set="memory"><svg viewBox="0 0 24 24"><path d="M9 4a3 3 0 0 0-3 3v1a3 3 0 0 0-2 5 3 3 0 0 0 2 5 3 3 0 0 0 6 1V4.5A2.5 2.5 0 0 0 9 4zM15 4a3 3 0 0 1 3 3v1a3 3 0 0 1 2 5 3 3 0 0 1-2 5 3 3 0 0 1-6 1"/></svg>Memory</button>
     <button type="button" data-set="skills"><svg viewBox="0 0 24 24"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5zM5 19.5A1.5 1.5 0 0 0 6.5 21H19M9 7h6M9 10.5h4"/></svg>Skills</button>
@@ -1251,6 +1253,17 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
       <div class="set-scroll">
         <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Card in the corner</div><div class="set-desc">A card above the taskbar saying which project needs you and what for. Allow or Deny an approval right from it, or open the session. It tucks away after 12 seconds (not while you point at it).</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntToast" role="switch" aria-checked="false" aria-label="Card in the corner"></button></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Use Windows’ own notification</div><div class="set-desc">The same, as a Windows notification instead of the VoxAI card: it also stays in the Windows notification centre.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntNative" role="switch" aria-checked="false" aria-label="Use Windows’ own notification"></button></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Taskbar badge</div><div class="set-desc">The taskbar button shows how many are waiting, and flashes when a new one comes in.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntTaskbar" role="switch" aria-checked="false" aria-label="Taskbar badge"></button></div></div></div>
         <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Minimize to the system tray</div><div class="set-desc">Minimizing hides the window to the tray icon instead of the taskbar. Click the icon to bring it back.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntTrayMin" role="switch" aria-checked="false" aria-label="Minimize to the system tray"></button></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Close to the system tray</div><div class="set-desc">Closing the window keeps VoxAI running in the tray, so runs carry on. Quit from the tray icon.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntTrayClose" role="switch" aria-checked="false" aria-label="Close to the system tray"></button></div></div></div>
+      </div>
+    </section>
+    <section class="set-page" data-set="local" hidden>
+      <header class="set-top"><h3>Local models</h3><p>Models that run on this PC: free, and nothing leaves your machine. They show in the model picker under “This PC”, and make a good free coder in Team.</p></header>
+      <div class="set-scroll">
+        <div class="set-group">
+          <div class="set-row"><div class="set-txt"><div class="set-lbl">Models folders</div><div class="set-desc" id="localDirTxt">Where your .gguf files are. Keep them on your fastest drive: reading a model from an NVMe was about half as fast again as from a hard drive. Offload plans from VoxAI ModelMaker (.offload.json) beside them are used. The engine lives in the first folder.</div></div><div class="set-ctl"><button class="btn ghost" id="btnLocalDir" type="button">Add folder…</button></div></div><div class="local-dirs" id="localDirs"></div>
+          <div class="set-row"><div class="set-txt"><div class="set-lbl">Engine</div><div class="set-desc" id="localEngineTxt">llama.cpp (Vulkan), downloaded once and checked against its published checksum.</div></div><div class="set-ctl"><button class="btn ghost" id="btnLocalInstall" type="button">Get engine</button></div></div>
+          <div class="set-row"><div class="set-txt"><div class="set-lbl">Graphics card</div><div class="set-desc" id="localGpuTxt">—</div></div></div>
+        </div>
+        <div class="set-group"><div class="local-models" id="localModels"><div class="ke">No models yet.</div></div></div>
       </div>
     </section>
     <section class="set-page" data-set="subs" hidden>
@@ -5626,6 +5639,7 @@ function showSetPage(key){
   document.querySelectorAll('.set-page').forEach((p) => { p.hidden = p.dataset.set !== key; });
   if (key === 'memory') { const ms = $('memSearch'); if (ms) ms.value = ''; loadMemory(); }
   if (key === 'keys') renderKeys();
+  if (key === 'local') renderLocal();
   if (key === 'skills') loadSkills();
 }
 /** Paint the switch, the engine picker, the percentages and the presets from the fields. */
@@ -5898,6 +5912,74 @@ async function showKeys(){
   box.innerHTML = ''; box.appendChild(t);
 }
 if ($('btnKeys')) $('btnKeys').onclick = showKeys;
+
+// ---- Settings → Local models (main/local-engine.js) ----
+let LOCAL_ST = null;
+const gbOf = (n) => (Number(n) / 1073741824).toFixed(1) + ' GB';
+function paintLocalEngine(){
+  const st = LOCAL_ST || {}, t = $('localEngineTxt'), b = $('btnLocalInstall');
+  if (!t || !b) return;
+  const lines = {
+    missing: 'Not installed yet: llama.cpp (Vulkan), about 33 MB, checked against its published checksum.' + (st.error ? ' Last try: ' + st.error : ''),
+    installing: 'Downloading… ' + (st.percent || 0) + '%',
+    stopped: 'Installed (llama.cpp ' + (st.build || '') + '). Not running.' + (st.error ? ' Last stop: ' + st.error : ''),
+    tuning: 'First load of ' + (st.model || '') + ': ' + (st.how || '') + '… (once, about two minutes)',
+    loading: 'Loading ' + (st.model || '') + ' — ' + (st.how || '') + '…',
+    ready: 'Running ' + (st.model || '') + ' on ' + (st.device || 'this PC') + (st.ctx ? ', ' + Number(st.ctx).toLocaleString() + ' tokens of context' : '') + '.',
+    stopping: 'Stopping…',
+  };
+  t.textContent = lines[st.state] || '—';
+  b.hidden = st.state !== 'missing';
+}
+async function renderLocal(){
+  if (!window.voxai.local) return;
+  try { LOCAL_ST = await window.voxai.local.state(); } catch {}
+  paintLocalEngine();
+  const r = await window.voxai.local.models().catch(() => ({ dir: '', models: [] }));
+  const dl = $('localDirs');
+  if (dl) {
+    dl.innerHTML = '';
+    (r.dirs || []).forEach((d, i) => {
+      const row = el('div', 'lm-row'), name = el('div', 'lm-name');
+      const b = document.createElement('b'); b.textContent = d; name.appendChild(b);
+      if (i === 0) { const sub = el('div', 'lm-sub'); sub.textContent = 'engine: ' + (r.engineDir || ''); name.appendChild(sub); }
+      row.appendChild(name);
+      const x = el('button', 'btn ghost', 'Remove'); x.type = 'button';
+      x.onclick = async () => { await window.voxai.local.removeDir(d); S = await window.voxai.getSettings(); loadModels(); renderLocal(); };
+      row.appendChild(x); dl.appendChild(row);
+    });
+  }
+  const gpu = $('localGpuTxt');
+  if (gpu) {
+    if (LOCAL_ST && LOCAL_ST.state !== 'missing' && LOCAL_ST.state !== 'installing') {
+      const d = await window.voxai.local.devices().catch(() => []);
+      gpu.textContent = d.length ? d.map((x) => x.name + ' — ' + (x.totalMiB / 1024).toFixed(1) + ' GB, ' + (x.freeMiB / 1024).toFixed(1) + ' GB free').join(' · ') : 'None found: models run on the CPU (slower).';
+    } else gpu.textContent = 'Shown once the engine is installed.';
+  }
+  const box = $('localModels'); if (!box) return;
+  box.innerHTML = '';
+  if (!(r.dirs || []).length) { box.appendChild(el('div', 'ke', 'Add the folder your models are in.')); return; }
+  if (!r.models.length) { box.appendChild(el('div', 'ke', 'No .gguf models in those folders.')); return; }
+  for (const m of r.models) {
+    const row = el('div', 'lm-row'), name = el('div', 'lm-name');
+    const b = document.createElement('b'); b.textContent = m.name; name.appendChild(b);
+    const on = LOCAL_ST && LOCAL_ST.model === m.file && (LOCAL_ST.state === 'ready' || LOCAL_ST.state === 'loading');
+    if (on) name.appendChild(el('span', 'lm-on', LOCAL_ST.state === 'ready' ? 'running' : 'loading'));
+    const sub = el('div', 'lm-sub'); sub.textContent = gbOf(m.bytes) + (m.sidecar ? ' · offload plan' : '') + ' · ' + (m.folder ? m.folder.replace(/[\\/]+$/, '') + '\\' : '') + m.file; name.appendChild(sub);
+    row.appendChild(name);
+    const btn = el('button', 'btn ghost', on ? 'Stop' : 'Load'); btn.type = 'button';
+    btn.onclick = async () => {
+      btn.disabled = true;
+      if (on) await window.voxai.local.stop();
+      else { const res = await window.voxai.local.start(m.file); if (!res.ok) toast(res.error || 'Could not load it.'); }
+      renderLocal();
+    };
+    row.appendChild(btn); box.appendChild(row);
+  }
+}
+if ($('btnLocalDir')) $('btnLocalDir').onclick = async () => { const d = await window.voxai.local.pickDir(); if (d) { S = await window.voxai.getSettings(); loadModels(); renderLocal(); } };
+if ($('btnLocalInstall')) $('btnLocalInstall').onclick = async () => { $('btnLocalInstall').disabled = true; await window.voxai.local.install(); $('btnLocalInstall').disabled = false; renderLocal(); };
+if (window.voxai.local) window.voxai.local.onState((st) => { LOCAL_ST = st; paintLocalEngine(); });
 $('btnUsageClose').onclick = closeUsage;
 $('btnUsageMore').onclick = () => loadUsage(false);
 $('usageModalBg').addEventListener('click', (e)=>{ if(e.target.id === 'usageModalBg') closeUsage(); });

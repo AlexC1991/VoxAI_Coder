@@ -151,6 +151,18 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
   // OpenRouter account usage / credits
   openrouterUsage: () => ipcRenderer.invoke('openrouter:usage'),
   openrouterKeys: () => ipcRenderer.invoke('openrouter:keys'),   // each key on the account and its spend (no secrets)
+  // Models on this PC (main/local-engine.js).
+  local: {
+    state: () => ipcRenderer.invoke('local:state'),
+    install: () => ipcRenderer.invoke('local:install'),
+    devices: () => ipcRenderer.invoke('local:devices'),
+    models: () => ipcRenderer.invoke('local:models'),
+    start: (file) => ipcRenderer.invoke('local:start', file),
+    stop: () => ipcRenderer.invoke('local:stop'),
+    pickDir: () => ipcRenderer.invoke('local:pickDir'),
+    removeDir: (dir) => ipcRenderer.invoke('local:removeDir', dir),
+    onState: (cb) => { const fn = (_e, st) => cb(st); ipcRenderer.on('local:state', fn); return () => ipcRenderer.removeListener('local:state', fn); },
+  },
   openrouterGenerations: (opts) => ipcRenderer.invoke('openrouter:generations', opts || {}),
   openrouterModels: () => ipcRenderer.invoke('openrouter:models'),
   openrouterTestMgmt: (key) => ipcRenderer.invoke('openrouter:testMgmt', { key }),

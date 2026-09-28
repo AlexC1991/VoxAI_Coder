@@ -220,7 +220,8 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
         checkReasoningSpec: agentOpts.checkReasoningSpec,
         cacheTtl: agentOpts.cacheTtl || '',
         checkpointFrom: agentOpts.checkpointSession || null,
-        contextLimit: agentOpts.contextLimit,
+        // A coder on this PC works within the context its engine was loaded with.
+        contextLimit: /^local\//.test(String(task.model || sub.model || agentOpts.defaultSubModel || '')) && agentOpts.localContext ? agentOpts.localContext : agentOpts.contextLimit,
         compactThreshold: agentOpts.compactThreshold,
         hardFraction: agentOpts.hardFraction,
         isSubAgent: true,
