@@ -71,11 +71,48 @@ async function verifyJson(fullPath) {
   }
 }
 
-function run(cmd, args) {
+/**
+ * JavaScript, checked in this process: no Node to start. Started fresh for every edit,
+ * `node --check` took ~3.8 s on a busy PC against a 4 s limit, so the check was quietly
+ * "skipped" and broken code was reported as written fine. A script (CommonJS) is compiled
+ * the way Node wraps a module; an ES module (import/export) cannot be compiled here without
+ * flags, so it alone still goes to `node --check`, as a .mjs copy, with longer to answer.
+ */
+const ESM_TIMEOUT_MS = Math.max(TIMEOUT_MS, 15000);
+async function verifyJs(fullPath, ext) {
+  let src;
+  try { src = await fsp.readFile(fullPath, 'utf8'); } catch { return { verified: 'skipped', reason: 'unreadable' }; }
+  if (ext !== '.mjs') {
+    const body = src.replace(/^#![^\n]*/, '');   // a shebang line is fine in a file Node runs
+    try {
+      // The wrapper sits on the file's first line, so line numbers in an error stay right.
+      new (require('vm').Script)(`(function (exports, require, module, __filename, __dirname) {${body}\n})`, { filename: fullPath });
+      return { verified: 'ok', checker: 'node' };
+    } catch (e) {
+      if (!/import statement|Unexpected token 'export'|import\.meta|await is only valid|Cannot use import/.test(String(e && e.message))) {
+        return { verified: 'failed', checker: 'node', diagnostics: trimDiag(String((e && e.stack) || e).split('\n    at ')[0].split('(function (exports, require, module, __filename, __dirname) {').join('')) };
+      }
+    }
+  }
+  // An ES module (or a .mjs): Node itself, on a .mjs copy so the project's package.json cannot
+  // make it read the file as a script (see the RTS note in verifyFile).
+  const tmp = path.join(require('os').tmpdir(), `vox-check-${process.pid}-${Date.now()}.mjs`);
+  try {
+    await fsp.writeFile(tmp, src, 'utf8');
+    const r = await run('node', ['--check', tmp], ESM_TIMEOUT_MS);
+    if (r.missing) return { verified: 'skipped', reason: 'node not available' };
+    if (r.timedOut) return { verified: 'skipped', reason: `node timed out after ${ESM_TIMEOUT_MS}ms` };
+    if (r.ok) return { verified: 'ok', checker: 'node (as an ES module)' };
+    return { verified: 'failed', checker: 'node', diagnostics: String(r.out || '').split(tmp).join(fullPath) };
+  } catch { return { verified: 'skipped', reason: 'could not check' }; }
+  finally { fsp.unlink(tmp).catch(() => {}); }
+}
+
+function run(cmd, args, timeout = TIMEOUT_MS) {
   return new Promise((resolve) => {
     let child;
     try {
-      child = execFile(cmd, args, { timeout: TIMEOUT_MS, windowsHide: true }, (err, stdout, stderr) => {
+      child = execFile(cmd, args, { timeout, windowsHide: true }, (err, stdout, stderr) => {
         const out = trimDiag(`${stderr || ''}${stdout || ''}`);
         if (!err) return resolve({ ok: true, out });
         // ENOENT = the toolchain simply isn't installed on this machine.
@@ -98,6 +135,7 @@ async function verifyFile(fullPath) {
   if (process.env.VOX_DISABLE_VERIFY) return { verified: 'skipped', reason: 'disabled' };
   const ext = path.extname(String(fullPath || '')).toLowerCase();
   if (ext === '.json') return verifyJson(fullPath);
+  if (ext === '.js' || ext === '.cjs' || ext === '.mjs') return verifyJs(fullPath, ext);
 
   const make = CHECKERS[ext];
   if (!make) return { verified: 'skipped', reason: `no checker for ${ext || 'this file type'}` };

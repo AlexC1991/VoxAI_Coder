@@ -430,7 +430,7 @@ function loadWith(file, stubs) {
     check('the sandboxed renderer never touches process', !/\bprocess\.env\b/.test(code) && !/\bprocess\.(platform|versions|argv)\b/.test(code), (code.match(/process\.\w+/g) || []).slice(0, 3));
 
     // A refused send (e.g. image to a text-only model) cleared the image it told you to resend.
-    check('a refused send gives the text back', /catch \(err\)[\s\S]{0,1600}if \(ta && !ta\.value\.trim\(\)\) ta\.value = text;/.test(HTML), 'text lost');
+    check('a refused send gives the text back', /catch \(err\)[\s\S]{0,1600}if \(here && ta && !ta\.value\.trim\(\)\) ta\.value = text;/.test(HTML), 'text lost');
     check('...and the attachments', /catch \(err\)[\s\S]{0,1800}PENDING_ATTACH\.push\(\{ dataUrl: url/.test(HTML), 'image lost');
     check("Electron's IPC wrapper is stripped from errors", HTML.includes("replace(/^Error invoking remote method '[^']*':\\s*/, '')"), 'wrapper shown');
 
@@ -470,7 +470,8 @@ function loadWith(file, stubs) {
 
     // main.js checks stored values, and passes them to BOTH places that start a run.
     check('stored values are validated', MAIN.includes("['exa', 'parallel', 'perplexity'].includes(raw.webSearchEngine)") && MAIN.includes('webSearchMaxResults: Math.min(10, Math.max(1,'), 'trusted blindly');
-    check('both run paths get the setting', (MAIN.match(/webSearch: \{ enabled: s\.webSearchEnabled, engine: s\.webSearchEngine, maxResults: s\.webSearchMaxResults \}/g) || []).length === 2, 'one path ignores it');
+    // The second path was the Sub-agents panel's spawn IPC, removed (no panel ever called it).
+    check('the run path gets the setting', (MAIN.match(/webSearch: \{ enabled: s\.webSearchEnabled, engine: s\.webSearchEngine, maxResults: s\.webSearchMaxResults \}/g) || []).length === 1, 'ignored');
 
     // The tool uses the chosen engine, its fee and the default count.
     const { makeWebSearchTool, ENGINES } = require(path.join(ROOT, 'src/backend/tools/web_search.js'));

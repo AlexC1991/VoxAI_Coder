@@ -84,8 +84,35 @@ async function saveSession(userData, session) {
     // The session's goal (/goal): set, met, failed or paused -- it outlives the app.
     ...(session.goal ? [JSON.stringify({ kind: 'goal', goal: session.goal })] : []),
   ];
-  await fsp.writeFile(path.join(dir, `${session.id}.jsonl`), lines.join('\n'), 'utf8');
+  await writeWhole(path.join(dir, `${session.id}.jsonl`), lines.join('\n'));
   return session;
+}
+
+/**
+ * Write a session file so it is never left half-written. Written in place, two saves of one
+ * session overlapping (the debounced save, the run's last save, a rename, a goal) or the app
+ * closing mid-write left a broken last line -- and the whole session would no longer open.
+ * Each save goes to a temporary file that is then renamed over the old one, and the saves of
+ * one file wait for each other, in order.
+ */
+const writing = new Map();   // file -> the save in progress
+function writeWhole(file, body) {
+  const prev = writing.get(file) || Promise.resolve();
+  const p = prev.catch(() => {}).then(async () => {
+    const tmp = `${file}.${process.pid}.tmp`;
+    await fsp.writeFile(tmp, body, 'utf8');
+    // Windows refuses a rename for a moment while something (a virus scan) has the file open.
+    for (let i = 0; ; i++) {
+      try { await fsp.rename(tmp, file); return; }
+      catch (e) {
+        if (i >= 4) { await fsp.writeFile(file, body, 'utf8'); await fsp.unlink(tmp).catch(() => {}); return; }
+        await new Promise((r) => setTimeout(r, 50 * (i + 1)));
+      }
+    }
+  });
+  writing.set(file, p);
+  p.finally(() => { if (writing.get(file) === p) writing.delete(file); }).catch(() => {});
+  return p;
 }
 
 /**
@@ -121,7 +148,8 @@ async function loadSession(userData, id) {
   const session = { id, title: 'session', workdir: '', model: '', messages: [], todos: [], usage: [], stats: { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, cost: 0, runs: 0 } };
   for (const line of raw.split('\n')) {
     if (!line.trim()) continue;
-    const o = JSON.parse(line);
+    // One damaged line (a save cut short by a crash) costs that line, not the whole session.
+    let o; try { o = JSON.parse(line); } catch { continue; }
     if (o.kind === 'meta') Object.assign(session, { title: o.title, workdir: o.workdir, model: o.model, coderModel: o.coderModel || '', parentId: o.parentId || null, createdAt: o.createdAt, updatedAt: o.updatedAt });
     else if (o.kind === 'message') session.messages.push(o.message);
     else if (o.kind === 'usage') session.usage.push(o.usage);
@@ -169,6 +197,7 @@ function endsOnQuestion(lines) {
 }
 
 /** Conversations, newest first; with { subs: true }, sub-agent sessions instead. */
+const listed = new Map();   // file -> { stamp, meta }: what the list needs from each session file
 async function listSessions(userData, limit = 50, { subs = false } = {}) {
   const dir = sessionsDir(userData);
   try { await fsp.mkdir(dir, { recursive: true }); } catch { /* noop */ }
@@ -177,11 +206,21 @@ async function listSessions(userData, limit = 50, { subs = false } = {}) {
   const metas = [];
   for (const f of files) {
     try {
-      const lines = (await fsp.readFile(path.join(dir, f), 'utf8')).split('\n');
-      const o = JSON.parse(lines[0]);
+      const file = path.join(dir, f);
+      // Read again only when the file has changed: the list is refreshed from many places,
+      // and each refresh read every session in full (megabytes each) for two facts per file.
+      const st = await fsp.stat(file);
+      const stamp = st.mtimeMs + ':' + st.size;
+      let row = listed.get(file);
+      if (!row || row.stamp !== stamp) {
+        const lines = (await fsp.readFile(file, 'utf8')).split('\n');
+        const o = JSON.parse(lines[0]);
+        row = { stamp, meta: o.kind === 'meta' ? { id: o.id, title: o.title, workdir: o.workdir, model: o.model, parentId: o.parentId || null, updatedAt: o.updatedAt, asking: endsOnQuestion(lines), sub: isSubSession(o) } : null };
+        listed.set(file, row);
+      }
       // Sub-agent sessions stay on disk (a worker can be resumed) but are not listed
       // as conversations: each fan-out used to add one "session" per worker.
-      if (o.kind === 'meta' && isSubSession(o) === subs) metas.push({ id: o.id, title: o.title, workdir: o.workdir, model: o.model, parentId: o.parentId || null, updatedAt: o.updatedAt, asking: endsOnQuestion(lines) });
+      if (row.meta && row.meta.sub === subs) { const { sub, ...m } = row.meta; metas.push(m); }
     } catch { /* skip corrupt */ }
   }
   metas.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-QtW/LWkh3w+JTKN57PMN5pYRwZDKxZwyCXiXCvJee0M='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-UcxEWnHHDWV/JjLL5r4dpd/Q6K7KPvl6g4AlZs4vnrM='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -6137,7 +6137,8 @@ function paintLocalEngine(){
     ready: 'Running ' + (st.model || '') + ' on ' + (st.device || 'this PC') + (st.ctx ? ', ' + Number(st.ctx).toLocaleString() + ' tokens of context' : '') + '.',
     stopping: 'Stopping…',
   };
-  t.textContent = lines[st.state] || '—';
+  t.textContent = st.supported === false ? 'Models on this PC run on Windows only for now: the engine VoxAI installs is the Windows build of llama.cpp.' : (lines[st.state] || '—');
+  if (st.supported === false) b.disabled = true;
   b.hidden = st.state !== 'missing';
 }
 async function renderLocal(){
@@ -6682,8 +6683,14 @@ function stopCurrent(){
   v.stopRequested = true;
   // A goal waits for you instead of starting its next run.
   if (v.goal && v.goal.status === 'active') { try { window.voxai.goalPause(v.id); } catch {} }
-  for (const rk of [...(v.runKeys || [])]) {
+  const keys = [...(v.runKeys || [])];
+  for (const rk of keys) {
     try { window.voxai.agentCancel(rk); } catch {}
+  }
+  // No key yet: the run is still starting -- a model on this PC loading, which takes minutes --
+  // and its key only comes back once it has. Ask main which runs this session has, and stop those.
+  if (!keys.length) {
+    try { window.voxai.agentLive(v.id).then((l) => { for (const k of (l && l.runKeys) || []) { try { window.voxai.agentCancel(k); } catch {} } }).catch(() => {}); } catch {}
   }
   v.runKeys.clear();
   updateSendState();
@@ -6990,18 +6997,25 @@ async function doSend(v, text, parts){
   v._goalPausedShown = null;   // a message picks a paused goal up; a later pause is news
   T = v; const bubble = addUser(text, parts); T = null;
   v.busy = true; v.runT0 = Date.now(); v.activity = 'Thinking'; v.planLive = false;
-  $('runDot').style.display = 'block'; updateSendState(); refreshSessionList(); paintShelf();
+  if (v === actView()) $('runDot').style.display = 'block';
+  updateSendState(); refreshSessionList(); paintShelf();
   try {
-    const id = await ensureSession();
-    if (activeId && id !== activeId) { activeId = id; } // keep in sync
-    const cur = viewOf(activeId);
+    // The session this message belongs to. A message queued in a session that then finished
+    // in the BACKGROUND was sent to whichever session was on screen -- another project's
+    // folder -- while its own session stayed "busy". Only a brand-new chat has no id yet.
+    let sid = v && v.id && viewStore.get(v.id) === v ? v.id : null;
+    if (!sid) {
+      sid = await ensureSession();
+      if (activeId && sid !== activeId) { activeId = sid; } // keep in sync
+    }
+    const cur = viewOf(sid);
     cur.busy = true;
-    const r = await window.voxai.agentSend(activeId, text, parts);
+    const r = await window.voxai.agentSend(sid, text, parts);
     refreshSessionList();   // the first message has just named the session
     cur.runKeys.add(r.runKey);
     updateSendState();
   } catch (err) {
-    const cur = actView();
+    const cur = (v && v.id && viewStore.get(v.id) === v) ? v : actView();   // the session it was sent from
     // Electron wraps every IPC rejection as "Error invoking remote method '<ch>': Error: <msg>".
     // That wrapper is plumbing, not information — show the reason itself.
     const reason = String((err && err.message) || err)
@@ -7021,15 +7035,17 @@ async function doSend(v, text, parts){
     // "this model cannot read images — switch model and send again" is useless if the
     // image has already been cleared and has to be attached all over again.
     const ta = $('prompt');
-    if (ta && !ta.value.trim()) ta.value = text;
-    if (!PENDING_ATTACH.length && Array.isArray(parts) && parts.length) {
+    const here = cur === actView();   // a background session's message is not put in this box
+    if (here && ta && !ta.value.trim()) ta.value = text;
+    if (here && !PENDING_ATTACH.length && Array.isArray(parts) && parts.length) {
       for (const p of parts) {
         const url = p && p.image_url && p.image_url.url;
         if (url) PENDING_ATTACH.push({ dataUrl: url, name: 'attachment' });
       }
       renderAttachTray();
     }
-    $('runDot').style.display = 'none'; updateSendState();
+    if (here) $('runDot').style.display = 'none';
+    updateSendState();
   }
 }
 
@@ -7109,61 +7125,6 @@ async function refreshUsage(){
   }
 }
 window.voxai.onMenu((ch)=>{ if(ch==='new-session') $('btnNew').click(); else if(ch==='open-folder') pickDir(); });
-
-// ---- Sub-agents panel ----
-async function loadSubRuns(){
-  const box = $('subRuns');
-  const cnt = $('subCount');
-  if (!box || !window.voxai || !window.voxai.subagents) return;
-  let items = [];
-  try { items = await window.voxai.subagents.list(); } catch { return; }
-  const runs = items.filter(s => s.title === 'subagent');
-  if (cnt) cnt.textContent = String(runs.length);
-  if (!runs.length) {
-    box.innerHTML = '<div class="msg" style="color:var(--dim)">No sub-agent runs yet. Spawn one above, or ask the main agent to use spawn_agent.</div>';
-    return;
-  }
-  box.innerHTML = '';
-  for (const r of runs.slice(0, 40)) {
-    const card = el('div', 'sub-run');
-    const head = el('div', 'sr-head');
-    head.appendChild(el('span', 'sr-badge', 'sub'));
-    head.appendChild(el('span', 'sr-model', esc(r.model || '')));
-    const meta = el('span', 'sr-meta', fmtTime(r.updatedAt || ''));
-    head.appendChild(meta);
-    const openBtn = el('button', 'sr-open', 'open \u2197');
-    openBtn.title = 'Open this sub-agent session';
-    openBtn.onclick = () => { openSession(r.id); go('work'); };
-    head.appendChild(openBtn);
-    card.appendChild(head);
-    box.appendChild(card);
-  }
-}
-async function spawnSub(){
-  const task = $('subTask') ? $('subTask').value.trim() : '';
-  const hint = $('subHint');
-  if (!task) { if (hint) hint.textContent = 'Describe the task first.'; return; }
-  const model = $('subModel') ? $('subModel').value.trim() : '';
-  const turns = $('subTurns') ? Number($('subTurns').value) : 25;
-  const timeout = $('subTimeout') ? Number($('subTimeout').value) : 300;
-  if (hint) hint.textContent = 'Spawning \u2026';
-  try {
-    const r = await window.voxai.subagents.spawn(task, model || undefined, turns || undefined, timeout || undefined);
-    if (hint) hint.textContent = 'Spawned sub-agent ' + (r && r.id ? r.id : '') + ' \u2014 it runs in the background.';
-    if ($('subTask')) $('subTask').value = '';
-    setTimeout(loadSubRuns, 600);
-  } catch (e) {
-    if (hint) hint.textContent = 'Spawn failed: ' + (e && e.message || e);
-  }
-}
-(function(){
-  const sb = $('subSpawn');
-  if (sb) sb.onclick = spawnSub;
-  if (window.voxai && window.voxai.subagents) {
-    try { window.voxai.subagents.onChanged(() => setTimeout(loadSubRuns, 400)); } catch {}
-    setTimeout(loadSubRuns, 200);
-  }
-})();
 
 // ---- in-UI window controls (frameless) ----
 (function(){

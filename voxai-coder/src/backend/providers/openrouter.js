@@ -76,7 +76,8 @@ async function post(host, init) {
       UND_ERR_SOCKET: 'the connection was dropped', CERT_HAS_EXPIRED: 'its certificate is not valid',
     }[code] || (code ? code
       : /bad port/i.test(String(e && e.cause && e.cause.message)) ? 'that port is blocked for web requests'
-      : 'no response');
+      // Without a code, the reason itself: "no response" hid what had actually failed.
+      : String((e && e.cause && e.cause.message) || (e && e.message && e.message !== 'fetch failed' ? e.message : '') || 'no response').slice(0, 160));
     const err = new Error(`Could not reach OpenRouter at ${base} (${why}). Check your internet connection`
       + (base === DEFAULT_HOST ? '' : ', or the OpenRouter address in Settings') + ', then send again.');
     err.code = 'unreachable';

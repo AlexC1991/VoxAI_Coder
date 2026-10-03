@@ -65,15 +65,24 @@ app.on('second-instance', (_e, argv) => {
 // ---------------------------------------------------------------- settings ---
 const SETTINGS_PATH = path.join(app.getPath('userData'), 'voxai-settings.json');
 
+// The file's text, kept until the file changes. Settings were read from disk (and the keys
+// decrypted) every second by the tray's tick, and several times more per run; a stat is all
+// that is needed to know nothing changed. Each caller still gets its own parsed copy.
+let settingsText = null, settingsStamp = '';
 function readSettingsFile() {
   try {
-    if (fs.existsSync(SETTINGS_PATH)) return JSON.parse(fs.readFileSync(SETTINGS_PATH, 'utf8'));
-  } catch { /* corrupted → fresh */ }
+    const st = fs.statSync(SETTINGS_PATH);
+    const stamp = st.mtimeMs + ':' + st.size;
+    if (stamp !== settingsStamp || settingsText === null) { settingsText = fs.readFileSync(SETTINGS_PATH, 'utf8'); settingsStamp = stamp; }
+    return JSON.parse(settingsText);
+  } catch { /* missing or corrupted → fresh */ }
   return {};
 }
 function writeSettingsFile(obj) {
   fs.mkdirSync(path.dirname(SETTINGS_PATH), { recursive: true });
-  fs.writeFileSync(SETTINGS_PATH, JSON.stringify(obj, null, 2));
+  const text = JSON.stringify(obj, null, 2);
+  fs.writeFileSync(SETTINGS_PATH, text);
+  try { const st = fs.statSync(SETTINGS_PATH); settingsText = text; settingsStamp = st.mtimeMs + ':' + st.size; } catch { settingsText = null; }
 }
 function encryptSecret(plain) {
   if (safeStorage.isEncryptionAvailable())
@@ -84,8 +93,21 @@ function encryptSecret(plain) {
   for (let i = 0; i < src.length; i++) out[i] = src[i] ^ mask[i % mask.length];
   return { enc: out.toString('base64'), store: 'obfuscated-file' };
 }
+const decrypted = new Map();   // enc -> plain: decrypting every second (see readSettingsFile) went through the OS keychain
 function decryptSecret(blob) {
   if (!blob || !blob.enc) return '';
+  // Not cached while the keychain is not ready yet (before the app is): read that early the key
+  // comes out wrong, and kept, every request after it went out with a garbled key ("Cannot
+  // convert argument to a ByteString" -- shown as "could not reach OpenRouter").
+  if (blob.store === 'keychain' && !safeStorage.isEncryptionAvailable()) return decryptSecretNow(blob);
+  const hit = decrypted.get(blob.store + ':' + blob.enc);
+  if (hit !== undefined) return hit;
+  const plain = decryptSecretNow(blob);
+  if (decrypted.size > 8) decrypted.clear();
+  decrypted.set(blob.store + ':' + blob.enc, plain);
+  return plain;
+}
+function decryptSecretNow(blob) {
   if (blob.store === 'keychain' && safeStorage.isEncryptionAvailable())
     return safeStorage.decryptString(Buffer.from(blob.enc, 'base64'));
   const mask = Buffer.from(app.getPath('userData'));
@@ -475,9 +497,12 @@ require('../backend/providers/openrouter').localEndpoint.url = () => localEngine
 require('../backend/providers/openrouter').localEndpoint.expected = () => { const s = localEngine.state(); return { tps: s.tps, pps: s.pps }; };
 require('../backend/providers/openrouter').localEndpoint.onSlow = (info) => { try { const c = allRenderers(); c && c.send('local:slow', info); } catch {} };
 /** Catalogue entries for the models in the local folder: free, tool-calling, no image input. */
+// The engine is llama.cpp's Windows (Vulkan) build, unpacked with Windows tar, sized with PowerShell: on
+// Linux (the AppImage) every step of it can only fail, so models on this PC are offered on Windows only.
+const LOCAL_SUPPORTED = process.platform === 'win32';
 function localCatalog() {
   const dirs = localModelDirs();
-  if (!dirs.length) return [];
+  if (!dirs.length || !LOCAL_SUPPORTED) return [];
   const st = localEngine.state();
   return localEngine.models(dirs).map((m) => ({
     id: m.id, name: 'This PC: ' + m.name, context: st.model === m.file && st.ctx ? st.ctx : localEngineMod.WANT_CTX,
@@ -538,6 +563,17 @@ function modelReasoning(modelId) {
 }
 
 /** true / false from the catalogue; null when the catalogue has not said. */
+/**
+ * How long an answer a model may write, from its catalogue entry: every request asked for 16,384
+ * tokens, more than some providers allow a model -- a refusal before anything ran. (A local
+ * model's entry says 8,192.) 16,384 stays the most asked for; VOX_MAX_TOKENS still wins.
+ */
+function modelMaxTokens(modelId) {
+  if (Number(process.env.VOX_MAX_TOKENS) > 0) return Number(process.env.VOX_MAX_TOKENS);
+  const cap = modelCapCache.byId.get(modelId);
+  const mc = Number(cap && cap.maxCompletion);
+  return mc >= 1024 ? Math.min(16384, mc) : 16384;
+}
 function modelVision(modelId) {
   const cap = modelCapCache.byId.get(modelId);
   return cap && typeof cap.vision === 'boolean' ? cap.vision : null;
@@ -574,10 +610,14 @@ async function assertModelUsable(modelId, getModels, opts = {}) {
  * the bridge: saveSettings, agentSend, agentPermission. Found in a live run. Web links
  * go to the user's browser instead; nothing else is followed.
  */
+// The app's own page, exactly. Any file named renderer/index.html (one in a project) passed the
+// old pattern, and would have been handed the whole bridge had this view ever gone to it.
+const APP_PAGE = path.resolve(__dirname, '..', 'renderer', 'index.html').replace(/\\/g, '/').toLowerCase();
 function isAppPage(url) {
   try {
     const u = new URL(url);
-    return u.protocol === 'file:' && /\/renderer\/index\.html$/i.test(decodeURIComponent(u.pathname).replace(/\\/g, '/'));
+    if (u.protocol !== 'file:') return false;
+    return require('url').fileURLToPath(u).replace(/\\/g, '/').toLowerCase() === APP_PAGE;
   } catch { return false; }
 }
 function guardTrustedView(wc) {
@@ -591,7 +631,8 @@ function attachSplitViews(w) {
   // Trusted surface: our own renderer, gets the full `window.voxai` bridge.
   const chatPrefs = {
     preload: path.join(__dirname, '..', 'preload', 'preload.js'),
-    contextIsolation: true, nodeIntegration: false, sandbox: false,
+    // Sandboxed like every other view: the preload needs nothing but electron's own modules.
+    contextIsolation: true, nodeIntegration: false, sandbox: true,
   };
   // UNTRUSTED surface: the Atlas view loads arbitrary https:// pages (browser_open,
   // preview:go, agent-driven navigation). It must NOT receive the preload — any page
@@ -1258,62 +1299,6 @@ app.whenReady().then(() => {
     return true;
   });
 
-  // Sub-agents: list persisted runs + manually trigger one (UI panel)
-  ipcMain.handle('subagents:list', async () => {
-    try { return await store.listSessions(userData(), 200, { subs: true }); } catch { return []; }
-  });
-  ipcMain.handle('subagents:spawn', async (_e, { task, model, maxTurns, timeoutMs }) => {
-    const s = getSettings(false);
-    if (!s.openrouterKey) throw new Error('No OpenRouter API key — open Settings first.');
-    if (!task || !String(task).trim()) throw new Error('sub-agent task is required');
-    // use the session the renderer is viewing (fallback: any live or the first)
-    let sess = null;
-    try { const arr = [...live.values()]; sess = arr[0]; } catch {}
-    const workdir = (sess && sess.workdir) || s.workingDir || os.homedir();
-    const sub = store.createSession({
-      workdir,
-      model: (model && String(model).trim()) || s.subagentModel || s.openrouterModel,
-      title: 'subagent',
-      parentId: (sess && sess.id) || null,
-    });
-    const ctl = new AbortController();
-    const panelKey = `${sub.id}:panel`;
-    const ask = sess ? askPermissionFor(sess.id, panelKey) : null;
-    const panelLabel = require('../backend/tools/spawn').taskSummary(task, 90).replace(/([^.!?…])$/, '$1.');
-    const panelAsk = async (q) => (ask ? ask({ ...q, note: 'From a sub-agent you started: ' + panelLabel + (q && q.note ? ' ' + q.note : '') }) : false);
-    (async () => {
-      try {
-        for await (const ev of runAgent({
-          session: sub, userText: String(task),
-          budgetUsd: Number(s.runBudgetUsd) > 0 ? Number(s.runBudgetUsd) : 1,
-          priceIn: modelPrice(sub.model).in, priceOut: modelPrice(sub.model).out, modelVision: modelVision(sub.model), reasoningSpec: modelReasoning(sub.model),
-          apiKey: s.openrouterKey, host: s.openrouterHost, model: sub.model,
-          reasoningEffort: s.reasoningEffort, access: s.access,
-          maxTurns: Number(maxTurns) > 0 ? Number(maxTurns) : (Number(s.subagentMaxTurns) > 0 ? Number(s.subagentMaxTurns) : 25),
-          // It asks in the session's approval box like any run (it used to answer itself yes).
-          signal: ctl.signal, askPermission: panelAsk,
-          userData: userData(), live: live,
-          contextLimit: s.contextLimit, compactThreshold: s.compactThreshold,
-          toolResultMaxChars: s.toolResultMaxChars, hardFraction: s.hardFraction,
-          subagentModel: s.subagentModel, subagentMaxTurns: s.subagentMaxTurns, subagentTimeoutMs: s.subagentTimeoutMs, mcpServers: readSettingsFile().mcpServers || {},
-          webSearch: { enabled: s.webSearchEnabled, engine: s.webSearchEngine, maxResults: s.webSearchMaxResults },
-          isSubAgent: false,
-        })) {
-          if (ev.type === 'done' || ev.type === 'error' || ev.type === 'cancelled' || ev.type === 'limit_reached' || ev.type === 'budget_reached') break;
-        }
-      } catch (err) {
-        try { store.recordUsage(sub, { prompt_tokens: 0, completion_tokens: 0, total_cost: 0, cost: 0 }); } catch {}
-      } finally {
-        // Its questions go with it: nothing is left waiting for an answer that can go nowhere.
-        for (const [k, pp] of pendingPerms) if (pp.runKey === panelKey) { pendingPerms.delete(k); try { pp.resolve(false, false); } catch {} }
-        try { const ru = sub._runUsage; if (ru) { store.recordUsage(sub, ru); delete sub._runUsage; } } catch {}
-        try { await store.saveSession(userData(), sub); } catch {}
-        const c = allRenderers(); c && c.send('subagents:changed', { id: sub.id });
-      }
-    })();
-    return { id: sub.id, model: sub.model, workdir: sub.workdir };
-  });
-
   // ---------- incremental session persistence ----------
   // Save in-flight state so a crash / app close mid-run doesn't lose the user
   // message and the tool/assistant turns already produced (pick up where you
@@ -1424,23 +1409,28 @@ app.whenReady().then(() => {
     }
     // A model on this PC (as the model or as Team's coder) is loaded before the run starts. One at a time.
     const locals = [sess.model || s.openrouterModel, sess.coderModel || ''].filter(localEngineMod.isLocalModel);
+    if (locals.length && !LOCAL_SUPPORTED) throw new Error('Models on this PC run on Windows only for now. Pick a cloud model for this session.');
+    if (locals.length && new Set(locals).size > 1) throw new Error('Only one model on this PC can run at a time, and this session uses two. Pick a cloud model for one of them.');
+    if (locals.length && !(s.localModelsDirs || []).length) throw new Error('Choose the folder your local models are in: Settings → Local models.');
+    // The run is registered BEFORE a local model loads, which can take minutes (install, tune).
+    // Registered after, Stop found nothing to stop, and the queue's watchdog took the session
+    // for idle and started a second run -- and a second engine load beside the first.
+    const runKey = `${sessionId}:${Date.now()}`;
+    const runT0 = Date.now();   // for "Worked for ..." when it ends
+    const ctl = new AbortController();
+    controllers.set(runKey, ctl);
     let localCtx = 0;
     if (locals.length) {
-      if (new Set(locals).size > 1) throw new Error('Only one model on this PC can run at a time, and this session uses two. Pick a cloud model for one of them.');
-      const dirs = s.localModelsDirs || [];
-      if (!dirs.length) throw new Error('Choose the folder your local models are in: Settings → Local models.');
       const c1 = allRenderers(); c1 && c1.send('agent:event', { sessionId, runKey: 'local', event: { type: 'warning', code: 'local-loading', message: 'Loading ' + localEngineMod.labelOf(localEngineMod.fileOf(locals[0])) + ' on this PC…' } });
-      localCtx = Number((await localEngine.start(dirs, localEngineMod.fileOf(locals[0]))).ctx) || 0;
+      try { localCtx = Number((await localEngine.start(s.localModelsDirs, localEngineMod.fileOf(locals[0]))).ctx) || 0; }
+      catch (e) { controllers.delete(runKey); throw e; }
+      if (ctl.signal.aborted) { controllers.delete(runKey); throw new Error('Stopped while the model on this PC was loading.'); }
     }
     if (!resume && sess.title === 'New session') sess.title = text.slice(0, 60);
     // A message from you while a goal is paused picks it back up ("continue" works).
     if (!goalContinue && sess.goal && sess.goal.status === 'active') { sess.goal.paused = false; sess.goal.pausedReason = ''; sess.goal.idle = 0; }
     let runEnd = 'error', runTools = 0, runCost = 0, runTokens = 0, runParts = null;   // for the goal loop (goalStep) and the run's summary
 
-    const runKey = `${sessionId}:${Date.now()}`;
-    const runT0 = Date.now();   // for "Worked for ..." when it ends
-    const ctl = new AbortController();
-    controllers.set(runKey, ctl);
     napBrowsers();   // this session's browser wakes for the run
     const w = win();
 
@@ -1482,6 +1472,7 @@ app.whenReady().then(() => {
           priceOut: modelPrice(sess.model || s.openrouterModel).out,
           // Whether screenshots are handed over as images or described as unseen.
           modelVision: modelVision(sess.model || s.openrouterModel),
+          maxTokens: modelMaxTokens(sess.model || s.openrouterModel), maxTokensOf: (id) => modelMaxTokens(id),
           visionOf: (id) => modelVision(id),   // a worker on another model (Team's coder) is asked about its own eyes
           visionHelper: s.visionHelperModel || '',
           // Auto's yes/no on each action, on a cheap model (Settings > Permissions).
@@ -1716,7 +1707,10 @@ app.whenReady().then(() => {
 
   ipcMain.handle('agent:cancel', (_e, runKey) => {
     const ctl = controllers.get(runKey);
-    if (ctl) { ctl.abort(); controllers.delete(runKey); return true; }
+    // Abort only. The run's own finally removes it once it has really ended; removed here, the
+    // session read as idle while the stopped run was still writing its last messages, and a
+    // new run could start on the same session underneath it.
+    if (ctl) { ctl.abort(); return true; }
     return false;
   });
   ipcMain.handle('agent:permission', (_e, { permId, allowed, always }) => {
@@ -1913,8 +1907,8 @@ ipcMain.handle('openrouter:testMgmt', async (_e, { key } = {}) => {
 // VoxAI's own numbers did not account for came from another key on the same account, and
 // nothing showed which one. OpenRouter lists names and masked labels, never the keys themselves.
 // ---- models on this PC (local-engine.js) ----
-ipcMain.handle('local:state', () => localEngine.state());
-ipcMain.handle('local:install', () => localEngine.install());
+ipcMain.handle('local:state', () => ({ ...localEngine.state(), supported: LOCAL_SUPPORTED }));
+ipcMain.handle('local:install', () => (LOCAL_SUPPORTED ? localEngine.install() : false));
 ipcMain.handle('local:devices', () => localEngine.devices());
 ipcMain.handle('local:models', () => {
   const dirs = localModelDirs();
@@ -1922,6 +1916,7 @@ ipcMain.handle('local:models', () => {
 });
 ipcMain.handle('local:start', async (_e, file) => {
   const dirs = localModelDirs();
+  if (!LOCAL_SUPPORTED) return { ok: false, error: 'Models on this PC run on Windows only for now.' };
   if (!dirs.length) return { ok: false, error: 'Add the folder your models are in first.' };
   try { return { ok: true, state: await localEngine.start(dirs, String(file || '')) }; } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
 });
@@ -2167,6 +2162,14 @@ ipcMain.handle('openrouter:generations', async (_e, { limit = 40, cursor } = {})
   ipcMain.handle('shell:openExternal', (_e, url) => {
     const u = String(url || '');
     if (!/^(https?|file):\/\//i.test(u)) return { ok: false, error: 'refused: only http(s) and file URLs open externally' };
+    // A file: URL is opened by Windows with whatever handles it -- a .bat or .exe RUNS. Only a
+    // page goes to the browser; any other file is shown in its folder instead.
+    if (/^file:/i.test(u)) {
+      try {
+        const p = require('url').fileURLToPath(u);
+        if (!/\.html?$/i.test(p)) { shell.showItemInFolder(p); return { ok: true, shown: true }; }
+      } catch (e) { return { ok: false, error: 'refused: not a file path' }; }
+    }
     try { shell.openExternal(u); return { ok: true }; }
     catch (e) { return { ok: false, error: e && e.message }; }
   });

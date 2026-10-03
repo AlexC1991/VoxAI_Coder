@@ -847,7 +847,7 @@ async function drain(gen) {
       await mcp2.run({ action: 'call', server: 't', name: 'add', arguments: { a: 1, b: 1 } }, mctx);
       check('one server process across turns, not one per turn', require(path.join(ROOT, 'src/backend/tools/mcp.js'))._clients.size === 1, require(path.join(ROOT, 'src/backend/tools/mcp.js'))._clients.size);
       require(path.join(ROOT, 'src/backend/tools/procs.js')).stopAll();
-      check('the app passes the configured servers to the agent', read('src/backend/agent.js').includes('getSettings: () => ({ access, mcpServers: mcpServers || {} }),') && (read('src/main/main.js').match(/mcpServers: readSettingsFile\(\)\.mcpServers \|\| \{\}/g) || []).length === 2, 'never passed');
+      check('the app passes the configured servers to the agent', read('src/backend/agent.js').includes('getSettings: () => ({ access, mcpServers: mcpServers || {} }),') && (read('src/main/main.js').match(/mcpServers: readSettingsFile\(\)\.mcpServers \|\| \{\}/g) || []).length === 1, 'never passed');   // one run path: the Sub-agents panel's spawn IPC is gone
       const MM = read('src/main/main.js'), HH = read('src/renderer/index.html'), AG = read('src/backend/agent.js');
       check('--user-data-dir is respected, for a separate profile', MM.includes("if (!app.commandLine.hasSwitch('user-data-dir')) app.setPath('userData'"), 'ignored');
       check("errors from the main process lose Electron's wrapper", HH.includes("replace(/^Error invoking remote method '[^']*': (?:\\w*Error: )?/, '')"), 'wrapper shown');
@@ -1113,7 +1113,7 @@ async function drain(gen) {
     {
       const H = read('src/renderer/index.html');
       check('a queued message is drawn as text', H.includes("const t = el('span', 'q-text', esc(raw.slice(0, 64)") && H.includes("el('span', 'q-steer', '\\u21b3 ' + esc(String(item.steer)"), 'as HTML');
-      check('model names from outside are drawn as text', H.includes("el('span','m', esc(r.model || ''))") && H.includes("el('span', 'sr-model', esc(r.model || ''))"), 'as HTML');
+      check('model names from outside are drawn as text', H.includes("el('span','m', esc(r.model || ''))"), 'as HTML');
       const inl = new vm.Script('(' + /function inlineMd\(t\)\{[\s\S]*?\n\}/.exec(H)[0] + ')').runInNewContext({});
       check('a markdown link is only ever a web link', inl('[x](javascript:alert(1))').indexOf('<a') < 0 && inl('[x](https://a.test/p)') === '<a href="https://a.test/p" target="_blank" rel="noopener">x</a>', inl('[x](javascript:alert(1))'));
     }
@@ -1671,8 +1671,8 @@ async function drain(gen) {
     const no = await workerAsk(async () => false);
     check('and the user\'s no is the worker\'s no', no === false, no);
     check('with nobody to ask, a worker is refused, not waved through', (await workerAsk(null)) === false, 'no parent');
-    check('the Sub-agents panel\'s workers ask in the session\'s box too', MAIN.includes('signal: ctl.signal, askPermission: panelAsk,') && !MAIN.includes('askPermission: async () => true')
-      && MAIN.includes('function askPermissionFor(sessionId, runKey) {') && MAIN.includes('for (const [k, pp] of pendingPerms) if (pp.runKey === panelKey)'), 'main');
+    check('runs ask in the session\'s box, never answering themselves yes (the Sub-agents panel IPC is gone)', !MAIN.includes('askPermission: async () => true')
+      && MAIN.includes('function askPermissionFor(sessionId, runKey) {') && !MAIN.includes("ipcMain.handle('subagents:spawn'"), 'main');
     check('several requests queue in the box instead of replacing each other', HTML.includes('if (!v.permQueue.some((q) => q.permId === permId)) v.permQueue.push(p);')
       && HTML.includes('if (v.permQueue && v.permQueue.length) { v.perm = v.permQueue.shift();'), 'page');
     check('programs opened on the desktop and every shell command are claimed as the session\'s own',
@@ -1773,7 +1773,7 @@ async function drain(gen) {
     check('a task that is only setup still says something', taskSummary('You are a reviewer.') === 'You are a reviewer.', taskSummary('You are a reviewer.'));
     const SPW = read('src/backend/tools/spawn.js');
     check('approvals, worker cards and the spawn prompt all use it', SPW.includes('${endSentence(taskSummary(task.task, 90))}') && SPW.includes('label: taskSummary(task.task, 90)')
-      && read('src/backend/agent.js').includes("require('./tools/spawn').taskSummary(t.task, 400)") && MAIN.includes("require('../backend/tools/spawn').taskSummary(task, 90)"), 'labels');
+      && read('src/backend/agent.js').includes("require('./tools/spawn').taskSummary(t.task, 400)"), 'labels');
 
     const D = require(path.join(ROOT, 'src/backend/cu/desktop.js'));
     let askedFor = null;
@@ -2408,7 +2408,7 @@ async function drain(gen) {
     const SPw = read('src/backend/tools/spawn.js');
     check('the coder can use the session\'s browser and is told to try what it built like a person would (it had no browser, so Team\'s "the coder tests it" could not happen)',
       SPw.includes("const WRITE_TOOLS = READ_TOOLS.concat(['write', 'edit', 'patch', 'shell', 'node_repl', 'memory', 'computer']);")
-      && SPw.includes('onAttachAtlas: agentOpts.onAttachAtlas || null,') && A.includes('priceIn, priceOut, modelVision, visionOf, webSearch, onOpenUrl, onAttachAtlas, localContext },')
+      && SPw.includes('onAttachAtlas: agentOpts.onAttachAtlas || null,') && A.includes('priceIn, priceOut, modelVision, visionOf, maxTokensOf, maxTokens, webSearch, onOpenUrl, onAttachAtlas, localContext },')
       && /open it with the computer tool and use it the way a/.test(SPw) && SPw.includes('browser_checks: browserChecks,'), 'coder browser');
     check('visual work the coder never opened is flagged to the planner, to send it back', A.includes("else if (subs.some((s) => s && s.ok !== false && !s.browser_checks && visual(s))) result.team_note =") && A.includes('/\\.(html?|css|jsx?|tsx?|vue|svelte)$/i.test('), 'unseen');
     const blind = { coderFails: 0, written: 0, looks: 0, blindCoder: true }; const bl = [...Array(9)].map(() => T.teamGuard('computer', {}, blind));
@@ -2420,7 +2420,7 @@ async function drain(gen) {
       H.includes('if (v && !v.opened) { keepPerm = v.perm ?') && H.includes('if (keepPerm) { v.perm = keepPerm.perm; v.permQueue = keepPerm.permQueue; }'), 'history');
     check('a worker on another model is asked about its own eyes (Muse Spark got its screenshots as V4.1 descriptions)',
       SPw.includes("(typeof agentOpts.visionOf === 'function' ? (() => { try { const v = agentOpts.visionOf(task.model || sub.model || agentOpts.defaultSubModel);")
-      && A.includes('priceIn, priceOut, modelVision, visionOf, webSearch, onOpenUrl, onAttachAtlas, localContext },') && read('src/main/main.js').includes('visionOf: (id) => modelVision(id),'), 'visionOf');
+      && A.includes('priceIn, priceOut, modelVision, visionOf, maxTokensOf, maxTokens, webSearch, onOpenUrl, onAttachAtlas, localContext },') && read('src/main/main.js').includes('visionOf: (id) => modelVision(id),'), 'visionOf');
     {
       // A provider that hangs: OpenRouter's ": PROCESSING" keep-alives kept the request open for ever.
       const ORs = require(path.join(ROOT, 'src/backend/providers/openrouter.js'));
@@ -2600,7 +2600,8 @@ async function drain(gen) {
       global.fetch = async (u, init) => {
         if (String(u).endsWith('/slots')) { polls++; return { ok: true, json: async () => [{ id_task: 9, is_processing: true, n_prompt_tokens_processed: polls > 12 ? 2048 : 0, next_token: [{ n_decoded: 0 }] }] }; }
         const enc = new TextEncoder();
-        return { ok: true, body: new ReadableStream({ start(c) { setTimeout(() => { c.enqueue(enc.encode('data: {"choices":[{"delta":{"content":"read"}}]}\n\ndata: [DONE]\n\n')); c.close(); }, 700); } }) };
+        // Ends once the watcher has looked 15 times (past the 2,048 jump), however busy the PC is.
+        return { ok: true, body: new ReadableStream({ start(c) { const iv = setInterval(() => { if (polls < 15) return; clearInterval(iv); c.enqueue(enc.encode('data: {"choices":[{"delta":{"content":"read"}}]}\n\ndata: [DONE]\n\n')); c.close(); }, 20); } }) };
       };
       ORl.localEndpoint.expected = () => ({ tps: 6.4, pps: 79 });
       const readOut = await ORl.chatCompletions({ model: 'local/m.gguf', messages: [{ role: 'user', content: 'x' }], tools, slowStopMs: 300, onEvent: () => {} });
@@ -2658,7 +2659,7 @@ async function drain(gen) {
     check('a model on this PC shares nothing, however free it is', require(path.join(ROOT, 'src/backend/team.js')).sharesData('local/m.gguf', { prompt: 0, completion: 0 }) === null, 'shares');
     const Ml = read('src/main/main.js');
     check('the app loads the local model a run needs (one at a time), gives it the engine\'s context, lists local models free, and stops the engine on quit',
-      Ml.includes('const locals = [sess.model || s.openrouterModel, sess.coderModel || \'\'].filter(localEngineMod.isLocalModel);') && Ml.includes('localCtx = Number((await localEngine.start(dirs, localEngineMod.fileOf(locals[0]))).ctx) || 0;')
+      Ml.includes('const locals = [sess.model || s.openrouterModel, sess.coderModel || \'\'].filter(localEngineMod.isLocalModel);') && Ml.includes('try { localCtx = Number((await localEngine.start(s.localModelsDirs, localEngineMod.fileOf(locals[0]))).ctx) || 0; }')
       && Ml.includes('contextLimit: localCtx && localEngineMod.isLocalModel(sess.model || s.openrouterModel) ? localCtx : s.contextLimit,') && Ml.includes('try { models.push(...localCatalog()); } catch')
       && Ml.includes('try { localEngine.stop(); } catch {} });') && read('src/renderer/index.html').includes('<section class="set-page" data-set="local" hidden>'), 'main');
   }
@@ -2713,6 +2714,62 @@ async function drain(gen) {
     const RL = read('scripts/release.js');
     check('release --linux attaches the .sh too, only when it names this exact AppImage; the README links both downloads',
       RL.includes("['attach', sh, releaseNumber, '--project', PROJECT],") && RL.includes('was made for a different AppImage') && RL.includes('## Linux') && RL.includes('## Windows'), 'release');
+  }
+
+  // ------------------------------------------------------------------ [VF]
+  console.log('\n[VF] an ES module is not reported broken because the project says CommonJS');
+  {
+    const { verifyFile } = require(path.join(ROOT, 'src/backend/tools/verify.js'));
+    const vd = path.join(WD, 'vf-esm'); fs.mkdirSync(vd, { recursive: true });
+    fs.writeFileSync(path.join(vd, 'package.json'), '{"type":"commonjs"}');
+    fs.writeFileSync(path.join(vd, 'good.js'), "import * as T from 'three';\nexport const A = 1;\n");
+    fs.writeFileSync(path.join(vd, 'bad.js'), "import * as T from 'three';\nexport const A = ;\n");
+    fs.writeFileSync(path.join(vd, 'cjs.js'), "const x = require('fs');\nmodule.exports = x;\n");
+    const g = await verifyFile(path.join(vd, 'good.js')), b = await verifyFile(path.join(vd, 'bad.js')), c = await verifyFile(path.join(vd, 'cjs.js'));
+    check('a valid ES module passes (an RTS game\'s every js/*.js edit was "does not parse"), a broken one still fails with its real error, CommonJS is unchanged',
+      g.verified === 'ok' && b.verified === 'failed' && /Unexpected token/.test(b.diagnostics || '') && !/vox-check-/.test(b.diagnostics || '') && c.verified === 'ok', { g, b: b.verified, c: c.verified });
+  }
+
+  // ------------------------------------------------------------------ [AU]
+  console.log('\n[AU] the code audit\'s findings stay fixed');
+  {
+    const SB = require(path.join(ROOT, 'src/backend/tools/sandbox.js'));
+    check('a line break, rg --pre, git --ext-diff and find -fls are not "only looking" (ls\\nrm -rf ran unasked on Linux)',
+      SB.isReadOnlyCommand('ls') && !SB.isReadOnlyCommand('ls\nrm -rf ~/proj') && !SB.isReadOnlyCommand('rg --pre=x foo') && !SB.isReadOnlyCommand('git diff --ext-diff')
+      && !SB.isReadOnlyCommand('find . -fls out') && !SB.isProjectCommand('npm test\nrm -rf src', 'A:/p') && SB.isProjectCommand('npm test', 'A:/p'), 'classifier');
+    const A2 = require(path.join(ROOT, 'src/backend/agent.js'));
+    const hist = [{ role: 'user', content: 'go' }, { role: 'assistant', content: '', tool_calls: [{ id: 'a' }, { id: 'b' }, { id: 'c' }] }, { role: 'tool', tool_call_id: 'a', content: 'ok' }, { role: 'user', content: 'next' }];
+    check('Stop during a turn of several calls: each unanswered call gets "not run" before the next request', A2.answerEveryCall(hist) === 2 && hist.map((m) => m.tool_call_id || m.role).join(',') === 'user,assistant,a,b,c,user' && A2.answerEveryCall(hist) === 0, hist.map((m) => m.tool_call_id || m.role));
+    const S2 = require(path.join(ROOT, 'src/backend/sessions.js'));
+    const ud = path.join(WD, 'au-sessions');
+    const base = { id: 'au1', title: 't', workdir: '', model: 'm', messages: [{ role: 'user', content: 'hi' }], todos: [], createdAt: new Date().toISOString() };
+    await Promise.all(Array.from({ length: 12 }, (_, i) => { const c = JSON.parse(JSON.stringify(base)); c.messages.push({ role: 'assistant', content: 'x'.repeat(100000) + i }); return S2.saveSession(ud, c); }));
+    const sf = path.join(ud, 'sessions', 'au1.jsonl');
+    const whole = fs.readFileSync(sf, 'utf8').split('\n').every((l) => { try { JSON.parse(l); return true; } catch { return false; } });
+    fs.appendFileSync(sf, '\n{"kind":"message","message":{"role":"ass');
+    const back = await S2.loadSession(ud, 'au1');
+    check('overlapping saves never leave a broken file, and a damaged line costs that line only', whole && back.messages.length === 2 && !fs.readdirSync(path.join(ud, 'sessions')).some((x) => x.endsWith('.tmp')), { whole, n: back.messages.length });
+    const MA = read('src/main/main.js'), HA = read('src/renderer/index.html'), LE2 = read('src/main/local-engine.js');
+    check('a queued message goes to its own session, not the one on screen', HA.includes('let sid = v && v.id && viewStore.get(v.id) === v ? v.id : null;') && HA.includes('const r = await window.voxai.agentSend(sid, text, parts);'), 'doSend');
+    check('a run is registered before its local model loads, Stop reaches it then, and loads go one at a time', MA.indexOf('controllers.set(runKey, ctl);\n    let localCtx = 0;') > 0
+      && MA.includes("throw new Error('Stopped while the model on this PC was loading.')") && HA.includes('window.voxai.agentLive(v.id).then((l) =>') && LE2.includes('if (starting && starting.file === file) return starting.p;'), 'lock');
+    check('Stop only aborts: the run itself is forgotten when it has really ended', MA.includes('if (ctl) { ctl.abort(); return true; }') && !MA.includes('if (ctl) { ctl.abort(); controllers.delete(runKey); return true; }'), 'cancel');
+    check('the chat view is sandboxed, the app page is matched exactly, and a file: link that is not a page is shown, not run',
+      MA.includes('contextIsolation: true, nodeIntegration: false, sandbox: true,\n  };') && MA.includes("return require('url').fileURLToPath(u).replace(/\\\\/g, '/').toLowerCase() === APP_PAGE;")
+      && MA.includes("if (!/\\.html?$/i.test(p)) { shell.showItemInFolder(p); return { ok: true, shown: true }; }"), 'shell');
+    check('each model gets its own longest answer from the catalogue (16,384 for all was refused by some providers)', MA.includes('return mc >= 1024 ? Math.min(16384, mc) : 16384;') && read('src/backend/tools/spawn.js').includes("agentOpts.maxTokensOf(task.model || sub.model"), 'max tokens');
+    check('settings are read again only when the file changes, keys decrypted once; the session list re-reads only changed files',
+      MA.includes("if (stamp !== settingsStamp || settingsText === null)") && MA.includes('const hit = decrypted.get(') && read('src/backend/sessions.js').includes('if (!row || row.stamp !== stamp) {'), 'cache');
+    check('models on this PC are offered on Windows only (the engine is the Windows build)', MA.includes("const LOCAL_SUPPORTED = process.platform === 'win32';") && MA.includes('if (!dirs.length || !LOCAL_SUPPORTED) return [];')
+      && LE2.indexOf("if (!m) throw new Error('Model not found in your local models folders: ' + file);") < LE2.indexOf("if (!fs.existsSync(exeOf()) && !(await install()))"), 'local');
+    check('the half-built Sub-agents panel IPC is gone (it ran in whichever session loaded first, and nothing could stop it)', !MA.includes("'subagents:spawn'") && !read('src/preload/preload.js').includes('subagents:') && !HA.includes('async function spawnSub('), 'subagents');
+    check('a key read before the keychain is ready is not cached (the cache kept a garbled key: every request failed as "could not reach OpenRouter")',
+      MA.includes("if (blob.store === 'keychain' && !safeStorage.isEncryptionAvailable()) return decryptSecretNow(blob);"), 'early key');
+    check('a request that fails with no network code says why, not "no response"', read('src/backend/providers/openrouter.js').includes("String((e && e.cause && e.cause.message) || (e && e.message && e.message !== 'fetch failed' ? e.message : '') || 'no response')"), 'why');
+    const { verifyFile: vf2 } = require(path.join(ROOT, 'src/backend/tools/verify.js'));
+    const jf = path.join(WD, 'au-cjs.js'); fs.writeFileSync(jf, 'const a = {;\n');
+    const t0 = Date.now(); const vr = await vf2(jf);
+    check('plain JavaScript is checked in-process: no Node to start, so a busy PC cannot time it out into "skipped"', vr.verified === 'failed' && Date.now() - t0 < 1000 && !/function \(exports/.test(vr.diagnostics || ''), { vr: vr.verified, ms: Date.now() - t0 });
   }
 
   // ------------------------------------------------------------------ [SZ]

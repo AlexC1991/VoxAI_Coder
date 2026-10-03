@@ -24,17 +24,6 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
     },
   },
 
-  // Sub-agents: manual spawn + list + change events
-  subagents: {
-    list: () => ipcRenderer.invoke('subagents:list'),
-    spawn: (task, model, maxTurns, timeoutMs) => ipcRenderer.invoke('subagents:spawn', { task, model, maxTurns, timeoutMs }),
-    onChanged: (cb) => {
-      const fn = (_e, msg) => cb(msg);
-      ipcRenderer.on('subagents:changed', fn);
-      return () => ipcRenderer.removeListener('subagents:changed', fn);
-    },
-  },
-
   // Atlas: in-app resizable browser (chat | browser split)
   preview: {
     // workdir: the session's project, so a local file in it passes containment.

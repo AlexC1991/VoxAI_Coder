@@ -282,13 +282,29 @@ function createLocalEngine({ baseDir, log = () => {}, onState = () => {} }) {
     return all[key];
   }
 
-  /** Load a model (stopping any other); resolves when it answers /health, or rejects with why. */
-  async function start(folders, file) {
+  /**
+   * Load a model (stopping any other); resolves when it answers /health, or rejects with why.
+   * One load at a time. Two runs starting together each called this: the second killed the first
+   * server mid-load, or two tunes ran trial servers on the same card and saved skewed speeds for
+   * good -- and a second spawn left the first llama-server running, unowned, after the app quit.
+   * A second call for the same model joins the load in flight; another model waits its turn.
+   */
+  let starting = null;   // { file, p }
+  function start(folders, file) {
+    if (starting && starting.file === file) return starting.p;
+    const prev = starting ? starting.p.catch(() => {}) : Promise.resolve();
+    const me = { file, p: prev.then(() => startNow(folders, file)) };
+    starting = me;
+    me.p.finally(() => { if (starting === me) starting = null; }).catch(() => {});
+    return me.p;
+  }
+  async function startNow(folders, file) {
     if (st.state === 'ready' && st.model === file && proc) return st;
     if (proc) await stop();
-    if (!fs.existsSync(exeOf()) && !(await install())) throw new Error('The local engine could not be installed: ' + st.error);
+    // The model first: an engine download (and its install) for a model that is not there helps nobody.
     const m = models(folders).find((x) => x.file === file);
     if (!m) throw new Error('Model not found in your local models folders: ' + file);
+    if (!fs.existsSync(exeOf()) && !(await install())) throw new Error('The local engine could not be installed: ' + st.error);
     const folder = m.folder;
     const model = path.join(folder, file);
     const devs = await devices();

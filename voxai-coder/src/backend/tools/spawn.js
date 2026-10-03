@@ -191,7 +191,9 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
         // pinned low so nothing mutating could be auto-approved even if it leaked in.
         access: role.access || agentOpts.access || 'full',
         allowTools: role.tools,
-        maxTokens: agentOpts.maxTokens || 16384,
+        // The worker's own model's limit (Team's coder is another model than the planner).
+        maxTokens: (typeof agentOpts.maxTokensOf === 'function' && agentOpts.maxTokensOf(task.model || sub.model || agentOpts.defaultSubModel || agentOpts.model)) || agentOpts.maxTokens || 16384,
+        maxTokensOf: agentOpts.maxTokensOf || null,
         maxTurns: Number(task.maxTurns) > 0 ? Number(task.maxTurns)
           : (Number(agentOpts.defaultSubMaxTurns) > 0 ? Number(agentOpts.defaultSubMaxTurns) : 25),
         signal: subCtl.signal,

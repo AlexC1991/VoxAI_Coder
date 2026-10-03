@@ -112,6 +112,9 @@ const READ_ONLY_GIT = new Set(['status', 'log', 'diff', 'show', 'rev-parse', 'ls
 function isReadOnlyCommand(cmd) {
   const s = String(cmd || '').trim();
   if (!s) return false;
+  // A line break is a second command to sh: "ls\nrm -rf ~/proj" read as only looking and ran
+  // without a prompt on Linux. Nothing that only looks needs two lines.
+  if (/[\r\n]/.test(s)) return false;
   // Silencing or merging error output writes nothing anywhere: 2>NUL, >/dev/null, 2>&1.
   // Models add these to almost every look-around command, which kept them asking.
   const quiet = s.replace(/\s*\d?>\s*(nul|\/dev\/null)(?=\s|$|[&|;])/gi, ' ').replace(/\s*2>&1/g, ' ');
@@ -128,12 +131,15 @@ function isReadOnlyCommand(cmd) {
       if (sub === 'branch') return words.slice(2).every((x) => /^(-a|-r|-v|-vv|--list|--all|--show-current)$/.test(x));
       if (sub === 'remote') return words.slice(2).every((x) => x === '-v');
       if (sub === 'config') return words.slice(2).some((x) => x === '--get' || x === '--list' || x === '-l');
-      return READ_ONLY_GIT.has(sub) && !words.some((x) => /^--output/.test(x));
+      // --ext-diff and --textconv run programs the repo's config names.
+      return READ_ONLY_GIT.has(sub) && !words.some((x) => /^--(output|ext-diff|textconv)/.test(x));
     }
+    // rg --pre runs any program on every file it searches.
+    if (w0 === 'rg') return !words.some((x) => /^--pre(=|$)/.test(x));
     if (['node', 'npm', 'python', 'python3', 'py', 'pip', 'dotnet', 'java', 'go', 'cargo', 'rustc', 'deno', 'bun'].includes(w0)) {
       return words.length === 2 && /^(--version|-v|-V|version)$/.test(words[1]) || (w0 === 'npm' && /^(ls|list|outdated|view|root|prefix)$/.test(words[1] || ''));
     }
-    if (w0 === 'find') return !words.some((x) => /^-(exec|execdir|delete|ok|fprint)/.test(x));
+    if (w0 === 'find') return !words.some((x) => /^-(exec|execdir|delete|ok|fprint|fls)/.test(x));
     if (w0 === 'sort') return !words.some((x) => /^(-o|\/o)$/i.test(x));
     return READ_ONLY_CMDS.has(w0);
   });
@@ -145,17 +151,25 @@ function isReadOnlyCommand(cmd) {
  * that expand to places. "Only looking" read C:\Users\...\.ssh\id_rsa without a word
  * (found by scripts/auto-battery.js).
  */
-const SECRET_PATH = /(\.ssh\b|id_rsa|id_ed25519|id_ecdsa|\.aws\b|\.azure\b|\.gnupg|\.kube\b|\.docker[\\/]config|\.npmrc|\.pypirc|\.netrc|\.git-credentials|credentials\.json|voxai-settings|update-key\.pem|Login Data|Cookies|wallet\.dat|\.kdbx)/i;
+const SECRET_PATH = /(\.ssh\b|\.config[\\/](gh|gcloud|hub)\b|hosts\.yml|id_rsa|id_ed25519|id_ecdsa|\.aws\b|\.azure\b|\.gnupg|\.kube\b|\.docker[\\/]config|\.npmrc|\.pypirc|\.netrc|\.git-credentials|credentials\.json|voxai-settings|update-key\.pem|Login Data|Cookies|wallet\.dat|\.kdbx)/i;
 function touchesOutside(cmd, workdir) {
   const s = String(cmd || '');
   if (SECRET_PATH.test(s)) return true;
   if (/(^|[\s"'=])(~[\\/]|\.\.[\\/]|\.\.$)|%(USERPROFILE|APPDATA|LOCALAPPDATA|HOMEPATH|HOMEDRIVE|PROGRAMDATA|SYSTEMROOT|WINDIR|TEMP|TMP)%|\$env:|\$HOME\b|\\\\[\w.-]+\\/i.test(s)) return true;
   const root = String(workdir || '').replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase();
   const abs = s.match(/\b[a-z]:[\\/][^\s"'&|;<>]*/gi) || [];
-  return abs.some((p) => {
+  if (abs.some((p) => {
     const q = p.replace(/\//g, '\\').replace(/\\+$/, '').toLowerCase();
     return !root || !(q === root || q.startsWith(root + '\\'));
-  });
+  })) return true;
+  // Linux: /home/u/.config/gh/hosts.yml went through Auto as "only looking" -- only drive
+  // letters were known. (Not on Windows, where /b and /s are a command's switches.)
+  if (process.platform !== 'win32') {
+    const proot = String(workdir || '').replace(/\/+$/, '');
+    const posix = (s.match(/(?:^|[\s"'=])(\/[^\s"'&|;<>]*)/g) || []).map((x) => x.replace(/^[\s"'=]/, ''));
+    return posix.some((p) => p !== '/dev/null' && !(proot && (p === proot || p.startsWith(proot + '/'))));
+  }
+  return false;
 }
 
 /**
@@ -194,6 +208,8 @@ const PROJECT_CMDS = [
 function isProjectCommand(cmd, workdir) {
   const s = String(cmd || '').trim();
   if (!s || touchesOutside(s, workdir)) return false;
+  // A line break is another command to sh, unchecked (see isReadOnlyCommand).
+  if (/[\r\n]/.test(s)) return false;
   // Quieting output is not writing: 2>NUL, >/dev/null, 2>&1.
   let q = s.replace(/\s*\d?>\s*(nul|\/dev\/null)(?=\s|$|[&|;])/gi, ' ').replace(/\s*2>&1/g, ' ');
   // Into a project file is fine (echo PORT=3000> .env); anywhere else, the check decides.

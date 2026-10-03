@@ -36,6 +36,8 @@ const LOCAL_TOOLS = ['read', 'write', 'edit', 'patch', 'shell', 'glob', 'grep', 
 const LOCAL_RULES = '\n\nRULES FOR THIS MODEL (it runs on this PC):\n'
   + '- Do the work with tool calls. To create or change a file, call write (the whole file) or edit. Never put code or file contents in your reply: code in a reply is NOT saved anywhere.\n'
   + '- One step at a time: call a tool, read its result, then decide the next call.\n'
+  // The 7B ran `grep` in Windows' cmd, got "'overlay' is not recognized", and handed the check back.
+  + '- To find or read files use the grep, glob and read tools, not shell commands' + (process.platform === 'win32' ? ' (the shell here is Windows cmd: grep, ls and cat do not exist in it)' : '') + '.\n'
   + '- When the task is done, reply with one short sentence saying what you changed.';
 const tools = require('./tools');
 const { compactSession, estimateSessionTokens } = require('./compact');
@@ -536,6 +538,29 @@ function uniqueToolIds(messages) {
   return changed;
 }
 
+/**
+ * Every tool call answered. Stop during a turn that made several calls answered only the one
+ * running, and the next request carried calls with no result -- which OpenAI- and
+ * Anthropic-style endpoints refuse, so the session could not go on. Each missing answer is
+ * filled in, right after its call's other answers, as not run. Returns how many were added.
+ */
+function answerEveryCall(messages) {
+  let added = 0;
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (!m || m.role !== 'assistant' || !Array.isArray(m.tool_calls) || !m.tool_calls.length) continue;
+    let j = i + 1;
+    const answered = new Set();
+    for (; j < messages.length && messages[j] && messages[j].role === 'tool'; j++) answered.add(messages[j].tool_call_id);
+    const missing = m.tool_calls.filter((c) => c && c.id && !answered.has(c.id));
+    if (!missing.length) continue;
+    messages.splice(j, 0, ...missing.map((c) => ({ role: 'tool', tool_call_id: c.id, content: 'DENIED_OR_ERROR: not run -- the run was stopped before this call.' })));
+    added += missing.length;
+    i = j + missing.length - 1;
+  }
+  return added;
+}
+
 async function* runAgent(opts) {
   const {
     session, userText, apiKey, host, model,
@@ -583,6 +608,7 @@ async function* runAgent(opts) {
     // Decides whether a screenshot is handed over as a real image or described.
     modelVision = null,
     visionOf = null,   // (modelId) -> true/false/null: whether another model can read images
+    maxTokensOf = null,   // (modelId) -> the longest answer that model may write (a worker on another model)
     // A model that can see, to describe screenshots for one that cannot. '' = off.
     visionHelper = '',
     // A cheap model for Auto's yes/no on each action. '' = the session's own model.
@@ -864,6 +890,8 @@ async function* runAgent(opts) {
   // provider that requires unique ids accepts the history. Nothing changes when there
   // are no repeats, so the prompt cache is disturbed at most once per old session.
   uniqueToolIds(session.messages);
+  // A run stopped mid-turn left calls unanswered; each gets "not run" (answerEveryCall).
+  answerEveryCall(session.messages);
 
   // Build the user message, supporting image attachments (multimodal content array).
   const userParts = [];
@@ -983,7 +1011,7 @@ async function* runAgent(opts) {
         defaultSubTimeoutMs: coderModel ? Math.max((isLocal(coderModel) ? 30 : 15) * 60 * 1000, Number(subagentTimeoutMs) || 0) : subagentTimeoutMs,
         // Sub-agents spend the PARENT's remaining allowance, never a fresh one.
         // Rebuilt each turn so a fan-out later in the run sees the depleted figure.
-        budgetRemaining: Math.max(0, budget - spent), priceIn, priceOut, modelVision, visionOf, webSearch, onOpenUrl, onAttachAtlas, localContext },
+        budgetRemaining: Math.max(0, budget - spent), priceIn, priceOut, modelVision, visionOf, maxTokensOf, maxTokens, webSearch, onOpenUrl, onAttachAtlas, localContext },
       // mcpServers were never passed, so no configured MCP server could be seen.
       getSettings: () => ({ access, mcpServers: mcpServers || {} }),
       getAccess: () => access,
@@ -1686,4 +1714,4 @@ function answerPendingAsk(session, callId, res) {
 }
 
 module.exports = {
-  _systemPrompt: (...a) => SYSTEM(...a), extractImages, TOOL_IMAGES_MARKER, runAgent, MAX_TURNS, AUTO_POLICY, autoCheckMessages, readAutoDecision, autoRule, describeScreenshot, goalPrompt, boundToolResult, accumulateUsage, uniqueToolIds, pendingAsk, answerPendingAsk, compactImage, browserTargetJs };
+  _systemPrompt: (...a) => SYSTEM(...a), extractImages, TOOL_IMAGES_MARKER, runAgent, MAX_TURNS, AUTO_POLICY, autoCheckMessages, readAutoDecision, autoRule, describeScreenshot, goalPrompt, boundToolResult, accumulateUsage, uniqueToolIds, answerEveryCall, pendingAsk, answerPendingAsk, compactImage, browserTargetJs };
