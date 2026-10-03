@@ -263,16 +263,22 @@ function loadWith(file, stubs) {
       [/\.\/native$/, { launch: (p) => { seen.push('NATIVE ' + p); return { ok: true }; }, screenshot: () => ({}), listWindows: () => ({ windows: [] }) }],
     ]);
     const t = cu.makeComputerUseTool({});
-    const ctx = { workdir: winPath('A:', 'Github', 'Desktop3D'), emit: () => {} };
+    // Drive-letter paths only mean something on Windows; elsewhere the same checks use a POSIX workdir.
+    const WIN = process.platform === 'win32';
+    const wd = WIN ? winPath('A:', 'Github', 'Desktop3D') : '/home/dev/Desktop3D';
+    const wdUrl = WIN ? 'file:///A:/Github/Desktop3D' : 'file:///home/dev/Desktop3D';
+    const ctx = { workdir: wd, emit: () => {} };
     const run = async (args) => { seen.length = 0; try { await t.run('cu_launch', args, ctx); return seen[0]; } catch (e) { return 'ERROR ' + e.message; } };
 
     // The exact call that failed on 2026-09-21.
-    const png = await run({ nativePath: winPath('A:', 'Github', 'Desktop3D', 'assets', 'renders', 'byte-qt-preview.png') });
-    check('a local image opens as file://', png === 'file:///A:/Github/Desktop3D/assets/renders/byte-qt-preview.png', png);
+    const png = await run({ nativePath: path.join(wd, 'assets', 'renders', 'byte-qt-preview.png') });
+    check('a local image opens as file://', png === `${wdUrl}/assets/renders/byte-qt-preview.png`, png);
     const rel = await run({ nativePath: 'assets/renders/byte-main-pose.png' });
-    check('a relative path resolves against the workdir', rel === 'file:///A:/Github/Desktop3D/assets/renders/byte-main-pose.png', rel);
-    const exe = await run({ nativePath: winPath('C:', 'Windows', 'notepad.exe') });
-    check('an .exe is launched natively', exe === 'NATIVE ' + winPath('C:', 'Windows', 'notepad.exe'), exe);
+    check('a relative path resolves against the workdir', rel === `${wdUrl}/assets/renders/byte-main-pose.png`, rel);
+    if (WIN) {
+      const exe = await run({ nativePath: winPath('C:', 'Windows', 'notepad.exe') });
+      check('an .exe is launched natively', exe === 'NATIVE ' + winPath('C:', 'Windows', 'notepad.exe'), exe);
+    }
     const web = await run({ url: 'https://example.com' });
     check('a url goes to the browser even right after a native launch', web === 'https://example.com', web);
     const none = await run({});

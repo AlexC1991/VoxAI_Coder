@@ -181,6 +181,79 @@ function saveSettings(patch) {
 // ------------------------------------------------------------- live sessions --
 const live = new Map(); // id → session object
 const controllers = new Map(); // runKey → AbortController
+// ------------------------------------------------------------------ steering ---
+// A message the user sends while a run is going, for THAT run.
+//
+// Steering used to be queue-only: the renderer held the message and drainQueue sent it,
+// but drainQueue only ever runs when a run ENDS. So a steered message could not reach a
+// live run at all -- the queue sat there until you pressed Stop, which is exactly the
+// behaviour it was meant to replace. Now the message comes straight here, the run picks it
+// up at its next turn, and it is appended to the transcript at the end.
+const steerInbox = new Map();  // sessionId → [{ text }]
+
+/**
+ * A trace file for steering, so "did it send?" is answerable from the evidence instead of by
+ * guessing. It records each hop the note has to make: the renderer's IPC arriving, whether a
+ * controller existed at that moment, and whether the agent then READ it at a turn boundary.
+ * Without this the note could sit in the queue with no way to tell which hop it died on.
+ */
+function steerTrace(sessionId, what, extra) {
+  try {
+    const f = path.join(userData(), 'steer.log');
+    const line = `${new Date().toISOString()}  ${what}  session=${sessionId}${extra ? '  ' + extra : ''}\n`;
+    fs.appendFileSync(f, line);
+    if (fs.statSync(f).size > 64 * 1024) fs.writeFileSync(f, line);
+  } catch { /* tracing must never break steering */ }
+}
+
+function steerPush(sessionId, text) {
+  const t = String(text == null ? '' : text).trim();
+  if (!sessionId || !t) return false;
+  if (!steerInbox.has(sessionId)) steerInbox.set(sessionId, []);
+  steerInbox.get(sessionId).push({ text: t });
+  return true;
+}
+
+/** Drain everything steered for this session. Called at the top of each agent turn. */
+function steerFor(sessionId) {
+  return () => {
+    const box = steerInbox.get(sessionId);
+    if (!box || !box.length) return [];
+    const texts = box.splice(0).map((m) => m.text).filter(Boolean);
+    if (!box.length) steerInbox.delete(sessionId);
+    // The hop that decides everything: the agent asks for steers at the top of a turn. Reaching
+    // here means the run really read the note.
+    steerTrace(sessionId, 'READ-BY-AGENT', JSON.stringify(texts));
+    return texts;
+  };
+}
+
+/** Nothing is running, so anything steered would never be read: clear it. */
+function steerClear(sessionId) {
+  const box = steerInbox.get(sessionId);
+  if (!box) return [];
+  const texts = box.splice(0).map((m) => m.text).filter(Boolean);
+  steerInbox.delete(sessionId);
+  return texts;
+}
+
+/**
+ * Take a steered message back, if the run has not read it yet.
+ *
+ * Steering sends the message into the live run straight away, but the run only reads it at
+ * the top of its next turn. In that window the user can still change their mind and queue it
+ * behind the run instead. Once the turn has started, the inbox copy is gone and there is
+ * nothing to recall, so this says so rather than silently doing nothing.
+ */
+function steerRecall(sessionId, text) {
+  const box = steerInbox.get(sessionId);
+  if (!box) return { recalled: false, read: true };
+  const i = box.findIndex((m) => m.text === text);
+  if (i === -1) return { recalled: false, read: true };
+  box.splice(i, 1);
+  if (!box.length) steerInbox.delete(sessionId);
+  return { recalled: true, read: false };
+}
 const sessionAlwaysAllow = new Map(); // sessionId -> Set<string> (normalized target) 
 const pendingPerms = new Map(); // permId → {msg, runKey, resolve}
 const pendingInputs = new Map(); // inputId → {sessionId, runKey, event, resolve}  (ask_user / ask_confirm)
@@ -549,6 +622,12 @@ function attachSplitViews(w) {
 
   chatV.webContents.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   guardTrustedView(chatV.webContents);
+  // Renderer-side steer trace: '[steer] ...' console lines are copied into steer.log next to
+  // main's hops, so a click that never reaches agent:steer shows up instead of looking like silence.
+  chatV.webContents.on('console-message', (e, _lvl, msg) => {
+    const m = String((e && e.message) || msg || '');
+    if (m.startsWith('[steer]')) steerTrace('renderer', m.slice(8));
+  });
 
   // keep the split correct when the window is resized/maximized
   // 'resized' fires only once the drag ENDS, so the split lagged the window the whole
@@ -1272,6 +1351,19 @@ app.whenReady().then(() => {
     inputs: [...pendingInputs.values()].filter((p) => p.sessionId === sessionId).map((p) => ({ runKey: p.runKey, event: p.event })),
     perms: [...pendingPerms.values()].filter((p) => p.msg && p.msg.sessionId === sessionId).map((p) => p.msg),
   }));
+  // A message the user sends while a run is going. It goes to the live run and is read at
+  // the start of its next turn; `live` is false when nothing is running, which is the
+  // renderer's signal to queue it instead (there would be nothing to read it).
+  ipcMain.handle('agent:steer', (_e, { sessionId, text } = {}) => {
+    const live = [...controllers.keys()].some((k) => k.startsWith(sessionId + ':'));
+    steerTrace(sessionId, live ? 'ipc-arrived-controller-exists' : 'ipc-arrived-NO-CONTROLLER', JSON.stringify(String(text || '').slice(0, 60)));
+    if (!live) return { ok: false, live: false };
+    const pushed = steerPush(sessionId, text);
+    steerTrace(sessionId, 'inbox-push', 'ok=' + pushed);
+    return { ok: pushed, live: true };
+  });
+  // Changed your mind: take the steered message back before the run reads it.
+  ipcMain.handle('agent:steer-recall', (_e, { sessionId, text } = {}) => steerRecall(sessionId, text));
   // Sessions with a run going, the ones waiting on the user first.
   ipcMain.handle('agent:live-sessions', () => {
     const waiting = waitingIds();
@@ -1313,6 +1405,8 @@ app.whenReady().then(() => {
 
   async function launchRun({ sessionId, text, attachments, resume = false, goalContinue = false, readOnly = false }) {
     const s = getSettings(false);
+    // A steered message goes to THIS run -- the live one -- not to the queue behind it.
+    const steerTake = steerFor(sessionId);
     if (!s.openrouterKey) throw new Error('No OpenRouter API key — open Settings and paste one.');
     const sess = await getLive(sessionId);
     if (!resume && (!text || !text.trim())) throw new Error('empty prompt');
@@ -1376,6 +1470,7 @@ app.whenReady().then(() => {
           reasoningEffort: s.reasoningEffort, access: readOnly ? 'ask' : s.access, planMode: s.planMode,
           ...(readOnly ? { allowTools: require('../backend/tools/spawn').READ_TOOLS.concat(['shell']) } : {}),
           signal: ctl.signal, askPermission, userInput: askUserInput,
+          checkSteer: steerTake,
           compactThreshold: s.compactThreshold, toolResultMaxChars: s.toolResultMaxChars, hardFraction: s.hardFraction,
           // A model on this PC has the context it was loaded with, not a cloud model's 200k.
           contextLimit: localCtx && localEngineMod.isLocalModel(sess.model || s.openrouterModel) ? localCtx : s.contextLimit,
@@ -1439,6 +1534,13 @@ app.whenReady().then(() => {
         // it: nothing is left waiting for an answer that can no longer go anywhere.
         for (const [k, p] of pendingInputs) if (p.runKey === runKey) { pendingInputs.delete(k); try { p.resolve({ answer: null, cancelled: true }); } catch {} }
         for (const [k, p] of pendingPerms) if (p.runKey === runKey) { pendingPerms.delete(k); try { p.resolve(false, false); } catch {} }
+        // A steer the run never got to read must not linger for the NEXT run: the renderer still
+        // has that message in its queue and sends it at the drain, so leaving it here would
+        // deliver it twice.
+        if (![...controllers.keys()].some((k) => k.startsWith(sessionId + ':'))) {
+          const left = steerClear(sessionId);
+          if (left.length) steerTrace(sessionId, 'run-ended-unread', JSON.stringify(left));
+        }
         napBrowsers();   // and sleeps again once nothing is using it
         disarmDesktopEsc(runKey);   // Esc goes back to the apps
         // flush any pending debounced save now (dupe with the final save below is fine)

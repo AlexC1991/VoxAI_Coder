@@ -530,7 +530,7 @@ async function drain(gen) {
     check('usage history finds its rows in any of the shapes the endpoint returns', MAIN3.includes('const list = [d, d && d.rows, d && d.data, d && d.results, body && body.rows, body && body.results].find(Array.isArray);') && !MAIN3.includes('(body && body.data && body.data) || []'), '.map is not a function');
     check('usage lists the biggest spend first', MAIN3.includes('rows.sort((a, b) => (Number(b.cost) || 0) - (Number(a.cost) || 0));'), 'arrival order');
     check('the usage window opens above Settings', HTML.includes('#usageModalBg{z-index:60}'), 'hidden under Settings');
-    check('a queued message goes out with its steering', HTML.includes("const text = next.steer ? next.text + '\\n\\n' + next.steer : next.text;\n  doSend(v, text, next.parts || []);"), 'steering dropped');
+    check('a queued message goes out with its steering, unless the running turn already read it', HTML.includes("const text = (!next.steerSent && next.steer) ? next.text + '\\n\\n' + next.steer : next.text;\n  doSend(v, text, next.parts || []);"), 'steering dropped');
     check('memory rows read as words', HTML.includes("if (act === 'add') return pick('list', 'Remembered', 'Remembering');"), 'Memory · add (2)');
   }
 
@@ -1187,10 +1187,19 @@ async function drain(gen) {
     const other = crypto.generateKeyPairSync('ed25519').publicKey.export({ type: 'spki', format: 'pem' });
     check('another key\'s signature is refused', !U.verifyManifest(m, other), 'accepted');
     check('no signature, no update', !U.verifyManifest({ ...m, sig: undefined }, pub), 'accepted');
+    const EXE = /\.exe$/i, APPIMAGE = /\.AppImage$/i;
     const info = { version: '0.2.1', files: [{ url: 'VoxAI-Coder-Setup-0.2.1.exe', sha512: 'abc==', size: 1234 }, { url: 'update.json', sha512: 'x', size: 9 }] };
-    check('manifest and feed agree', U.matchesFeed(m, info), 'disagree');
-    check('a feed listing another installer is refused', !U.matchesFeed(m, { ...info, files: [...info.files, { url: 'Other.exe', sha512: 'q', size: 1 }] }), 'accepted');
-    check('a feed with another version is refused', !U.matchesFeed(m, { ...info, version: '0.2.2' }), 'accepted');
+    check('manifest and feed agree', U.matchesFeed(m, info, EXE), 'disagree');
+    check('a feed listing another installer is refused', !U.matchesFeed(m, { ...info, files: [...info.files, { url: 'Other.exe', sha512: 'q', size: 1 }] }, EXE), 'accepted');
+    check('a feed with another version is refused', !U.matchesFeed(m, { ...info, version: '0.2.2' }, EXE), 'accepted');
+    // One release carries both installers; each platform checks only its own against its own manifest.
+    const mLinux = { app: 'voxai-coder', version: '0.2.1', file: 'VoxAI-Coder-0.2.1.AppImage', size: 5678, sha512: 'lin==', notes: 'Fixes' };
+    const both = { version: '0.2.1', files: [...info.files, { url: 'VoxAI-Coder-0.2.1.AppImage', sha512: 'lin==', size: 5678 }, { url: 'update-linux.json', sha512: 'y', size: 9 }] };
+    check('the Windows manifest still matches a feed that also lists the AppImage', U.matchesFeed(m, both, EXE), 'disagree');
+    check('the Linux manifest matches the AppImage in that feed', U.matchesFeed(mLinux, both, APPIMAGE), 'disagree');
+    check('a Windows manifest is no use to Linux', !U.matchesFeed(m, both, APPIMAGE), 'accepted');
+    check('a feed with no AppImage offers Linux nothing', !U.matchesFeed(mLinux, info, APPIMAGE), 'accepted');
+    check('each platform reads its own manifest', U.MANIFEST === (process.platform === 'linux' ? 'update-linux.json' : 'update.json'), U.MANIFEST);
 
     const PKG = JSON.parse(read('package.json'));
     check('the app reads the public releases feed', PKG.build.publish && PKG.build.publish[0].url === U.FEED && /\/voxai-coder-releases\/updates$/.test(U.FEED), PKG.build.publish);
@@ -1208,8 +1217,10 @@ async function drain(gen) {
     const EU = require.resolve('electron-updater', { paths: [ROOT] });
     const realFetch = global.fetch;
     const wait = (n) => new Promise((r) => setTimeout(r, n));
-    const signed = (over) => { const x = { ...m, version: '0.2.1', ...over }; x.sig = U.signManifest(x, priv); return x; };
-    const feedInfo = { version: '0.2.1', files: [{ url: 'VoxAI-Coder-Setup-0.2.1.exe', sha512: 'abc==', size: 1234 }] };
+    // The installer this platform's updater takes: the .exe, or the AppImage on Linux.
+    const inst = U.INSTALLER.test('x.AppImage') ? 'VoxAI-Coder-0.2.1.AppImage' : 'VoxAI-Coder-Setup-0.2.1.exe';
+    const signed = (over) => { const x = { ...m, file: inst, version: '0.2.1', ...over }; x.sig = U.signManifest(x, priv); return x; };
+    const feedInfo = { version: '0.2.1', files: [{ url: inst, sha512: 'abc==', size: 1234 }] };
     // One scenario: `manifests` are what update.json returns, in turn; `offline` fails the check.
     async function scenario({ manifests = [], offline = 0, run }) {
       const fake = new EventEmitter();
@@ -1263,9 +1274,9 @@ async function drain(gen) {
     // 0.2.27 shipped a 172 KB installer; Restart did nothing and said nothing.
     check('a Restart that does not install says so and downloads again', UP.includes("set({ state: 'error', error: 'The update could not be installed. It will be downloaded again.' });") && /setTimeout\(\(\) => \{\s*log\('the update did not install/.test(UP) && UP.includes('const INSTALL_WAIT_MS = 30 * 1000;'), 'silent');
     const RELX = read('scripts/release.js');
-    check('a release refuses a build that did not finish', RELX.includes("if (!fs.existsSync(yml)) die('release/latest.yml is missing, so the build did not finish") && RELX.includes('does not match what the build recorded in latest.yml') && RELX.indexOf('latest.yml is missing') < RELX.indexOf('m.sig = signManifest'), 'publishes it');
+    check('a release refuses a build that did not finish', RELX.includes("if (!fs.existsSync(yml)) die(`release/${feedYml} is missing, so the build did not finish") && RELX.includes('does not match what the build recorded in ${feedYml}') && RELX.indexOf('is missing, so the build did not finish') < RELX.indexOf('m.sig = signManifest'), 'publishes it');
     check('an open app checks every 30 minutes', /CHECK_EVERY_MS = 30 \* 60 \* 1000/.test(UP), 'every 4 hours');
-    check('update.json is never a cached copy', /update\.json\?t=\$\{Date\.now\(\)\}`, \{ redirect: 'follow', cache: 'no-store' \}/.test(UP), 'cached');
+    check('update.json is never a cached copy', /\$\{MANIFEST\}\?t=\$\{Date\.now\(\)\}`, \{ redirect: 'follow', cache: 'no-store' \}/.test(UP), 'cached');
     const MAIN2 = read('src/main/main.js');
     check('one copy of the app at a time', /if \(!app\.requestSingleInstanceLock\(\)\) \{\s*app\.quit\(\);\s*return;/.test(MAIN2) && MAIN2.includes("app.on('second-instance'"), 'copies pile up');
     check('focus reaches the updater', MAIN2.includes("app.on('browser-window-focus', () => { try { updater && updater.onFocus(); } catch {} });"), 'never on focus');
@@ -1274,7 +1285,8 @@ async function drain(gen) {
       && read('src/renderer/index.html').includes("if (!ok) { $('updTxt').textContent = 'Could not restart into the update'; setTimeout(paintUpdate, 3000); }"), 'update.log');
     const REL = read('scripts/release.js');
     check('a release is named only after its files are attached', REL.indexOf("['attach', manifestPath]") < REL.indexOf("['release', `v${version}`"), 'named first');
-    check('the release script checks the feed like an installed copy', REL.includes("if (bad.length) die(`the feed does not check out"), 'version string only');
+    check('the release script checks the feed like an installed copy', REL.includes("if (bad.length) die(`${f.yml} does not check out"), 'version string only');
+    check('adding the Linux build re-checks the Windows feed too', /yml: 'latest\.yml'[\s\S]*yml: 'latest-linux\.yml'[\s\S]*LINUX \? true/.test(REL), 'Windows unchecked');
     // After installing, the download stayed in pending/ -- a second 110 MB copy.
     {
       const LA = path.join(WD, 'localappdata');
@@ -2610,6 +2622,8 @@ async function drain(gen) {
         const bodiesC = [], liveX = []; let calls = 0;
         global.fetch = async (u, init) => {
           if (String(u).endsWith('/slots')) return { ok: true, json: async () => [{ is_processing: false }] };
+          // Only this engine's requests count: anything else still running in the suite gets the real fetch.
+          if (!String(u).includes('127.0.0.1:5996/')) return fetch2(u, init);
           calls++; const body = JSON.parse(init.body); bodiesC.push(body);
           if (calls === 1) return { ok: false, status: 400, text: async () => '{"error":{"code":400,"message":"request (16543 tokens) exceeds the available context size (16384 tokens), try increasing it","type":"exceed_context_size_error"}}' };
           const enc = new TextEncoder();
@@ -2647,6 +2661,58 @@ async function drain(gen) {
       Ml.includes('const locals = [sess.model || s.openrouterModel, sess.coderModel || \'\'].filter(localEngineMod.isLocalModel);') && Ml.includes('localCtx = Number((await localEngine.start(dirs, localEngineMod.fileOf(locals[0]))).ctx) || 0;')
       && Ml.includes('contextLimit: localCtx && localEngineMod.isLocalModel(sess.model || s.openrouterModel) ? localCtx : s.contextLimit,') && Ml.includes('try { models.push(...localCatalog()); } catch')
       && Ml.includes('try { localEngine.stop(); } catch {} });') && read('src/renderer/index.html').includes('<section class="set-page" data-set="local" hidden>'), 'main');
+  }
+
+  // ------------------------------------------------------------------ [ST]
+  console.log('\n[ST] steering reaches the run that is going (ported from the Linux edition)');
+  {
+    const ORs = require(path.join(ROOT, 'src/backend/providers/openrouter.js'));
+    const fetchS = global.fetch; const bodiesS = []; let turnS = 0;
+    ORs.localEndpoint.url = () => 'http://127.0.0.1:5995';
+    global.fetch = async (u, init) => {
+      if (String(u).endsWith('/slots')) return { ok: true, json: async () => [{ is_processing: false }] };
+      bodiesS.push(JSON.parse(init.body)); turnS++;
+      const chunks = turnS === 1 ? call('s1', 'glob', { pattern: '*.none' }) : say('Done, in French.');
+      const enc = new TextEncoder();
+      return { ok: true, body: new ReadableStream({ start(c) { for (const ch of chunks) c.enqueue(enc.encode('data: ' + JSON.stringify(ch) + '\n\n')); c.enqueue(enc.encode('data: [DONE]\n\n')); c.close(); } }) };
+    };
+    let inbox = []; let asked = 0;
+    const evS = await drain(runAgent({ session: { id: 'st-1', workdir: WD, messages: [] }, userText: 'look around', apiKey: '', model: 'local/m.gguf', access: 'full', askPermission: async () => true, maxTurns: 4,
+      checkSteer: () => { asked++; const t = inbox; inbox = []; if (asked === 1) inbox = ['answer in French']; return t; } }));
+    global.fetch = fetchS; ORs.localEndpoint.url = () => null;
+    const sent = JSON.stringify(bodiesS[1] && bodiesS[1].messages.slice(-2));
+    check('a message steered in while the run works is read at its next turn, at the end of the transcript, and said as "steered"', evS.some((e) => e.type === 'steered' && e.text === 'answer in French')
+      && /\[VOX STEER\] The user sent this while you were working: answer in French/.test(sent) && asked >= 2, { asked, steered: evS.filter((e) => e.type === 'steered'), sent: sent.slice(0, 200) });
+    const Ms = read('src/main/main.js'), Ps = read('src/preload/preload.js'), Hs = read('src/renderer/index.html');
+    check('main keeps an inbox per session: agent:steer fills it while a run is live, the run drains it each turn, and an unread one is cleared when the run ends',
+      Ms.includes("ipcMain.handle('agent:steer', (_e, { sessionId, text } = {}) => {") && Ms.includes('checkSteer: steerTake,') && Ms.includes('const steerTake = steerFor(sessionId);')
+      && Ms.includes("const left = steerClear(sessionId);") && Ps.includes("agentSteer: (sessionId, text) => ipcRenderer.invoke('agent:steer', { sessionId, text }),"), 'main');
+    check('the page: Steer sends into the running turn, shows a "Steering conversation" bubble, and the row leaves the queue once the run has read it',
+      Hs.includes('async function steerLive(v, text) {') && Hs.includes("const lab = el('span', '', 'Steering conversation');") && Hs.includes("} else if (event.type === 'steered') {")
+      && Hs.includes('vt.queue.splice(whole, 1); syncSteer(vt); renderQueue(vt);') && Hs.includes('if (await steerQueuedNow(v, item)) return;'), 'page');
+    check('a queue left waiting by a missed end event still sends (checked every 3 s, after asking main whether a run is really alive)', Hs.includes('async function drainQueue(sid, byHand){') && Hs.includes("try { live = await window.voxai.agentLive(sid); } catch { /* treat as not running */ }") && Hs.includes('}, 3000);'), 'watchdog');
+  }
+
+  // ------------------------------------------------------------------ [LX]
+  console.log('\n[LX] every release carries a Windows .exe and a Linux .sh');
+  {
+    const out = path.join(WD, 'lx-release');
+    fs.mkdirSync(out, { recursive: true });
+    const ver = require(path.join(ROOT, 'package.json')).version;
+    const img = Buffer.alloc(21 * 1024 * 1024, 7);
+    fs.writeFileSync(path.join(out, `VoxAI-Coder-${ver}.AppImage`), img);
+    require('child_process').execFileSync(process.execPath, [path.join(ROOT, 'scripts', 'linux-sh.js')], { env: { ...process.env, VOX_RELEASE_OUT: out }, encoding: 'utf8' });
+    const sh = fs.readFileSync(path.join(out, `VoxAI-Coder-${ver}-Linux.sh`), 'utf8');
+    const sha = require('crypto').createHash('sha512').update(img).digest('hex');
+    check('dist:linux writes VoxAI-Coder-<version>-Linux.sh: that version\'s AppImage from the public feed, checked by SHA-512, installed under ~/.local with a menu entry',
+      sh.startsWith('#!/usr/bin/env bash') && sh.includes(`SHA512='${sha}'`) && sh.includes(`/voxai-coder-releases/updates/VoxAI-Coder-${ver}.AppImage'`)
+      && sh.includes('[ "$GOT" = "$SHA512" ] || fail') && sh.includes('Exec="$APP" %U') && !sh.includes('\r') && sh.includes('libfuse2'), sh.slice(0, 300));
+    const P = require(path.join(ROOT, 'package.json'));
+    check('npm run dist:linux builds the AppImage and then its .sh; clean-release clears old .sh files', P.scripts['dist:linux'] === 'electron-builder --linux --publish never && node scripts/linux-sh.js'
+      && read('scripts/clean-release.js').includes('|-Linux\\.sh$|'), P.scripts);
+    const RL = read('scripts/release.js');
+    check('release --linux attaches the .sh too, only when it names this exact AppImage; the README links both downloads',
+      RL.includes("['attach', sh, releaseNumber, '--project', PROJECT],") && RL.includes('was made for a different AppImage') && RL.includes('## Linux') && RL.includes('## Windows'), 'release');
   }
 
   // ------------------------------------------------------------------ [SZ]

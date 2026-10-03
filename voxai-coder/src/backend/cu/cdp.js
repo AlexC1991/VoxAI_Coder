@@ -23,7 +23,12 @@ const CHROME_CANDIDATES = [
   'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
   '/usr/bin/google-chrome',
+  '/usr/bin/google-chrome-stable',
   '/usr/bin/chromium',
+  '/usr/bin/chromium-browser',
+  '/snap/bin/chromium',
+  '/usr/bin/microsoft-edge',
+  '/usr/bin/brave-browser',
 ].filter(Boolean);
 
 function findChrome() {

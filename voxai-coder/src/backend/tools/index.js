@@ -346,11 +346,12 @@ const shell = tool('shell', SHELL_DESC, {
   // and `node -e "console.log('hi there')"` died with a syntax error. Found in a live run.
   // Stop and the time limit end the whole process tree. Ending cmd.exe alone left its
   // children running -- after Stop, a `ping -n 40` carried on to the end. Found in a
-  // live run. On Windows that takes taskkill /T; elsewhere the shell's process.
+  // live run. On Windows that takes taskkill /T; elsewhere the shell leads its own process
+  // group (detached below), and the group goes -- the shell alone left `sleep 40 &` running.
   const killTree = (c) => {
     try {
       if (isWin) execFile('taskkill', ['/pid', String(c.pid), '/T', '/F'], { windowsHide: true }, () => {});
-      else c.kill('SIGKILL');
+      else { try { process.kill(-c.pid, 'SIGKILL'); } catch { c.kill('SIGKILL'); } }
     } catch {}
   };
   let timedOut = false, stopped = false, heldOpen = false, left = [];
@@ -365,7 +366,7 @@ const shell = tool('shell', SHELL_DESC, {
     s.chunks.push(b); s.size += b.length; s.total += b.length;
     while (s.size - s.chunks[0].length >= TAIL) s.size -= s.chunks.shift().length;
   };
-  const child = spawn(exe, argv, { cwd: ctx.workdir, env: procs.childEnv(), windowsHide: true, windowsVerbatimArguments: isWin });
+  const child = spawn(exe, argv, { cwd: ctx.workdir, env: procs.childEnv(), windowsHide: true, windowsVerbatimArguments: isWin, detached: !isWin });
   // Its own, for kills.js: a program this command starts (`start app.exe`) keeps this
   // pid as its parent's, so the session can later end it by pid without being asked.
   procs.claim(child.pid, ctx.session && ctx.session.id);

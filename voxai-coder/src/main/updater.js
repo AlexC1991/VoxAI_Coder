@@ -29,6 +29,19 @@ const FOCUS_MIN_GAP_MS = 10 * 60 * 1000;    // coming back to the window checks,
 const RETRY_AFTER_ERROR_MS = 5 * 60 * 1000;  // offline, or a release still being published
 const INSTALL_WAIT_MS = 30 * 1000;            // Restart pressed and the app is still here: it did not install
 
+// Windows installs the .exe and checks update.json; Linux installs the AppImage and checks
+// update-linux.json. Both hang off the same release, so the feed lists every file and each
+// platform verifies only its own.
+const LINUX = process.platform === 'linux';
+const MANIFEST = LINUX ? 'update-linux.json' : 'update.json';
+const INSTALLER = LINUX ? /\.AppImage$/i : /\.exe$/i;
+
+/** Where electron-updater keeps its downloads: %LOCALAPPDATA% on Windows, the XDG cache on Linux. */
+function cacheRoot() {
+  if (process.platform === 'win32') return process.env.LOCALAPPDATA;
+  return process.env.XDG_CACHE_HOME || path.join(require('os').homedir(), '.cache');
+}
+
 /**
  * The exact text that is signed -- one field per line in a fixed order, the free-text
  * notes last so nothing in them can pose as another field.
@@ -48,12 +61,13 @@ function verifyManifest(m, publicKeyPem) {
 }
 
 /**
- * The signed manifest and the feed must describe the same installer. Every .exe the
- * feed lists has to be the signed one, so the updater cannot be steered to another.
+ * The signed manifest and the feed must describe the same installer. Every installer
+ * the feed lists for this platform (.exe, or .AppImage on Linux) has to be the signed
+ * one, so the updater cannot be steered to another.
  */
-function matchesFeed(m, info) {
+function matchesFeed(m, info, installer = INSTALLER) {
   if (!m || !info || String(m.version) !== String(info.version)) return false;
-  const exes = (info.files || []).filter((f) => /\.exe$/i.test(decodeURIComponent(String(f.url || ''))));
+  const exes = (info.files || []).filter((f) => installer.test(decodeURIComponent(String(f.url || ''))));
   if (!exes.length) return false;
   return exes.every((f) => decodeURIComponent(String(f.url)) === m.file && f.sha512 === m.sha512 && Number(f.size) === Number(m.size));
 }
@@ -72,7 +86,7 @@ function plainError(e) {
  * installed -- a second 110 MB copy beside the one the installer keeps for itself.
  * Once the app is running that version (or a later one), the download has done its job.
  */
-function clearInstalledDownload(version, log = () => {}, root = process.env.LOCALAPPDATA) {
+function clearInstalledDownload(version, log = () => {}, root = cacheRoot()) {
   // Judged by the installers themselves: the info file it used to read is not always
   // written, and without it nothing was cleared -- one install held 0.2.6 and 0.2.12,
   // 329 MB. Found in a live update. Every installer at or below the running version
@@ -83,7 +97,7 @@ function clearInstalledDownload(version, log = () => {}, root = process.env.LOCA
     const semver = require(require.resolve('semver', { paths: [path.dirname(require.resolve('electron-updater'))] }));
     let removed = 0, waiting = 0;
     for (const f of fs.readdirSync(dir)) {
-      const v = (/(\d+\.\d+\.\d+)\.exe$/i.exec(f) || [])[1];
+      const v = (/(\d+\.\d+\.\d+)\.(?:exe|AppImage)$/i.exec(f) || [])[1];
       if (!v) continue;
       if (semver.gt(v, version)) { waiting++; continue; }
       try { fs.rmSync(path.join(dir, f), { force: true }); removed++; log(`removed the installed ${v} download`); } catch {}
@@ -114,11 +128,15 @@ function initUpdater({ app, send, log = () => {} }) {
   const FOCUS_GAP = ms('VOX_UPDATE_FOCUS_MS', FOCUS_MIN_GAP_MS);
   const RETRY = ms('VOX_UPDATE_RETRY_MS', RETRY_AFTER_ERROR_MS);
   const portable = !!process.env.PORTABLE_EXECUTABLE_DIR;
+  // On Linux only the AppImage can replace itself; an unpacked build has nothing to swap.
+  const notAppImage = LINUX && !process.env.APPIMAGE;
   let st = { state: 'off', version: app.getVersion() };
   const set = (patch) => { st = { ...st, ...patch }; try { send(st); } catch {} };
 
-  if ((!app.isPackaged || portable) && !test) {
-    st.reason = portable ? 'The portable build does not update itself. Use the installer for updates.' : 'Updates run in the installed app.';
+  if ((!app.isPackaged || portable || notAppImage) && !test) {
+    st.reason = portable ? 'The portable build does not update itself. Use the installer for updates.'
+      : !app.isPackaged ? 'Updates run in the installed app.'
+      : 'Only the AppImage updates itself on Linux.';
     return { state: () => st, check: async () => st, install: () => false, onFocus: () => {} };
   }
 
@@ -169,8 +187,8 @@ function initUpdater({ app, send, log = () => {} }) {
     try {
       // Never a cached copy: a manifest left over from the last release would read
       // as a mismatch the moment a new one appears.
-      const res = await fetch(`${feed}/update.json?t=${Date.now()}`, { redirect: 'follow', cache: 'no-store' });
-      if (!res.ok) throw new Error(`update.json: HTTP ${res.status}`);
+      const res = await fetch(`${feed}/${MANIFEST}?t=${Date.now()}`, { redirect: 'follow', cache: 'no-store' });
+      if (!res.ok) throw new Error(`${MANIFEST}: HTTP ${res.status}`);
       const m = await res.json();
       if (!verifyManifest(m, publicKey())) {
         set({ state: 'refused', next: info.version, checkedAt: Date.now(), error: 'This update is not signed with VoxAI Coder\'s release key, so it was not downloaded.' });
@@ -216,7 +234,7 @@ function initUpdater({ app, send, log = () => {} }) {
       // goes with it.)
       const t = setTimeout(() => {
         log('the update did not install; downloading it again');
-        try { fs.rmSync(path.join(process.env.LOCALAPPDATA || '', 'voxai-coder-updater', 'pending'), { recursive: true, force: true }); } catch {}
+        try { fs.rmSync(path.join(cacheRoot() || '', 'voxai-coder-updater', 'pending'), { recursive: true, force: true }); } catch {}
         set({ state: 'error', error: 'The update could not be installed. It will be downloaded again.' });
         setTimeout(check, 5000);
       }, INSTALL_WAIT_MS);
@@ -226,4 +244,4 @@ function initUpdater({ app, send, log = () => {} }) {
   };
 }
 
-module.exports = { initUpdater, clearInstalledDownload, plainError, manifestText, signManifest, verifyManifest, matchesFeed, FEED, APP, OWNER, PROJECT };
+module.exports = { initUpdater, clearInstalledDownload, plainError, manifestText, signManifest, verifyManifest, matchesFeed, FEED, APP, OWNER, PROJECT, MANIFEST, INSTALLER };

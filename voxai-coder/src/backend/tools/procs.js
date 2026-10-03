@@ -68,14 +68,16 @@ function stopAll() {
     try {
       if (isWin) execFileSync('taskkill', ['/pid', String(pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore', timeout: 5000 });
       else process.kill(-pid, 'SIGKILL');
-    } catch {}
+    } catch { try { process.kill(pid, 'SIGKILL'); } catch {} }   // a leftover is in its shell's group, not leading one
   }
   running.clear();
 }
 
 /**
  * The processes a finished command left behind: children of its (now gone) shell.
- * Windows keeps the parent id on an orphan, so they can still be found by it.
+ * Windows keeps the parent id on an orphan, so they can still be found by it. Elsewhere
+ * an orphan is handed to init, but it stays in the shell's process group (the shell is
+ * spawned detached, so the group is the shell's pid) -- so it is found by that instead.
  */
 function leftovers(parentPid) {
   return new Promise((resolve) => {
@@ -88,9 +90,10 @@ function leftovers(parentPid) {
         }).filter((x) => x.pid && !/^(conhost|taskkill)\.exe$/i.test(x.name)));
       });
     } else {
-      execFile('ps', ['-o', 'pid=,comm=', '--ppid', String(parentPid)], (err, out) => {
+      execFile('ps', ['-eo', 'pid=,pgid=,comm='], (err, out) => {
         resolve(String(out || '').split('\n').map((l) => l.trim()).filter(Boolean).map((l) => {
-          const m = /^(\d+)\s+(.*)$/.exec(l); return m ? { pid: Number(m[1]), name: m[2] } : null;
+          const m = /^(\d+)\s+(\d+)\s+(.*)$/.exec(l);
+          return m && Number(m[2]) === Number(parentPid) && Number(m[1]) !== Number(parentPid) ? { pid: Number(m[1]), name: m[3] } : null;
         }).filter(Boolean));
       });
     }

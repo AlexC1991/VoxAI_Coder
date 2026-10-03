@@ -11,8 +11,8 @@ const fs = require('fs');
 const path = require('path');
 
 const OUT = process.env.VOX_RELEASE_OUT || path.join(__dirname, '..', 'release');
-const BUILT = /\.(exe|blockmap)$|^(latest|builder-debug|builder-effective-config)\.ya?ml$|^update\.json$/i;
-const DIRS = new Set(['win-unpacked', 'win-ia32-unpacked', 'win-arm64-unpacked']);
+const BUILT = /\.(exe|blockmap|AppImage)$|-Linux\.sh$|^(latest|latest-linux|builder-debug|builder-effective-config)\.ya?ml$|^update(-linux)?\.json$/i;
+const DIRS = new Set(['win-unpacked', 'win-ia32-unpacked', 'win-arm64-unpacked', 'linux-unpacked']);
 
 if (!fs.existsSync(OUT)) process.exit(0);
 let freed = 0, n = 0;

@@ -122,6 +122,11 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
   agentPermission: (permId, allowed, always) => ipcRenderer.invoke('agent:permission', { permId, allowed, always: !!always }),
   agentAnswer: (inputId, answer, cancelled) => ipcRenderer.invoke('agent:user-input-answer', { inputId, answer, cancelled: !!cancelled }),
   agentLive: (sessionId) => ipcRenderer.invoke('agent:live', sessionId),
+  // A message sent while a run is going: the live run reads it at its next turn. Returns
+  // { ok, live }; live:false means nothing is running, so queue it instead.
+  agentSteer: (sessionId, text) => ipcRenderer.invoke('agent:steer', { sessionId, text }),
+  // Changed your mind: pull a steered message back before the run reads it.
+  agentSteerRecall: (sessionId, text) => ipcRenderer.invoke('agent:steer-recall', { sessionId, text }),
   agentLiveSessions: () => ipcRenderer.invoke('agent:live-sessions'),
   agentResumeAsk: (sessionId, callId, answer, cancelled) => ipcRenderer.invoke('agent:resume-ask', { sessionId, callId, answer, cancelled: !!cancelled }),
   agentCompact: (sessionId) => ipcRenderer.invoke('agent:compact', { sessionId }),

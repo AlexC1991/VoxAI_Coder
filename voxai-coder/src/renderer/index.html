@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-5nZzU4F64kWtCkigwGQwX6PJ98jqjqXHCdB6GzKyO9I='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-QtW/LWkh3w+JTKN57PMN5pYRwZDKxZwyCXiXCvJee0M='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -566,6 +566,7 @@ tests"). Scroll the row instead of breaking words:
 /* thread rhythm: answers read as prose, not as a stack of announcements */
 .md{font-size:15px;line-height:1.65;text-wrap:pretty;overflow-wrap:break-word}
 .user{align-self:flex-end;max-width:80%;background:var(--panel2);border:0;border-radius:14px 14px 4px 14px;padding:10px 14px;font-size:14.5px;line-height:1.55}
+.steer-tag{display:flex;align-items:center;gap:6px;margin-bottom:6px;font-family:"Sometype Mono",monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold)}
 .col{gap:16px}
 /* the plan: a tab on the box's top edge, the whole plan in a drawer that rises behind it */
 .plan-tab{position:relative;display:flex;align-items:flex-end;height:30px;padding-left:16px;margin-bottom:-7px;z-index:4}  /* -7: the composer's 6px gap, plus 1px over the box border so the tab joins it */
@@ -1398,6 +1399,55 @@ function tidyPaths(t){
   }
   return String(t).replace(TIDY.re, '');
 }
+/**
+ * Pressing Steer with an EMPTY box steers the QUEUED MESSAGE ITSELF into the running turn.
+ *
+ * This is the case every screenshot showed: the row is armed, the hint says "Steering message
+ * <that message>", and the box is empty. Until now nothing was sent in that state -- send()
+ * returns early on empty text, so agent:steer was never called and steer.log stayed empty,
+ * which looked exactly like "the message is locked in the UI". Pressing Steer now means "send
+ * this one into the run now", and the message still goes out normally at the drain if the run
+ * ends before the agent reads it.
+ */
+async function steerQueuedNow(v, item) {
+  if (!v || !item) return false;
+  const text = String(item.text || '').trim();
+  if (!text) return false;
+  v.steerIdx = null; v.steerItem = null;
+  item.steeredWhole = true;   // the 'steered' event removes this row once the run has read it
+  const hint = $('steerHint'); if (hint) hint.hidden = true;
+  paintShelf(); renderQueue(v);
+  T = v; addSteer(text); T = null;
+  await steerLive(v, text);
+  return true;
+}
+/**
+ * Send a steering note straight into a run that is going RIGHT NOW.
+ *
+ * Without this the note only ever left when the run ended: the row's note is appended to the
+ * message as it drains, and draining only happens on a run's 'done'. So "steer" could not
+ * actually steer a live turn -- the app looked like it had swallowed it, and the only way to
+ * get it through was to press Stop first. main.js already has the receiving end
+ * (agent:steer -> steerInbox -> checkSteer, read at the top of every turn, which is where the
+ * agent.js comment says a steer is supposed to land); the renderer just never called it.
+ *
+ * Returns true when the note was handed over, false when it could not be (no bridge, or
+ * nothing running) so the caller can keep it in the queue instead of losing it.
+ */
+async function steerLive(v, text) {
+  try {
+    if (!v || !v.id || !text) return;
+    const api = window.voxai;
+      if (!api || !api.agentSteer) { console.info('[steer] NO BRIDGE: window.voxai.agentSteer missing'); return; }
+      console.info('[steer] calling agent:steer session=' + v.id);
+      await api.agentSteer(v.id, text);
+    // Whether it landed is decided by the agent's own 'steered' event, not here: `live` means a
+    // controller EXISTS, and a run in its closing turn never reads the steering inbox. Trusting
+    // `live` marked the note delivered when nothing had read it, and the drain then SKIPPED it --
+    // "it kept it in the queue and never steered" (found in a live run). See the 'steered' event
+    // handler, which is what sets steerSent.
+  } catch { /* a steer must never break the run */ }
+}
 function renderVTE(t){
   t = tidyPaths(t == null ? '' : t);
   try {
@@ -1646,7 +1696,38 @@ function renderQueue(v){
     const steerBtn = el('button', 'q-act q-steer-btn', 'Steer');
     steerBtn.type = 'button';
     steerBtn.title = 'Steer this queued message (adds an instruction on top)';
-    steerBtn.onclick = (e) => { e.stopPropagation(); v.steerIdx = idx; v.steerItem = item; updateSteerHint(v); $('prompt').focus(); };
+      steerBtn.onclick = async (e) => {
+        e.stopPropagation();
+        const p = $('prompt');
+        const typed = p ? String(p.value || '').trim() : '';
+        if (typed) {
+          // You wrote the note first and then clicked Steer. Use it now, instead of making you
+          // press Enter as well: leaving it in the box is what "it did not send" looked like --
+          // the row said "steering", the note sat in the box, and nothing ever reached the run.
+          v.steerIdx = idx; v.steerItem = item;
+          item.steer = typed;
+          v.steerIdx = null; v.steerItem = null;
+          const hint = $('steerHint'); if (hint) hint.hidden = true;
+          p.value = ''; p.dispatchEvent(new Event('input', { bubbles: true }));
+          clearAttachments();
+          paintShelf(); renderQueue(v);
+          T = v; addSteer(typed); T = null;
+          await steerLive(v, typed);   // the 'steered' event marks it delivered, if the run reads it
+          return;
+        }
+          // Empty box: the first click ARMS this row so you can add a direction to it. Clicking
+          // Steer ON THE ROW THAT IS ALREADY ARMED steers the message ITSELF into the run now --
+          // which is what the screenshots showed: the hint already read "Steering message <that
+          // message>", and pressing Steer appeared to do nothing because send() returns early on
+          // an empty box, so agent:steer was never called at all.
+          // ONE press sends it. The two-step version (first click only armed the row) is exactly
+          // what failed live: the row said "Steering message ..." and nothing was ever sent --
+          // steer.log was never even created. To add a direction instead, type it, then press Steer.
+          console.info('[steer] click with empty box -> steering the queued message');
+          if (await steerQueuedNow(v, item)) return;
+          v.steerIdx = idx; v.steerItem = item;
+          updateSteerHint(v); if (p) p.focus();
+      };
     const editBtn = el('button', 'q-act q-edit', 'Edit');
     editBtn.type = 'button';
     editBtn.title = 'Edit this queued message';
@@ -1922,21 +2003,66 @@ function compactNow(){
 $('shCompact').onclick = compactNow;
 $('shCacheFix').onclick = compactNow;
 
-function drainQueue(sid, byHand){
+async function drainQueue(sid, byHand){
   const v = viewOf(sid);
-  // After Stop the queue waits; Send (or Enter on an empty box) sends the next one.
-  if (v && v.stopRequested && !byHand) { v.stopRequested = false; if (sid === activeId) updateSendState(); return false; }
-  if (v) v.stopRequested = false;
-  if (!v || v.busy || !(v.queue && v.queue.length)) return false;
+  // After Stop the queue waits for you rather than starting the next run on its own --
+  // but a Send or an Enter on the empty box IS you asking, so that always goes through.
+  // Stop is NOT cleared on the way out: doing that left the watchdog free to send the
+  // message a moment later, quietly overriding the Stop the user had just pressed.
+  if (v && v.stopRequested && !byHand) { if (sid === activeId) updateSendState(); return false; }
+  if (!v || !(v.queue && v.queue.length)) return false;
+  // Only one drain at a time per session: the liveness check below awaits, and two
+  // overlapping drains would send the same queued message twice.
+  if (v._draining) return false;
+  if (v.busy) {
+    // A stale "busy" strands the queue forever: the run it is waiting for has already
+    // finished and its 'done' event was missed, so nothing will ever call this again.
+    // Ask main whether anything is really running for this session before believing it.
+    v._draining = true;
+    let live = null;
+    try { live = await window.voxai.agentLive(sid); } catch { /* treat as not running */ }
+    v._draining = false;
+    const reallyRunning = !!(live && live.runKeys && live.runKeys.length);
+    if (reallyRunning) return false;          // genuinely busy: wait for its own 'done'
+    // Nothing is running, so the flag was stale: clear it and take the queue.
+    v.busy = false; v.activity = '';
+    v.runKeys = new Set();
+    if (v.statusEl) { try { v.statusEl.remove(); } catch {} v.statusEl = null; }
+    if (sid === activeId) { $('runDot').style.display = 'none'; updateSendState(); paintShelf(); }
+  }
+  // Past every guard, so this message really is going out: only now is Stop satisfied.
+  v.stopRequested = false;
   const next = v.queue.shift();
   syncSteer(v);   // the one being steered may have just gone out, or moved up
   renderQueue(v);
   // Steering is part of the message: it was shown on the queued row and then dropped
   // when the message went out, so "answer in three words" never reached the agent.
-  const text = next.steer ? next.text + '\n\n' + next.steer : next.text;
+  // steerSent means it was already handed to the running turn through agentLive/agent:steer,
+  // so it is NOT appended again here -- otherwise the agent reads the same note twice.
+  const text = (!next.steerSent && next.steer) ? next.text + '\n\n' + next.steer : next.text;
   doSend(v, text, next.parts || []);
   return true;
 }
+/**
+ * A safety net for the queue.
+ *
+ * A queued (or steered) message only went out because a run's own end event called
+ * drainQueue. If that event was missed -- the window was hidden, the run ended in a way
+ * that did not report, the flag was left stale -- nothing ever called it again and the
+ * messages sat there permanently, which is what "it never sends" looks like. This checks
+ * every few seconds instead of trusting a single event; drainQueue itself verifies with
+ * main that a run is really alive before sending, so an idle session is not disturbed.
+ * A queue the user stopped waits for them, so that case is left alone.
+ */
+setInterval(() => {
+  try {
+    for (const [sid, v] of viewStore) {
+      if (!v || !(v.queue && v.queue.length) || v._draining) continue;
+      if (v.stopRequested) continue;
+      drainQueue(sid);
+    }
+  } catch { /* the watchdog must never break the page */ }
+}, 3000);
 // ---- right-hand Atlas preview (real in-app browser, resizable) ----
 let ppHistory = [];   // [{url,text,kind}]
 let ppIdx = -1;
@@ -2423,6 +2549,26 @@ function addUser(text, attachParts){
   const t = el('div'); t.textContent = text || ''; u.appendChild(t);
   const r = RR(); if(r){ r.appendChild(u); followThread(true); }
   return u;
+}
+/**
+ * A steering instruction, shown in the thread as the message the user sent.
+ *
+ * Steering is typed into the shelf and used to direct a run, so without this it is invisible in
+ * the transcript: all that shows is an italic note on the queued row, and the user cannot see
+ * the direction they actually wrote. This puts it where every other message they send appears,
+ * marked as steering so it is clear it directs the run's next turn rather than asking for something
+ * new. It is NOT sent as a message of its own -- the text rides along with the queued message.
+ */
+function addSteer(text){
+  const b = el('div', 'user');
+  const tag = el('div', 'steer-tag');
+  tag.appendChild(trIcon('send'));
+  const lab = el('span', '', 'Steering conversation');
+  tag.appendChild(lab);
+  b.appendChild(tag);
+  const t = el('div'); t.textContent = text || ''; b.appendChild(t);
+  const r = RR(); if(r){ r.appendChild(b); followThread(true); }
+  return b;
 }
 function setStatus(t){ const v = RT(); if(!v) return; setActivity(v, t.charAt(0).toUpperCase() + t.slice(1).replace(/\u2026$/, '')); }
 function clearStatus(){ const v = RT(); if(v && v.statusEl){ v.statusEl.remove(); v.statusEl = null; } }
@@ -5008,6 +5154,46 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
     setActivity(v, 'Using your keyboard and mouse · Esc or moving the mouse stops it');
   } else if (event.type === 'awaiting_agents') {
     setStatus('waiting for ' + event.count + ' background agent' + (event.count === 1 ? '' : 's') + '…');
+    } else if (event.type === 'steered') {
+      // The run PICKED UP a message the user sent while it was working. This event is the only
+      // real confirmation of delivery: agent:steer's `live` merely means a controller exists, and
+      // a run in its closing turn never reads the steering inbox. So the note is marked delivered
+      // HERE. Before this, the note was assumed delivered and the drain then skipped it -- the
+      // message stayed in the queue and was never steered (found in a live run).
+        const vt = viewStore.get(sid);
+        const w = String(event.text || '').trim();
+        // Traced because "the row stayed in the UI" is otherwise unanswerable: this line shows the
+        // event arriving, whether a view was found, and which branch matched. 'whole=-1' means the
+        // row was NOT sent by the Steer button (steeredWhole is only set there), so only its note
+        // was delivered and the message itself still goes out at the drain.
+        console.info('[steer] steered-event session=' + sid + ' view=' + (vt ? 'yes' : 'NO')
+          + ' text=' + JSON.stringify(w.slice(0, 40))
+          + ' queued=' + (vt && Array.isArray(vt.queue) ? vt.queue.map((q) => (q && q.steeredWhole ? 'W' : '') + String(q && q.text || '').slice(0, 24)).join('|') : 'none'));
+        if (vt && Array.isArray(vt.queue) && w) {
+        // A whole queued message steered in (Steer with an empty box): the run has it now, so it
+        // must LEAVE the queue -- otherwise the row stays in the UI and would be sent a second time
+        // at the drain (found live: "it left it in the UI").
+          const whole = vt.queue.findIndex((q) => q && q.steeredWhole && String(q.text || '').trim() === w);
+          if (whole !== -1) {
+            // Wrapped, and traced with the queue length AFTER the removal: if syncSteer/renderQueue
+            // ever throw, the row would silently stay and the 'Steered into the running turn' note
+            // below never appears. 'after=' is the proof the row actually left.
+            try {
+              vt.queue.splice(whole, 1); syncSteer(vt); renderQueue(vt);
+              if (vt === actView()) { paintShelf(); updateSendState(); }
+              console.info('[steer] row-removed after=' + vt.queue.length);
+            } catch (err) {
+              console.info('[steer] row-remove FAILED ' + (err && err.message));
+            }
+          } else {
+          const hit = vt.queue.find((q) => q && String(q.steer || '').trim() === w && !q.steerSent);
+          if (hit) { hit.steerSent = true; renderQueue(vt); }
+        }
+      }
+      // Shown as a small note so it is clear the live run has been told, and not silently queued
+      // behind it.
+      const line = noteRow({ icon: 'send', verb: 'Steered into the running turn', chip: String(event.text || '').slice(0, 60) });
+      const rr = RR(); if (rr) { rr.appendChild(line); followThread(); }
   } else if (event.type === 'agent_finished') {
     const n = (event.files_changed || []).length;
     const bad = (event.needs_attention || []).length;
@@ -6751,13 +6937,22 @@ async function send(){
     syncSteer(v);
     if (v.steerIdx != null && v.steerIdx >= 0 && v.steerIdx < v.queue.length && text) {
       // steering: attach direction on top of the queued message
-      v.queue[v.steerIdx].steer = text;
+      const target = v.queue[v.steerIdx];
+      target.steer = text;
       v.steerIdx = null; v.steerItem = null;
       const hint = $('steerHint'); if (hint) hint.hidden = true;
       paintShelf();
       $('prompt').value = '';
       clearAttachments();
       renderQueue(v);
+      // Show it in the thread, so the direction the user wrote is visible in the context
+      // rather than only as a note on the queued row.
+      T = v; addSteer(text); T = null;
+      // ...and hand it to the run that is going right now, instead of leaving it to the drain
+      // (which only ever happens when the run ends -- that is why a steer could not steer).
+      // Mark it delivered so a note that DID reach the run is not also appended to the message
+      // afterwards and read twice.
+      if (await steerLive(v, text)) target.steerSent = true;
       return;
     }
     v.queue.push({ text, parts });
@@ -6765,6 +6960,25 @@ async function send(){
     clearAttachments();
     renderQueue(v);
     updateSendState();
+    return;
+  }
+  // The steering note can be armed against a message whose run has ALREADY finished: the queue
+  // outlives the run (it waits for you after a Stop, and a finish can beat your Enter by a
+  // moment). Without this the armed steer was silently dropped and the text went out as an
+  // ordinary message instead, while the box still said "Steering message" and no steering bubble
+  // ever appeared -- found in a live run.
+  syncSteer(v);
+  if (v.steerIdx != null && v.steerIdx >= 0 && v.steerIdx < v.queue.length && text) {
+    v.queue[v.steerIdx].steer = text;
+    v.steerIdx = null; v.steerItem = null;
+    const hint = $('steerHint'); if (hint) hint.hidden = true;
+    paintShelf();
+    $('prompt').value = '';
+    clearAttachments();
+    renderQueue(v);
+    T = v; addSteer(text); T = null;
+    // Nothing is running here, so the note rides along when this message finally sends: the row
+    // keeps it (.steer is appended by drainQueue). steerLive() would find nothing to steer.
     return;
   }
   $('prompt').value = '';

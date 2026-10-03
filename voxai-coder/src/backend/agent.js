@@ -596,6 +596,11 @@ async function* runAgent(opts) {
     coderVision = null,   // false: the coder cannot read images, so the planner does the looking
     // { enabled, engine, maxResults } from Settings. null = defaults (on, exa, 5).
     webSearch = null,
+    // Mid-run steering: called at the top of each turn. Returns anything the user typed
+    // while this run was going, or null. Without it a steered message had nowhere to land
+    // until the run FINISHED -- which is the whole point of steering, so the only way to
+    // get one through was to press Stop first. See main.js (steerFor).
+    checkSteer = null,
   } = opts;
   let access = normalizeAccess(opts.access || 'test');
 
@@ -930,6 +935,19 @@ async function* runAgent(opts) {
         files_changed: rr.files_changed || [],
         ...(rr.needs_attention ? { needs_attention: rr.needs_attention } : {}),
       };
+    }
+
+    // Deliver anything the user steered into this run while it was going. Same slot as a
+    // background agent finishing: appended at the END of the transcript, where changing
+    // content costs nothing in cache terms, and read by the model at this turn's start.
+    if (checkSteer) {
+      try {
+        for (const text of checkSteer() || []) {
+          if (!text) continue;
+          session.messages.push({ role: 'user', content: `[VOX STEER] The user sent this while you were working: ${text}` });
+          yield { type: 'steered', text };
+        }
+      } catch { /* a steer must never break the run */ }
     }
 
     // Check BEFORE spending, not only after, so the cap cannot be overshot by a
