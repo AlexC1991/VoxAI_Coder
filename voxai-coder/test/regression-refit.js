@@ -615,9 +615,9 @@ async function drain(gen) {
     fakeOpenRouter((n) => (n === 1 ? call('stuck1', 'ask_user', { question: 'still there?' }) : say('done')));
     const ctl = new AbortController();
     const sess = { id: 'cx', workdir: WD, messages: [] };
-    setTimeout(() => ctl.abort(), 500);
-    const t0 = Date.now();
-    const ev = await drain(runAgent({ session: sess, userText: 'go', apiKey: 'k', model: 'm', access: 'full', signal: ctl.signal, askPermission: async () => true, userInput: () => new Promise(() => {}), maxTurns: 3 }));
+    // Stopped once the call is really waiting (a fixed 500 ms fired before it began on a busy PC).
+    let t0 = Date.now();
+    const ev = await drain(runAgent({ session: sess, userText: 'go', apiKey: 'k', model: 'm', access: 'full', signal: ctl.signal, askPermission: async () => true, userInput: () => { t0 = Date.now(); setTimeout(() => ctl.abort(), 300); return new Promise(() => {}); }, maxTurns: 3 }));
     const took = Date.now() - t0;
     check('Stop ends a run whose action is stuck', ev.some((e) => e.type === 'cancelled') && took < 3000, { took, types: ev.map((e) => e.type) });
     const last = sess.messages[sess.messages.length - 1];
@@ -1105,7 +1105,8 @@ async function drain(gen) {
       const H = read('src/renderer/index.html');
       check('a dropped image is attached', H.includes("document.addEventListener('drop', (e) => {") && H.includes('addImageFiles(e.dataTransfer.files);'), 'nothing');
       check('a pasted image is attached, text pastes as usual', H.includes("$('prompt').addEventListener('paste', (e) => {") && H.includes("if (!files.some((f) => /^image\\//i.test(f.type || ''))) return;"), 'nothing');
-      check('a file that is not an image goes in as its path', H.includes('window.voxai.pathForFile(f)') && H.includes("ta.value = (ta.value && !/\\s$/.test(ta.value) ? ta.value + ' ' : ta.value) + paths.map(q).join(' ');"), 'dropped');
+      check('a file that is not an image goes in as an @-mention (sent with the message), from the project folder when inside it', H.includes('window.voxai.pathForFile(f)') && H.includes("ta.value = (ta.value && !/\\s$/.test(ta.value) ? ta.value + ' ' : ta.value) + paths.map(rel).map(q).join(' ') + ' ';")
+        && H.includes("const q = (p) => '@' + (/\\s/.test(p) ? '\"' + p + '\"' : p);"), 'dropped');
       check('"Keys saved" only when a key was typed', H.includes("flashSettingsSaved(('openrouterKey' in patch || 'managementKey' in patch) ? 'Keys saved' : 'Saved');"), 'always');
     }
     // Text that is not ours is text, not HTML: a queued message with an onerror
@@ -1536,7 +1537,8 @@ async function drain(gen) {
       const CS = read('native/VoxUia.cs');
       check('the controls helper has no keyboard or mouse hooks, and knows real pixels', !/SetWindowsHookEx|class Recorder|class FocusGuard/.test(CS) && CS.includes('SetProcessDpiAwarenessContext(new IntPtr(-4))'), 'hooks');
       check('the helper is built and unpacked with the app, with koffi', PKG0.scripts.predist.includes('node scripts/build-uia.js') && PKG0.scripts.prestart.includes('node scripts/build-uia.js')
-        && JSON.stringify(PKG0.build.asarUnpack) === JSON.stringify(['node_modules/koffi/**', 'node_modules/@koromix/**', 'resources/uia/**']) && !!PKG0.dependencies.koffi, PKG0.build.asarUnpack);
+        && ['node_modules/koffi/**', 'node_modules/@koromix/**', 'resources/uia/**'].every((p) => PKG0.build.asarUnpack.includes(p)) && !!PKG0.dependencies.koffi, PKG0.build.asarUnpack);
+      check('the terminal\'s node-pty is unpacked too, and not rebuilt (it ships prebuilt; a rebuild needs a C++ compiler)', PKG0.build.asarUnpack.includes('node_modules/node-pty/**') && PKG0.build.npmRebuild === false && !!PKG0.dependencies['node-pty'], PKG0.build);
       check('the helper runs from outside the packed app', read('src/backend/cu/uia.js').includes(".replace(/app\\.asar([\\\\/])/, 'app.asar.unpacked$1')"), 'inside asar');
       check('desktop actions read in words (Auto\'s check judges them; other modes ask)', AG.includes("return { kind: 'desktop-act', target: d.target") && AG.includes("kind: 'desktop-look'") && HTML.includes("'desktop-act': 'Use your keyboard and mouse?'"), 'raw');
       check('Esc stops a run that is driving the desktop, and is let go after', MAIN.includes("if (ev.type === 'desktop_control') armDesktopEsc(runKey, ctl, ev.phase);") && MAIN.includes("globalShortcut.register('Escape'") && MAIN.includes('disarmDesktopEsc(runKey);   // Esc goes back to the apps'), 'no kill switch');
@@ -2770,6 +2772,53 @@ async function drain(gen) {
     const jf = path.join(WD, 'au-cjs.js'); fs.writeFileSync(jf, 'const a = {;\n');
     const t0 = Date.now(); const vr = await vf2(jf);
     check('plain JavaScript is checked in-process: no Node to start, so a busy PC cannot time it out into "skipped"', vr.verified === 'failed' && Date.now() - t0 < 1000 && !/function \(exports/.test(vr.diagnostics || ''), { vr: vr.verified, ms: Date.now() - t0 });
+  }
+
+  // ------------------------------------------------------------------ [RS]
+  console.log('\n[RS] review and ship, @-mentions, the terminal panel');
+  {
+    const R = require(path.join(ROOT, 'src/backend/review.js'));
+    const cp = require('child_process');
+    const repo = path.join(WD, 'rs-repo'); fs.mkdirSync(repo, { recursive: true });
+    const g = (...a) => cp.execFileSync('git', a, { cwd: repo, windowsHide: true, stdio: 'pipe' });
+    g('init', '-q'); g('config', 'user.email', 't@t'); g('config', 'user.name', 't'); g('config', 'core.autocrlf', 'false');
+    fs.writeFileSync(path.join(repo, 'f.txt'), 'a\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl\nm\nn\n'); g('add', '.'); g('commit', '-qm', 'init');
+    fs.writeFileSync(path.join(repo, 'f.txt'), 'A\nb\nc\nd\ne\nf\ng\nh\ni\nj\nk\nl\nm\nN\n'); fs.writeFileSync(path.join(repo, 'n.txt'), 'new\n');
+    const st = await R.status(repo);
+    check('review lists each changed file with its kind and +/- lines', st.repo && st.files.map((f) => f.status + f.path + f.added + '/' + f.removed).sort().join(' ') === '?n.txt1/0 Mf.txt2/2', st.files);
+    const d = await R.fileDiff(repo, 'f.txt');
+    const stale = await R.revertHunk(repo, 'f.txt', 0, '@@ not it @@');
+    const back = await R.revertHunk(repo, 'f.txt', 1, d.hunks[1].header);
+    const now = fs.readFileSync(path.join(repo, 'f.txt'), 'utf8').split('\n');
+    check('one hunk is put back and the rest kept; a hunk that changed since it was shown is refused', d.hunks.length === 2 && back.ok && now[0] === 'A' && now[13] === 'n' && !stale.ok, { back, stale: stale.ok, now: [now[0], now[13]] });
+    const nd = await R.fileDiff(repo, 'n.txt', { untracked: true });
+    const c = await R.commit(repo, ['f.txt', 'n.txt'], 'Test commit\n\n- body');
+    const after = await R.status(repo);
+    check('a new file shows as a diff; the picked files are committed with the message', nd.hunks.length === 1 && c.ok && /^[0-9a-f]{7,}$/.test(c.hash) && after.files.length === 0, { c, left: after.files });
+    fs.writeFileSync(path.join(repo, 'f.txt'), 'changed\n');
+    const dis = await R.discardFile(repo, 'f.txt', 'M');
+    fs.writeFileSync(path.join(repo, 'z.txt'), 'z\n');
+    const disNew = await R.discardFile(repo, 'z.txt', '?');
+    check('discarding a changed file restores it; a new file is handed to the Recycle Bin, not deleted here', dis.ok && fs.readFileSync(path.join(repo, 'f.txt'), 'utf8').startsWith('A\n') && disNew.ok && disNew.trash && fs.existsSync(path.join(repo, 'z.txt')), { dis, disNew });
+    const nr = await R.status(path.join(WD));
+    check('a folder that is not a repository says so', nr.repo === false && /not a git repository/.test(nr.error), nr);
+    const MR = read('src/main/main.js'), HR = read('src/renderer/index.html');
+    check('the screen: per-file Discard (two clicks), per-hunk Put back, line comments sent to the agent, Write message, Commit, Push, Create PR, checks with "Fix with the agent"',
+      HR.includes("const res = await rvApi().discard(RV.sid, f.path, f.status);") && HR.includes("const r = await rvApi().revertHunk(RV.sid, f.path, i, h.header);") && HR.includes("let msg = 'Review comments on your changes.")
+      && HR.includes("const log = await rvApi().failedLog(RV.sid, c.link);") && MR.includes("if (r.ok && r.trash) { try { await shell.trashItem(r.trash); }") && MR.includes("ipcMain.handle('review:message',"), 'screen');
+    const MN = require(path.join(ROOT, 'src/backend/mentions.js'));
+    fs.writeFileSync(path.join(repo, 'm.js'), 'export const x = 1;\n');
+    const mm = await MN.expandMentions('fix @m.js, see @"' + path.join(repo, 'f.txt') + '" and mail a@b.com @nope', repo);
+    check('@-mentions: a file\'s contents and a dropped absolute path go with the message; an email and a missing file do not', mm.used.length === 2 && /### m\.js\n```js\nexport const x = 1;/.test(mm.text) && mm.missing.includes('nope') && !MN.findMentions('a@b.com').length, { used: mm.used, missing: mm.missing });
+    const A3 = read('src/backend/agent.js');
+    check('...as a second part of the message, so the bubble shows only what was typed', A3.includes("if (mentions && userText) userParts.push({ type: 'text', text: String(mentions) });") && MR.includes('mentions: mentionText,') && HR.includes('<div class="slash-menu" id="atMenu" hidden'), 'mentions');
+    const P2 = require(path.join(ROOT, 'src/backend/tools/procs.js'));
+    check('a command that will ask (ssh login, npm login, gh auth login) is told to use the terminal panel; quoted words and one-shots are not', P2.needsTerminal('ssh me@host') && P2.needsTerminal('npm login') && P2.needsTerminal('gh auth login')
+      && !P2.needsTerminal('ssh me@host ls') && !P2.needsTerminal('git commit -m "ssh host"') && !P2.needsTerminal('npm test'), 'needsTerminal');
+    check('the terminal panel: a pty manager, its IPC and bridge, the panel and xterm in the page; the agent\'s terminal_run asks through the normal gate',
+      MR.includes("const terminals = new TerminalManager({") && MR.includes("ipcMain.handle('term:open',") && read('src/preload/preload.js').includes("open: (arg) => ipcRenderer.invoke('term:open', arg || {}),")
+      && HR.includes('<script src="terminal-panel.js"></script>') && HR.includes('id="termToggle"') && read('src/backend/tools/terminal.js').includes("await ctx.checkPermission('shell', command);")
+      && read('src/main/interactive.js').includes("? ['cmd.exe', `/d /s /c \"${command}\"`]") && read('src/renderer/terminal-panel.js').includes("if (typeof viewDir === 'function' && typeof actView === 'function')"), 'terminal');
   }
 
   // ------------------------------------------------------------------ [SZ]

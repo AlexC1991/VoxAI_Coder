@@ -19,6 +19,24 @@ const { decodeOutput } = require('./decode');
 const isWin = process.platform === 'win32';
 const running = new Map();   // pid -> { pid, name, command, sessionId, startedAt, log }
 
+/**
+ * Will this command stop and ask something it has no way to read on a pipe? Those run in the
+ * terminal panel instead (terminal_run), where the user answers. sudo is Linux's; a bare ssh
+ * login, ssh-add, gpg, and the CLIs' own logins ask on Windows too. Text in quotes is data:
+ * `git commit -m "ssh host"` asks nothing. A plain `ssh host some-command` is a one-shot.
+ */
+function needsTerminal(command) {
+  let c = String(command == null ? '' : command);
+  if (!c) return false;
+  c = c.replace(/"[^"]*"/g, ' ').replace(/'[^']*'/g, ' ');
+  // sudo, unless -n ("never prompt"), which is the pipe-safe form.
+  if (!isWin && /(^|[\s;&|(])sudo(\s|$)/.test(c) && !/(^|[\s;&|(])sudo\s+-[A-Za-z]*n/.test(c)) return true;
+  if (/(^|[\s;&|(])ssh(\.exe)?\s+[^\s;&|]+\s*$/i.test(c)) return true;
+  if (/(^|[\s;&|(])(ssh-add|gpg|pass)(\.exe)?\s/i.test(c)) return true;
+  if (/(^|[\s;&|(])(npm|pnpm|yarn)\s+(login|adduser)\b/i.test(c) || /(^|[\s;&|(])gh\s+auth\s+login\b/i.test(c)) return true;
+  return false;
+}
+
 /** How a command is run: cmd.exe on Windows, given the command exactly as written. */
 function shellArgs(command) {
   return isWin ? ['cmd.exe', ['/d', '/s', '/c', '"' + command + '"']] : ['/bin/sh', ['-c', command]];
@@ -133,4 +151,4 @@ function startBackground(command, { cwd, sessionId, waitMs = 3000 } = {}) {
   });
 }
 
-module.exports = { startBackground, leftovers, track, claim, ownedBy, list, stop, stopAll, killTree, shellArgs, childEnv };
+module.exports = { startBackground, leftovers, track, claim, ownedBy, list, stop, stopAll, killTree, shellArgs, childEnv, needsTerminal };

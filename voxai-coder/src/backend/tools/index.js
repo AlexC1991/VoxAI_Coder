@@ -335,6 +335,21 @@ const shell = tool('shell', SHELL_DESC, {
 }, ({ command, timeout_secs, background }, ctx) => new Promise(async (resolve, reject) => {
   try { await ctx.checkPermission('shell', command); }
   catch (e) { reject(e); return; }
+  // A command that will stop and ask something (a sudo password) cannot run here: there is
+  // no terminal for the prompt. Say so, and name the tool that can, rather than silently
+  // swapping the command for a panel one — the model used to be told nothing and could not
+  // tell afterwards what had actually run.
+  if (ctx.interactive && !background && procs.needsTerminal(command)) {
+    resolve({
+      ok: false,
+      refused: true,
+      error: 'This command needs a terminal to answer a prompt (a password, a host-key question), and shell '
+        + 'runs on pipes with no terminal. Run it with terminal_run instead: it runs in the app\'s terminal '
+        + 'panel, where the user types the answer themselves. Do not retry this exact call.',
+      hint: 'terminal_run',
+    });
+    return;
+  }
   if (background) {
     resolve(await procs.startBackground(command, { cwd: ctx.workdir, sessionId: ctx.session && ctx.session.id }));
     return;
@@ -562,7 +577,7 @@ function makeFacade(spec, members) {
 }
 
 function buildTools(opts) {
-  const { workdir, session, emit, checkPermission, userData, live, resolveIn, userInput, showInApp, attachAtlas } = opts || {};
+  const { workdir, session, emit, checkPermission, userData, live, resolveIn, userInput, showInApp, attachAtlas, interactive } = opts || {};
   const ctx = {
     workdir,
     session,
@@ -572,6 +587,9 @@ function buildTools(opts) {
     userData,
     live,
     userInput: userInput || (async () => ({ answer: null, cancelled: true })),
+    // Run a command on a real terminal. Called by the shell tool when the command may
+    // need to ask something (a sudo password); main supplies it while the app is running.
+    interactive: typeof interactive === 'function' ? interactive : null,
   };
   const patchT = makePatchTool({ resolveIn, checkPermission });
   const memT = makeMemoryTool({ resolveIn });
@@ -594,6 +612,7 @@ function buildTools(opts) {
   const { makeSandboxTool } = require('./sandbox');
   const { makeArtifactTool } = require('./artifact');
   const { makeComputerUseTool } = require('../cu');
+  const { makeTerminalTool } = require('./terminal');
 
   const mcpT = makeMcpTool({ getSettings: opts.getSettings, mcpDir: opts.mcpDir });
   const skillsT = makeSkillsTool({ workdir, userData });
@@ -604,6 +623,7 @@ function buildTools(opts) {
   const sandboxT = makeSandboxTool({ getAccess: opts.getAccess });
   const artT = makeArtifactTool({ resolveIn, userData, emit });
   const cuT = makeComputerUseTool({ showInApp, attachAtlas });
+  const termT = makeTerminalTool({ interactive });
 
   // feature 1-8 tools each expose defs[] + a run(name,args,ctx) dispatcher
   // Every tool's schema rides at the head of every request, so what cannot be used is left
@@ -615,7 +635,7 @@ function buildTools(opts) {
   const featureDeps = [
     ...(mcpOn ? [[mcpT, 'mcp_']] : []), [skillsT, 'skill'], [fsT, 'fsops'], [docRagT, 'doc'],
     [spawnT, 'spawn'], [browserT, 'browser_'], [artT, 'artifact'],
-    [cuT, 'cu'],
+    [cuT, 'cu'], [termT, 'terminal_'],
   ];
   const featureTools = [];
   for (const [impl] of featureDeps) if (impl && Array.isArray(impl.defs)) {

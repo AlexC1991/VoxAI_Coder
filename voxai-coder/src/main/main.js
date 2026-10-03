@@ -397,6 +397,28 @@ function allRenderers() {
   return { send: (ch, data) => { for (const c of list) { try { c.send(ch, data); } catch { /* closing */ } } } };
 }
 
+// ---------------------------------------------------------------- terminal ---
+// A real shell docked beside the chat (from the Linux edition): a pty per panel, so a command
+// that asks something can be answered there. node-pty ships prebuilt for Windows; if it cannot
+// load, the panel says why and nothing else changes.
+const terminalAvail = require('./terminal').available();
+const { TerminalManager } = require('./terminal');
+const interactive = require('./interactive');
+const terminals = new TerminalManager({
+  onData: (id, chunk) => {
+    // A command the agent runs in the panel: this is where its exit code comes from.
+    try { interactive.noteChunk(id, chunk); } catch { /* never break output */ }
+    // Every page that shows the chat (the chat is a WebContentsView, not the window's own page).
+    try { allRenderers().send('term:data', { id, data: chunk }); } catch { /* closing */ }
+  },
+  onExit: (id, info) => {
+    try { interactive.noteExit(id, info); } catch { /* never break exit */ }
+    try { allRenderers().send('term:exit', { id, ...info }); } catch { /* closing */ }
+  },
+});
+// A shell must not outlive the app.
+app.on('before-quit', () => { try { terminals.closeAll(); } catch { /* nothing open */ } });
+
 // File menu -> the window (New Session, Open Folder). It lived inside the startup
 // function, out of reach of the menu built in createWindow, so the menu items and
 // their shortcuts (Ctrl+N, Ctrl+O) threw and did nothing. Found in a live test.
@@ -1037,6 +1059,56 @@ app.whenReady().then(() => {
     return w ? (w.isMaximized() ? 'maximized' : 'normal') : 'normal';
   });
 
+  // Terminal: a real pty per panel. Nothing typed here reaches the agent loop: keystrokes go
+  // straight to the pty and its output comes back, so a password stays between you and the shell.
+  ipcMain.handle('term:open', (_e, arg) => {
+    const a = arg || {};
+    return terminals.open({ cwd: typeof a.cwd === 'string' && a.cwd ? a.cwd : undefined, cols: a.cols, rows: a.rows });
+  });
+  ipcMain.on('term:write', (_e, arg) => { if (arg && typeof arg.id === 'string') terminals.write(arg.id, String(arg.data == null ? '' : arg.data)); });
+  ipcMain.on('term:resize', (_e, arg) => { if (arg && typeof arg.id === 'string') terminals.resize(arg.id, arg.cols, arg.rows); });
+  ipcMain.on('term:close', (_e, arg) => { if (arg && typeof arg.id === 'string') terminals.close(arg.id); });
+  // Review and ship (backend/review.js): the session folder's changes, hunk by hunk, then
+  // commit, push, pull request and its checks. Every one is a button the user pressed.
+  const review = require('../backend/review');
+  const reviewDir = async (sessionId) => { const sess = await getLive(String(sessionId || '')); if (!sess || !sess.workdir) throw new Error('This session has no folder.'); return sess.workdir; };
+  const reviewCall = (fn) => async (_e, a = {}) => { try { return await fn(await reviewDir(a.sessionId), a); } catch (e) { return { ok: false, error: String((e && e.message) || e) }; } };
+  ipcMain.handle('review:status', reviewCall((cwd) => review.status(cwd)));
+  ipcMain.handle('review:diff', reviewCall((cwd, a) => review.fileDiff(cwd, String(a.file || ''), { untracked: !!a.untracked })));
+  ipcMain.handle('review:revertHunk', reviewCall((cwd, a) => review.revertHunk(cwd, String(a.file || ''), Number(a.index) || 0, String(a.header || ''))));
+  ipcMain.handle('review:discard', reviewCall(async (cwd, a) => {
+    const r = await review.discardFile(cwd, String(a.file || ''), String(a.kind || ''));
+    // A file new since the last commit goes to the Recycle Bin, not away for good.
+    if (r.ok && r.trash) { try { await shell.trashItem(r.trash); } catch (e) { return { ok: false, error: 'Could not move it to the Recycle Bin: ' + e.message }; } }
+    return r;
+  }));
+  ipcMain.handle('review:commit', reviewCall((cwd, a) => review.commit(cwd, a.files, a.message)));
+  ipcMain.handle('review:push', reviewCall((cwd) => review.push(cwd)));
+  ipcMain.handle('review:pr', reviewCall((cwd, a) => review.createPr(cwd, a.title, a.body)));
+  ipcMain.handle('review:checks', reviewCall((cwd) => review.prChecks(cwd)));
+  ipcMain.handle('review:failedLog', reviewCall((cwd, a) => review.failedLog(cwd, a.link)));
+  // A commit message for the picked files, written by a cheap model (or the session's own model on this PC).
+  ipcMain.handle('review:message', reviewCall(async (cwd, a) => {
+    const s = getSettings(false);
+    const sess = await getLive(String(a.sessionId || ''));
+    const model = localEngineMod.isLocalModel(sess && sess.model) ? sess.model : (s.autoCheckModel || 'deepseek/deepseek-v4.1-flash');
+    if (!localEngineMod.isLocalModel(model) && !s.openrouterKey) return { ok: false, error: 'Add your OpenRouter key in Settings to have the message written.' };
+    const diff = await review.diffForMessage(cwd, a.files);
+    if (!diff.trim()) return { ok: false, error: 'There is nothing to describe in the picked files.' };
+    const r = await chatOnce({ apiKey: s.openrouterKey, host: s.openrouterHost, model, maxTokens: 300, messages: [
+      { role: 'system', content: 'You write git commit messages. Reply with the message only: a short imperative subject line (at most 72 characters), a blank line, then 1-4 short "- " lines on what changed and why. No code fences, no quotes.' },
+      { role: 'user', content: diff },
+    ] });
+    const text = String((r && r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content) || '').replace(/^```\w*\n?|```$/g, '').trim();
+    return text ? { ok: true, message: text, model } : { ok: false, error: 'The model returned nothing.' };
+  }));
+  // The @ picker's list: the project's files and folders (git's list when it is a repository).
+  ipcMain.handle('files:list', async (_e, workdir) => {
+    try { return { ok: true, files: await require('../backend/mentions').projectFiles(String(workdir || '')) }; }
+    catch (e) { return { ok: false, files: [], error: String((e && e.message) || e) }; }
+  });
+  ipcMain.handle('term:list', () => ({ ok: true, terminals: terminals.list(), ...terminalAvail }));
+
   // Atlas: in-app resizable browser (chat | browser split)
   // Judge a file:// URL against the SESSION's project. With only the url, containment
   // used the global working folder, so a local file from any other project was refused
@@ -1427,6 +1499,15 @@ app.whenReady().then(() => {
       if (ctl.signal.aborted) { controllers.delete(runKey); throw new Error('Stopped while the model on this PC was loading.'); }
     }
     if (!resume && sess.title === 'New session') sess.title = text.slice(0, 60);
+    // @-mentioned files and folders go with the message (backend/mentions.js), read now.
+    let mentionText = '';
+    if (!resume && text && text.includes('@')) {
+      try {
+        const mm = await require('../backend/mentions').expandMentions(text, sess.workdir);
+        mentionText = mm.text;
+        if (mm.used.length) { const c2 = allRenderers(); c2 && c2.send('agent:event', { sessionId, runKey, event: { type: 'mentioned', files: mm.used } }); }
+      } catch { /* sent without them; the agent can still read the paths */ }
+    }
     // A message from you while a goal is paused picks it back up ("continue" works).
     if (!goalContinue && sess.goal && sess.goal.status === 'active') { sess.goal.paused = false; sess.goal.pausedReason = ''; sess.goal.idle = 0; }
     let runEnd = 'error', runTools = 0, runCost = 0, runTokens = 0, runParts = null;   // for the goal loop (goalStep) and the run's summary
@@ -1461,6 +1542,18 @@ app.whenReady().then(() => {
           ...(readOnly ? { allowTools: require('../backend/tools/spawn').READ_TOOLS.concat(['shell']) } : {}),
           signal: ctl.signal, askPermission, userInput: askUserInput,
           checkSteer: steerTake,
+          mentions: mentionText,
+          // A command that has to ask something (an ssh login, npm login) runs in the terminal
+          // panel, where the user answers it; what they type never reaches the model. Approval is
+          // the terminal_run tool's own (the same gate as shell), so it is asked once, not twice.
+          interactive: terminalAvail.ok ? async (command, o) => {
+            return interactive.runInteractive(command, {
+              cwd: (o && o.cwd) || sess.workdir,
+              timeoutSecs: o && o.timeoutSecs,
+              terminals,
+              send: (ch, data) => allRenderers().send(ch, data),
+            });
+          } : null,
           compactThreshold: s.compactThreshold, toolResultMaxChars: s.toolResultMaxChars, hardFraction: s.hardFraction,
           // A model on this PC has the context it was loaded with, not a cloud model's 200k.
           contextLimit: localCtx && localEngineMod.isLocalModel(sess.model || s.openrouterModel) ? localCtx : s.contextLimit,

@@ -592,6 +592,12 @@ async function* runAgent(opts) {
     // closed on has just been answered (see answerPendingAsk).
     resume = false,
     userInput = null,
+    // Runs a command in the terminal panel when it has to ask something (an ssh login): main
+    // supplies it; null without a terminal, where the shell tool keeps using pipes.
+    interactive = null,
+    // Files and folders the user @-mentioned, already read (backend/mentions.js): sent with the
+    // message as its own part, so the chat bubble shows only what was typed.
+    mentions = '',
     onOpenUrl = null,
     onAttachAtlas = null,
     planMode = false,
@@ -896,6 +902,7 @@ async function* runAgent(opts) {
   // Build the user message, supporting image attachments (multimodal content array).
   const userParts = [];
   if (userText) userParts.push({ type: 'text', text: userText });
+  if (mentions && userText) userParts.push({ type: 'text', text: String(mentions) });
   // The renderer sends OpenAI-shaped parts ({type:'image_url', image_url:{url}}).
   // This used to read only `att.dataUrl`, a field that shape does not have -- so
   // EVERY attached image was silently dropped, while the user's own bubble still
@@ -999,6 +1006,7 @@ async function* runAgent(opts) {
     const { ALL: builtTools } = tools.buildTools({
       workdir: session.workdir, session, emit: pushEvent, checkPermission: ctx.checkPermission,
       resolveIn, userData, live, userInput: userInput || (async () => ({ answer: null, cancelled: true })),
+      interactive,
       runner: (o) => runAgent(o),
       // askPermission: a worker's prompts come to the same place as this run's (spawn.js).
       agentOpts: { apiKey, host, model, reasoningEffort, reasoningSpec, access, sessionId: session.id, signal, isSubAgent, workdir: session.workdir, visionHelper, checkModel, checkReasoningSpec, cacheTtl, askPermission, checkpointSession: session,

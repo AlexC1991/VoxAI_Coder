@@ -587,7 +587,8 @@ function loadWith(file, stubs) {
     // web_fetch's link regex shipped that way for one edit. A parse check cannot see
     // it; this can.
     const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory()
-      ? (e.name === 'node_modules' ? [] : walk(path.join(d, e.name))) : [path.join(d, e.name)]));
+      // vendor/ is third-party minified code (xterm.js carries control bytes on purpose), not edited here.
+      ? (e.name === 'node_modules' || e.name === 'vendor' ? [] : walk(path.join(d, e.name))) : [path.join(d, e.name)]));
     const files = [...walk(path.join(ROOT, 'src')), ...walk(path.join(ROOT, 'test'))].filter((f) => /\.(js|html|css)$/.test(f));
     const hits = [];
     for (const f of files) {

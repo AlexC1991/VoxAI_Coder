@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-UcxEWnHHDWV/JjLL5r4dpd/Q6K7KPvl6g4AlZs4vnrM='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-73E6EIBDgF3KDtO5lRjRuJBx/Ap6jAy+EjoJhnPCko4='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -200,6 +200,45 @@ tests"). Scroll the row instead of breaking words:
 .hunk{border:1px solid var(--edge);border-radius:8px;overflow:hidden}
 .hunk header{background:var(--panel);padding:7px 11px;font-family:"Sometype Mono",monospace;font-size:13px;color:var(--dim)}
 .hunk pre{margin:0;padding:8px 11px;font-family:"Sometype Mono",monospace;font-size:13px;line-height:1.7;white-space:pre-wrap}
+/* Review and ship (backend/review.js) */
+#screen-diff{flex-direction:column}
+.rv-back{padding:4px 10px;font-size:12.5px}
+.rv-open{font-size:15px;font-weight:600}
+.rv-file{display:flex;align-items:center;gap:7px;padding:5px 6px;border-radius:7px;cursor:pointer;font-size:12.5px;min-width:0}
+.rv-file:hover{background:var(--sel)} .rv-file.on{background:var(--panel2)}
+.rv-file input{margin:0;flex:none;accent-color:var(--gold)}
+.rv-file .st{flex:none;width:15px;text-align:center;font-family:"Sometype Mono",monospace;font-size:11px;font-weight:700;color:var(--gold)}
+.rv-file .st.A,.rv-file .st.q{color:var(--add)} .rv-file .st.D{color:var(--del)}
+.rv-file .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;direction:rtl;text-align:left}
+.rv-file .ct{flex:none;font-family:"Sometype Mono",monospace;font-size:11px;color:var(--dim)}
+.rv-file .x{flex:none;border:0;background:none;color:var(--faint);cursor:pointer;font-size:11.5px;padding:1px 4px;border-radius:4px}
+.rv-file .x:hover,.rv-file .x.arm{color:var(--del);background:var(--sel)}
+.hunk header{display:flex;align-items:center;gap:8px}
+.hunk header .hh{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hunk header button{border:1px solid var(--edge2);background:var(--bg);color:var(--sub);border-radius:6px;font:12px Chivo,sans-serif;padding:2px 8px;cursor:pointer}
+.hunk header button:hover{color:var(--ink);border-color:var(--gold)}
+.rv-lines{font-family:"Sometype Mono",monospace;font-size:12.5px;line-height:1.6}
+.rv-ln{display:flex;cursor:pointer;white-space:pre-wrap;word-break:break-all}
+.rv-ln:hover{outline:1px solid var(--edge2)}
+.rv-ln .g{flex:none;width:76px;display:flex;gap:4px;padding:0 6px;color:var(--faint);user-select:none;font-size:11px;justify-content:flex-end}
+.rv-ln .g i{width:30px;text-align:right;font-style:normal}
+.rv-ln .c{flex:1;padding:0 10px 0 6px;min-width:0}
+.rv-ln.add{background:color-mix(in srgb,var(--add) 13%,transparent)} .rv-ln.add .c::before{content:"+";color:var(--add);margin-right:4px}
+.rv-ln.del{background:color-mix(in srgb,var(--del) 13%,transparent)} .rv-ln.del .c::before{content:"-";color:var(--del);margin-right:4px}
+.rv-ln.ctx .c::before{content:" ";margin-right:4px}
+.rv-cmt{margin:4px 10px 6px 82px;padding:7px 10px;border:1px solid var(--goldedge);border-radius:8px;background:var(--panel);font:13px Chivo,sans-serif;display:flex;gap:8px;align-items:flex-start}
+.rv-cmt textarea{flex:1;min-height:44px;resize:vertical;background:var(--bg);color:var(--ink);border:1px solid var(--edge2);border-radius:6px;padding:6px;font:13px Chivo,sans-serif}
+.rv-cmt .say{flex:1;white-space:pre-wrap;color:var(--ink)} .rv-cmt b{color:var(--gold);font-weight:600}
+.rv-cmt button{border:0;background:none;color:var(--sub);cursor:pointer;font:12px Chivo,sans-serif}
+.rv-ship{flex:none;border-top:1px solid var(--edge);padding:10px 14px;display:flex;flex-direction:column;gap:8px;background:var(--deep)}
+.rv-row{display:flex;align-items:center;gap:8px} .rv-count{font-size:12.5px;color:var(--dim)}
+.rv-commit{display:flex;gap:10px;align-items:flex-start}
+.rv-commit textarea{flex:1;resize:vertical;min-height:52px;background:var(--bg);color:var(--ink);border:1px solid var(--edge2);border-radius:8px;padding:7px 9px;font:13px "Sometype Mono",monospace}
+.rv-btns{display:grid;grid-template-columns:1fr 1fr;gap:6px;flex:none}
+.rv-checks{font-size:12.5px;display:flex;flex-direction:column;gap:4px;max-height:150px;overflow:auto}
+.rv-check{display:flex;align-items:center;gap:8px} .rv-check .b{flex:none;width:58px;font-family:"Sometype Mono",monospace;font-size:11px}
+.rv-check .b.pass{color:var(--add)} .rv-check .b.fail{color:var(--del)} .rv-check .b.pending{color:var(--gold)}
+.rv-check a{color:var(--sub);cursor:pointer;text-decoration:underline} .rv-check button{border:1px solid var(--edge2);background:var(--bg);color:var(--sub);border-radius:6px;font:12px Chivo,sans-serif;padding:1px 8px;cursor:pointer}
 .ln-add{color:var(--add)} .ln-del{color:var(--del)} .ln-ctx{color:var(--dim)}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:50}
 /* Usage opens from Settings, so it goes on top of it: at the same level it opened
@@ -416,6 +455,18 @@ tests"). Scroll the row instead of breaking words:
 .pp-tools{margin-left:auto;display:flex;gap:2px}
 .pp-btn{width:26px;height:24px;border:0;border-radius:5px;background:transparent;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--dim);font-size:14px}
 .pp-btn:hover{background:var(--sel);color:var(--ink)}
+/* Terminal panel: a real shell in a docked pane, styled like the preview panel. */
+.term-panel{flex:none;width:0;max-width:70%;min-width:0;border-left:1px solid var(--edge);background:var(--deep);display:flex;flex-direction:column;overflow:hidden;opacity:0;
+  transition:width var(--pp-ease-ms) cubic-bezier(.22,.61,.36,1), min-width var(--pp-ease-ms) cubic-bezier(.22,.61,.36,1), opacity calc(var(--pp-ease-ms) * .8) ease}
+.term-panel.open{width:42%;min-width:300px;opacity:1}
+.term-panel.dragging{transition:none}
+.term-holder{flex:1;min-height:0;padding:4px 2px 4px 6px}
+.term-holder .xterm{height:100%}
+.term-note{flex:none;padding:6px 10px;font-size:11.5px;color:var(--dim);border-top:1px solid var(--edge)}
+.term-note b{color:var(--mut);font-weight:600}
+.term-cwd{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:42%;direction:rtl;text-align:left}
+.term-btn{width:26px;height:24px;border:0;border-radius:5px;background:transparent;cursor:pointer;color:var(--dim);font-size:13px}
+.term-btn:hover{background:var(--sel);color:var(--ink)}
 .pp-nav{flex:none;display:flex;align-items:center;gap:8px;padding:8px 10px;border-bottom:1px solid var(--edge)}
 /* One tab per session with a page open: each agent has its own browser (main.js). */
 .pp-tabs{flex:none;display:flex;gap:4px;padding:6px 8px 0;border-bottom:1px solid var(--edge);overflow-x:auto;scrollbar-width:none}
@@ -1059,7 +1110,8 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
       </button>
     </div>
     <div class="work" id="screen-work">
-      <div class="workhead"><span class="dot run" id="runDot" style="display:none"></span><h1 class="sr-only" id="sessTitle">New session</h1><button type="button" class="wh-dir" id="whDir" title="Open this folder in File Explorer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="sub" id="sessSub"></span><svg class="wh-dir-go" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg></button><span class="wh-branch" id="cbBranch" hidden></span><span class="wh-share" id="shareBadge" hidden></span><span class="wh-sp"></span><span class="workstats" id="statPill" tabindex="0" hidden><span class="stat st-cost"><b id="sessStatCost"></b></span><span class="stat st-tok"><b id="sessStatTok"></b> tokens</span><span class="stat-card" role="tooltip"><span class="stat"><i>Price per 1M</i><b id="sessStatRate"></b></span><span class="stat" id="sessStatCacheWrap" style="display:none"><i>Served from cache</i><b id="sessStatCache"></b></span><span class="stat" id="sessStatBudgetWrap" style="display:none"><i>This run</i><b id="sessStatBudget"></b></span></span></span><button class="pp-toggle ic" id="btnCompact" title="Summarise older turns now"></button><button class="pp-toggle ic" id="ppToggle" title="Toggle preview panel"></button><button type="button" class="pane-x" id="btnPaneClose" title="Close this pane (the session keeps going)" aria-label="Close this pane"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button></div>
+      <div class="workhead"><span class="dot run" id="runDot" style="display:none"></span><h1 class="sr-only" id="sessTitle">New session</h1><button type="button" class="wh-dir" id="whDir" title="Open this folder in File Explorer"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg><span class="sub" id="sessSub"></span><svg class="wh-dir-go" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 17 17 7"/><path d="M8 7h9v9"/></svg></button><span class="wh-branch" id="cbBranch" hidden></span><span class="wh-share" id="shareBadge" hidden></span><span class="wh-sp"></span><span class="workstats" id="statPill" tabindex="0" hidden><span class="stat st-cost"><b id="sessStatCost"></b></span><span class="stat st-tok"><b id="sessStatTok"></b> tokens</span><span class="stat-card" role="tooltip"><span class="stat"><i>Price per 1M</i><b id="sessStatRate"></b></span><span class="stat" id="sessStatCacheWrap" style="display:none"><i>Served from cache</i><b id="sessStatCache"></b></span><span class="stat" id="sessStatBudgetWrap" style="display:none"><i>This run</i><b id="sessStatBudget"></b></span></span></span><button class="pp-toggle ic" id="btnCompact" title="Summarise older turns now"></button><button class="pp-toggle ic rv-open" id="btnReview" title="Review changes: diff, comments, commit, push, pull request" aria-label="Review changes">±</button><button class="pp-toggle ic" id="ppToggle" title="Toggle preview panel"></button>
+<button class="pp-toggle ic" id="termToggle" title="Toggle terminal" aria-label="Toggle terminal">&gt;_</button><button type="button" class="pane-x" id="btnPaneClose" title="Close this pane (the session keeps going)" aria-label="Close this pane"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button></div>
       <div class="scroll"><div id="thread" style="width:100%;max-width:760px;display:flex;flex-direction:column;padding-bottom:20px">
         <div class="msg" style="color:var(--dim)">Open a folder, pick an OpenRouter model in ⚙ Settings, and ask for code. The agent runs on your own <b style="color:var(--gold)">vox</b> backend — file edits, shell, tests — billed to your OpenRouter key.</div>
       </div></div>
@@ -1078,6 +1130,7 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
           <div class="qrows" id="qrows" hidden></div>
           <!-- the shelf: ONE line holding what matters most right now -->
           <div class="slash-menu" id="slashMenu" hidden role="listbox" aria-label="Commands"></div>
+          <div class="slash-menu" id="atMenu" hidden role="listbox" aria-label="Files to mention"></div>
           <div class="shelf" id="shelf" hidden>
             <span class="sh-goal sh-loop" id="shLoop" hidden><span class="sh-goal-ic" aria-hidden="true">↻</span><span id="shLoopTxt"></span><button class="sh-lnk" id="shLoopStop" type="button">Stop loop</button></span>
             <span class="sh-eyes" id="shEyes" hidden><span class="sh-eyes-ic" aria-hidden="true">◐</span><span id="shEyesTxt"></span></span>
@@ -1141,6 +1194,22 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
       </div></div>
     </div>
     <div id="splitSlots"></div>
+    <div class="term-divider pp-divider" id="termDivider" title="Drag to resize terminal"></div>
+    <div class="term-panel" id="termPanel" style="display:none">
+      <div class="pp-head">
+        <span class="pp-title">Terminal</span>
+        <span class="pp-host term-cwd" id="termCwd" title=""></span>
+        <span class="pp-tools">
+          <button class="term-btn" id="termNew" title="New shell">+</button>
+          <button class="term-btn" id="termKill" title="Close the shell">×</button>
+          <button class="pp-btn ic" id="termHide" title="Hide the terminal">▾</button>
+        </span>
+      </div>
+      <div class="term-holder" id="termHolder"></div>
+      <div class="term-note" id="termNote">
+        A real shell. Passwords you type here (sudo, ssh) stay in this panel and are never sent to the model.
+      </div>
+    </div>
     <!-- Resizable Atlas-style split: real browser pane docked beside the chat.
          Drag the divider (ppDivider) to resize; chat + composer reflow with it. -->
     <div class="pp-divider" id="ppDivider" title="Drag to resize browser"></div>
@@ -1173,8 +1242,14 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
       </div></div>
     </div>
     <div class="work" id="screen-diff" style="display:none">
-      <div class="workhead"><span class="t">Review changes</span><span class="sub">agent git worktree · keep / discard per file</span></div>
-      <div class="diffwrap"><div class="filelist" id="fileList"></div><div class="hunks" id="hunks"><div class="msg" style="color:var(--dim)">No diff loaded yet — run the agent first, then its file changes will be reviewable here.</div></div></div>
+      <div class="workhead"><button type="button" class="btn ghost rv-back" id="rvBack">‹ Chat</button><span class="t">Review changes</span><span class="sub" id="rvSub"></span><span class="wh-sp"></span><button type="button" class="btn ghost" id="rvRefresh">Refresh</button></div>
+      <div class="diffwrap"><div class="filelist" id="fileList"></div><div class="hunks" id="hunks"><div class="msg" style="color:var(--dim)">Loading the changes…</div></div></div>
+      <div class="rv-ship" id="rvShip">
+        <div class="rv-row"><span id="rvCount" class="rv-count"></span><span class="wh-sp"></span><button type="button" class="btn ghost" id="rvSendComments" disabled>Send comments to the agent</button></div>
+        <div class="rv-commit"><textarea id="rvMsg" rows="3" placeholder="Commit message: a short first line, then what changed and why"></textarea>
+          <div class="rv-btns"><button type="button" class="btn ghost" id="rvWrite">Write message</button><button type="button" class="btn" id="rvCommit">Commit</button><button type="button" class="btn ghost" id="rvPush">Push</button><button type="button" class="btn ghost" id="rvPr">Create PR</button></div></div>
+        <div class="rv-checks" id="rvChecks" hidden></div>
+      </div>
     </div>
     <!-- Sub-agents screen (Codex/Goose/Claude-style panel) -->
     <!-- The Sub-agents and Memory screens were removed with their tabs: sub-agent
@@ -1305,6 +1380,9 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
 </div></div>
 
 <script src="vendor/vte.browser.js"></script>
+<script src="vendor/xterm.js"></script>
+<script src="vendor/xterm-addon-fit.js"></script>
+<script src="terminal-panel.js"></script>
 <script>
 const $ = (id) => document.getElementById(id);
 // A split pane (main/split.js) is this page with ?pane=<session id>: that session only.
@@ -2165,6 +2243,12 @@ function ppOpen(url){
   // Show the destination immediately. Waiting for main to broadcast back left the
   // address bar reading "http://localhost" while a different page was loading.
   if (url) ppSetUrl(url);
+  // One dock, one panel. The terminal and the preview both dock on the right at 42%, so
+  // with both open they took 84% of the window and squeezed the chat to nothing (measured:
+  // preview 597px + terminal 597px in a 1422px window). Opening the preview closes the
+  // terminal; its shell keeps running, it is just not on screen. The other half of this is
+  // in terminal-panel.js open().
+  try { if (window.VOX_TERMINAL && window.VOX_TERMINAL.isOpen && window.VOX_TERMINAL.isOpen()) window.VOX_TERMINAL.close(); } catch {}
   ppSetOpen(true);
   const wd = viewDir(actView());
   if (b) { try { b.open(url, wd); } catch {} }
@@ -2218,6 +2302,9 @@ function ppClose(){
     syncViewport();
   }, ppAnimMs() + 40);
 }
+// The preview's own control surface, so the terminal panel can close it when it opens (and
+// the other way round in ppOpen). The dock is a single slot -- see the note in ppOpen.
+window.VOX_PREVIEW = { open: (url) => ppOpen(url), close: () => ppClose(), isOpen: () => !!(function () { const p = $('previewPanel'); return p && p.classList.contains('open'); })() };
 
 /**
  * Mirror the real preview state pushed by the main process.
@@ -5154,6 +5241,11 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
     setActivity(v, 'Using your keyboard and mouse · Esc or moving the mouse stops it');
   } else if (event.type === 'awaiting_agents') {
     setStatus('waiting for ' + event.count + ' background agent' + (event.count === 1 ? '' : 's') + '…');
+    } else if (event.type === 'mentioned') {
+      // What went with the message from its @-mentions, so it is clear the model has them.
+      const fs0 = Array.isArray(event.files) ? event.files : [];
+      const names = fs0.map((f) => f.path + (f.kind === 'folder' ? '/' : '') + (f.cut ? ' (cut)' : f.kind === 'binary' ? ' (binary, left out)' : f.kind === 'skipped' ? ' (left out)' : '')).join(', ');
+      if (names) { const line = noteRow({ icon: 'send', verb: 'Sent with your message', chip: names.slice(0, 160) }); const rr = RR(); if (rr) { rr.appendChild(line); followThread(); } }
     } else if (event.type === 'steered') {
       // The run PICKED UP a message the user sent while it was working. This event is the only
       // real confirmation of delivery: agent:steer's `live` merely means a controller exists, and
@@ -5758,8 +5850,12 @@ function addImageFiles(files){
   const paths = others.map((f) => { try { return (window.voxai && window.voxai.pathForFile) ? window.voxai.pathForFile(f) : ''; } catch { return ''; } }).filter(Boolean);
   if (paths.length) {
     const ta = $('prompt');
-    const q = (p) => (/\s/.test(p) ? '"' + p + '"' : p);
-    ta.value = (ta.value && !/\s$/.test(ta.value) ? ta.value + ' ' : ta.value) + paths.map(q).join(' ');
+    // As @-mentions, so the files go WITH the message (backend/mentions.js) instead of as bare
+    // paths the agent then has to go and read. Inside the project, the path from its folder.
+    const root = String(viewDir(actView()) || '').replace(/\\/g, '/').replace(/\/+$/, '');
+    const rel = (p) => { const f = p.replace(/\\/g, '/'); return root && f.toLowerCase().startsWith(root.toLowerCase() + '/') ? f.slice(root.length + 1) : p; };
+    const q = (p) => '@' + (/\s/.test(p) ? '"' + p + '"' : p);
+    ta.value = (ta.value && !/\s$/.test(ta.value) ? ta.value + ' ' : ta.value) + paths.map(rel).map(q).join(' ') + ' ';
     ta.dispatchEvent(new Event('input', { bubbles: true }));
     ta.focus();
   }
@@ -6751,6 +6847,327 @@ $('prompt').addEventListener('keydown', (e) => {
   } else if (e.key === 'Escape') {
     e.preventDefault(); e.stopImmediatePropagation();
     box.hidden = true;
+  }
+}, true);
+
+// ---- Review and ship (backend/review.js) ----
+// The session folder's changes file by file and hunk by hunk: put a hunk or a file back, comment
+// on lines and send the comments to the agent, then commit what was picked, push, open a pull
+// request and follow its checks -- where "Fix with the agent" hands a failing log to the run.
+const RV = { sid: '', st: null, file: null, diff: null, pick: new Set(), comments: [], timer: null, lastMsg: '' };
+const rvApi = () => window.voxai.review;
+function rvSay(text, bad){ toast((bad ? '⚠ ' : '') + text); }
+async function openReview(){
+  const v = actView();
+  if (!v || !v.id) { rvSay('Open a session first: its folder is what gets reviewed.'); return; }
+  if (RV.sid !== v.id) { RV.comments = []; RV.pick = new Set(); RV.file = null; RV.lastMsg = ''; $('rvMsg').value = ''; }
+  RV.sid = v.id;
+  go('diff');
+  await rvLoad();
+}
+async function rvLoad(){
+  const list = $('fileList'), hunks = $('hunks');
+  const st = await rvApi().status(RV.sid);
+  RV.st = st;
+  if (!st || st.repo === false || st.ok === false) {
+    list.innerHTML = '';
+    hunks.innerHTML = '';
+    hunks.appendChild(el('div', 'msg', esc((st && st.error) || 'Could not read this folder.') + ' Review works in a git repository: run <b>git init</b> in the terminal panel to start one.'));
+    $('rvSub').textContent = ''; rvPaintShip(); return;
+  }
+  $('rvSub').textContent = st.branch + (st.upstream ? ' → ' + st.upstream : '') + (st.ahead ? ' · ' + st.ahead + ' to push' : '') + (st.behind ? ' · ' + st.behind + ' behind' : '');
+  const paths = new Set(st.files.map((f) => f.path));
+  for (const p of [...RV.pick]) if (!paths.has(p)) RV.pick.delete(p);
+  if (!RV.pick.size) st.files.forEach((f) => RV.pick.add(f.path));
+  list.innerHTML = '';
+  if (!st.files.length) {
+    hunks.innerHTML = '';
+    hunks.appendChild(el('div', 'msg', 'No changes since the last commit.' + (st.ahead ? ' ' + st.ahead + ' commit' + (st.ahead === 1 ? '' : 's') + ' to push.' : '')));
+    RV.file = null; rvPaintShip(); rvChecks(); return;
+  }
+  st.files.forEach((f) => list.appendChild(rvFileRow(f)));
+  const keep = RV.file && st.files.find((f) => f.path === RV.file.path);
+  await rvShowFile(keep || st.files[0]);
+  rvPaintShip();
+  rvChecks();
+}
+function rvFileRow(f){
+  const r = el('div', 'rv-file' + (RV.file && RV.file.path === f.path ? ' on' : ''));
+  r.title = f.path;
+  const cb = document.createElement('input'); cb.type = 'checkbox'; cb.checked = RV.pick.has(f.path); cb.title = 'Include in the commit';
+  cb.onclick = (e) => { e.stopPropagation(); if (cb.checked) RV.pick.add(f.path); else RV.pick.delete(f.path); rvPaintShip(); };
+  r.appendChild(cb);
+  const lab = { M: 'M', A: 'A', D: 'D', R: 'R', '?': 'N' }[f.status] || f.status;
+  r.appendChild(el('span', 'st ' + (f.status === '?' ? 'q' : f.status), lab));
+  r.appendChild(el('span', 'nm', esc(f.path)));
+  if (f.added != null || f.removed != null) r.appendChild(el('span', 'ct', '+' + (f.added || 0) + ' −' + (f.removed || 0)));
+  const x = el('button', 'x', 'Discard'); x.type = 'button';
+  x.title = f.status === '?' ? 'Move this new file to the Recycle Bin' : 'Put this file back as the last commit had it';
+  x.onclick = async (e) => {
+    e.stopPropagation();
+    // Two clicks: the first arms it, so one stray click cannot throw away work.
+    if (!x.classList.contains('arm')) { x.classList.add('arm'); x.textContent = 'Sure?'; setTimeout(() => { x.classList.remove('arm'); x.textContent = 'Discard'; }, 3000); return; }
+    const res = await rvApi().discard(RV.sid, f.path, f.status);
+    if (!res || !res.ok) { rvSay((res && res.error) || 'Could not discard it.', true); return; }
+    rvSay(f.status === '?' ? f.path + ' went to the Recycle Bin.' : f.path + ' is back as it was.');
+    rvLoad();
+  };
+  r.appendChild(x);
+  r.onclick = () => rvShowFile(f);
+  return r;
+}
+async function rvShowFile(f){
+  RV.file = f;
+  document.querySelectorAll('#fileList .rv-file').forEach((n) => n.classList.toggle('on', n.title === f.path));
+  const box = $('hunks');
+  const d = await rvApi().diff(RV.sid, f.path, f.status === '?');
+  RV.diff = d;
+  box.innerHTML = '';
+  if (!d || d.error) { box.appendChild(el('div', 'msg', esc((d && d.error) || 'No diff.'))); return; }
+  if (d.binary) { box.appendChild(el('div', 'msg', 'A binary file: nothing to show line by line.')); return; }
+  if (!d.hunks.length) { box.appendChild(el('div', 'msg', f.status === 'D' ? 'This file was deleted.' : 'Nothing changed inside this file (its mode or name only).')); return; }
+  const newFile = f.status === '?' || f.status === 'A';
+  d.hunks.forEach((h, i) => {
+    const card = el('div', 'hunk');
+    const head = document.createElement('header');
+    head.appendChild(el('span', 'hh', esc(h.header)));
+    if (!newFile) {
+      const back = el('button', '', 'Put back'); back.type = 'button'; back.title = 'Undo just this change in the file';
+      back.onclick = async () => {
+        const r = await rvApi().revertHunk(RV.sid, f.path, i, h.header);
+        if (!r || !r.ok) rvSay((r && r.error) || 'Could not put it back.', true);
+        await rvLoad();
+      };
+      head.appendChild(back);
+    }
+    card.appendChild(head);
+    const lines = el('div', 'rv-lines');
+    h.lines.forEach((ln) => {
+      if (ln.t === '\\') return;
+      const row = el('div', 'rv-ln ' + (ln.t === '+' ? 'add' : ln.t === '-' ? 'del' : 'ctx'));
+      const g = el('span', 'g', '<i>' + (ln.oldNo != null ? ln.oldNo : '') + '</i><i>' + (ln.newNo != null ? ln.newNo : '') + '</i>');
+      const c = el('span', 'c'); c.textContent = ln.text;
+      row.appendChild(g); row.appendChild(c);
+      row.title = 'Click to comment on this line';
+      row.onclick = () => rvCommentBox(row, f.path, ln);
+      lines.appendChild(row);
+      RV.comments.filter((m) => m.file === f.path && m.key === rvKey(ln)).forEach((m) => lines.appendChild(rvCommentView(m)));
+    });
+    card.appendChild(lines);
+    box.appendChild(card);
+  });
+}
+const rvKey = (ln) => (ln.newNo != null ? 'n' + ln.newNo : 'o' + ln.oldNo);
+function rvCommentBox(row, file, ln){
+  if (row.nextSibling && row.nextSibling.classList && row.nextSibling.classList.contains('rv-new')) { row.nextSibling.querySelector('textarea').focus(); return; }
+  const cbox = el('div', 'rv-cmt rv-new');
+  const ta = document.createElement('textarea'); ta.placeholder = 'What should change here? (Ctrl+Enter adds it)';
+  const add = el('button', '', 'Add'); add.type = 'button';
+  const no = el('button', '', 'Cancel'); no.type = 'button';
+  const save = () => {
+    const text = ta.value.trim(); if (!text) { cbox.remove(); return; }
+    const m = { file, key: rvKey(ln), line: ln.newNo != null ? ln.newNo : ln.oldNo, side: ln.newNo != null ? 'new' : 'old', code: ln.text, text };
+    RV.comments.push(m);
+    cbox.parentNode.replaceChild(rvCommentView(m), cbox);
+    rvPaintShip();
+  };
+  add.onclick = save; no.onclick = () => cbox.remove();
+  ta.onkeydown = (e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); save(); } if (e.key === 'Escape') cbox.remove(); };
+  cbox.appendChild(ta); cbox.appendChild(add); cbox.appendChild(no);
+  row.after(cbox);
+  ta.focus();
+}
+function rvCommentView(m){
+  const box = el('div', 'rv-cmt');
+  box.appendChild(el('span', 'say', '<b>Comment</b> ' + esc(m.text)));
+  const x = el('button', '', 'Remove'); x.type = 'button';
+  x.onclick = () => { RV.comments = RV.comments.filter((c) => c !== m); box.remove(); rvPaintShip(); };
+  box.appendChild(x);
+  return box;
+}
+function rvPaintShip(){
+  const n = RV.comments.length, files = RV.st && RV.st.files ? RV.st.files.length : 0;
+  $('rvCount').textContent = (files ? RV.pick.size + ' of ' + files + ' file' + (files === 1 ? '' : 's') + ' picked for the commit' : '') + (n ? ' · ' + n + ' comment' + (n === 1 ? '' : 's') : '');
+  $('rvSendComments').disabled = !n;
+  $('rvSendComments').textContent = n ? 'Send ' + n + ' comment' + (n === 1 ? '' : 's') + ' to the agent' : 'Send comments to the agent';
+  const repo = !!(RV.st && RV.st.repo);
+  $('rvCommit').disabled = !repo || !RV.pick.size;
+  $('rvWrite').disabled = !repo || !RV.pick.size;
+  $('rvPush').disabled = !repo || !RV.st.remote;
+  $('rvPr').disabled = !repo || RV.st.host !== 'github';
+  $('rvPr').title = repo && RV.st.host !== 'github' ? 'Pull requests here use GitHub (gh); this remote is ' + (RV.st.host || 'not set') + '.' : 'Open a pull request for this branch on GitHub';
+}
+/** Hand words to the session's agent, as if typed: queued if it is busy. */
+async function rvToAgent(text){
+  go('work');
+  const v = viewOf(RV.sid);
+  if (actView() !== v) await openSession(RV.sid);
+  const pr = $('prompt'); pr.value = text; pr.dispatchEvent(new Event('input', { bubbles: true }));
+  await send();
+}
+$('rvSendComments').onclick = async () => {
+  if (!RV.comments.length) return;
+  const by = new Map();
+  for (const c of RV.comments) { if (!by.has(c.file)) by.set(c.file, []); by.get(c.file).push(c); }
+  let msg = 'Review comments on your changes. Make each of these, then say briefly what you changed:\n';
+  for (const [file, cs] of by) {
+    msg += '\n' + file + '\n';
+    for (const c of cs.sort((a, b) => a.line - b.line)) msg += '- line ' + c.line + (c.side === 'old' ? ' (removed line)' : '') + ': ' + c.text + '\n  > ' + c.code.trim().slice(0, 160) + '\n';
+  }
+  RV.comments = [];
+  await rvToAgent(msg.trim());
+};
+$('rvWrite').onclick = async () => {
+  const b = $('rvWrite'); b.disabled = true; const was = b.textContent; b.textContent = 'Writing…';
+  try {
+    const r = await rvApi().message(RV.sid, [...RV.pick]);
+    if (r && r.ok) $('rvMsg').value = r.message; else rvSay((r && r.error) || 'Could not write it.', true);
+  } finally { b.textContent = was; rvPaintShip(); }
+};
+$('rvCommit').onclick = async () => {
+  const msg = $('rvMsg').value.trim();
+  if (!msg) { rvSay('Write a commit message first (or press Write message).', true); $('rvMsg').focus(); return; }
+  const r = await rvApi().commit(RV.sid, [...RV.pick], msg);
+  if (!r || !r.ok) { rvSay((r && r.error) || 'The commit failed.', true); return; }
+  RV.lastMsg = msg; $('rvMsg').value = ''; RV.pick = new Set();
+  rvSay('Committed ' + r.hash + '.');
+  rvLoad();
+};
+$('rvPush').onclick = async () => {
+  const b = $('rvPush'); b.disabled = true; b.textContent = 'Pushing…';
+  const r = await rvApi().push(RV.sid);
+  b.textContent = 'Push';
+  if (!r || !r.ok) rvSay('Push failed: ' + ((r && r.error) || ''), true); else rvSay('Pushed.');
+  rvLoad();
+};
+$('rvPr').onclick = async () => {
+  const src = (RV.lastMsg || $('rvMsg').value || '').trim();
+  const title = src.split('\n')[0] || (RV.st && RV.st.branch) || 'Changes';
+  const body = src.split('\n').slice(1).join('\n').trim() + '\n\nOpened from VoxAI Coder.';
+  const b = $('rvPr'); b.disabled = true; b.textContent = 'Opening…';
+  const r = await rvApi().pr(RV.sid, title, body);
+  b.textContent = 'Create PR';
+  if (!r || !r.ok) { rvSay((r && r.error) || 'Could not open the pull request.', true); rvPaintShip(); return; }
+  rvSay((r.existed ? 'This branch already has a pull request: ' : 'Pull request opened: ') + r.url);
+  rvChecks();
+};
+/** The branch's pull request and its checks; looked at again every 30 s while any are running. */
+async function rvChecks(){
+  clearTimeout(RV.timer);
+  const box = $('rvChecks');
+  if (!RV.st || RV.st.host !== 'github') { box.hidden = true; return; }
+  const r = await rvApi().checks(RV.sid);
+  if (!r || !r.ok || !r.pr) { box.hidden = true; return; }
+  box.hidden = false; box.innerHTML = '';
+  const top = el('div', 'rv-check');
+  const a = el('a', '', esc('Pull request #' + r.pr.number + ': ' + r.pr.title)); a.onclick = () => window.voxai.openExternal(r.pr.url);
+  top.appendChild(el('span', 'b', esc(String(r.pr.state || '').toLowerCase()))); top.appendChild(a);
+  box.appendChild(top);
+  let running = false;
+  for (const c of r.checks) {
+    const bucket = String(c.bucket || c.state || '').toLowerCase();
+    if (bucket === 'pending') running = true;
+    const row = el('div', 'rv-check');
+    row.appendChild(el('span', 'b ' + (bucket === 'pass' ? 'pass' : bucket === 'fail' ? 'fail' : 'pending'), esc(bucket || '?')));
+    const nm = el('a', '', esc((c.workflow ? c.workflow + ' / ' : '') + c.name)); nm.onclick = () => c.link && window.voxai.openExternal(c.link);
+    row.appendChild(nm);
+    if (bucket === 'fail') {
+      const fix = el('button', '', 'Fix with the agent'); fix.type = 'button';
+      fix.onclick = async () => {
+        fix.disabled = true; fix.textContent = 'Reading the log…';
+        const log = await rvApi().failedLog(RV.sid, c.link);
+        const tail = log && log.ok ? '\n\nThe failing part of its log:\n```\n' + log.log + '\n```' : '\n\n(Its log could not be read here: ' + ((log && log.error) || '') + ' Run the check\'s command locally to see the failure.)';
+        await rvToAgent('The CI check "' + c.name + '" failed on pull request #' + r.pr.number + '. Find the cause, fix it, and run the same check locally if you can.' + tail);
+      };
+      row.appendChild(fix);
+    }
+    box.appendChild(row);
+  }
+  if (!r.checks.length) box.appendChild(el('div', 'rv-check', '<span class="b pending">none</span><span>No checks reported yet.</span>'));
+  if (running && $('screen-diff').style.display !== 'none') RV.timer = setTimeout(rvChecks, 30000);
+}
+$('btnReview').onclick = openReview;
+$('rvBack').onclick = () => { clearTimeout(RV.timer); go('work'); };
+$('rvRefresh').onclick = () => rvLoad();
+
+// ---- @-mentions: a file or folder named with @ goes with the message (backend/mentions.js) ----
+let AT_SEL = 0, AT_SEQ = 0, AT_HITS = [], AT_FILES = { dir: '', at: 0, list: [] };
+async function atFiles(){
+  const dir = viewDir(actView());
+  if (!dir || !window.voxai.filesList) return [];
+  if (AT_FILES.dir === dir && Date.now() - AT_FILES.at < 20000) return AT_FILES.list;
+  let list = [];
+  try { const r = await window.voxai.filesList(dir); list = (r && r.files) || []; } catch {}
+  AT_FILES = { dir, at: Date.now(), list };
+  return list;
+}
+/** The @word being typed at the caret: { q, start } or null. An @ inside a word (an email) is not one. */
+function atToken(){
+  const pr = $('prompt');
+  const upto = pr.value.slice(0, pr.selectionStart || 0);
+  const m = /(^|\s)@([^\s"]*)$/.exec(upto);
+  return m ? { q: m[2], start: upto.length - m[2].length - 1 } : null;
+}
+/** Lower is better: the name starts with it, the name has it, the path has it, its letters in order. */
+function atRank(p, q){
+  if (!q) return p.split('/').length;
+  const lp = p.toLowerCase(), lq = q.toLowerCase().replace(/\\/g, '/');
+  const base = lp.replace(/\/$/, '').split('/').pop();
+  if (base.startsWith(lq)) return 0;
+  if (base.includes(lq)) return 1;
+  if (lp.includes(lq)) return 2;
+  let i = 0; for (const ch of lp) { if (ch === lq[i]) i++; if (i === lq.length) return 3; }
+  return -1;
+}
+async function paintAtMenu(){
+  const box = $('atMenu'); if (!box) return;
+  const tok = atToken();
+  if (!tok || /^\//.test($('prompt').value)) { box.hidden = true; AT_HITS = []; return; }
+  const seq = ++AT_SEQ;
+  const list = await atFiles();
+  if (seq !== AT_SEQ) return;   // typed on meanwhile
+  AT_HITS = list.map((p) => [p, atRank(p, tok.q)]).filter((x) => x[1] >= 0)
+    .sort((a, b) => (a[1] - b[1]) || (a[0].length - b[0].length)).slice(0, 12).map((x) => x[0]);
+  box.hidden = !AT_HITS.length;
+  if (!AT_HITS.length) return;
+  AT_SEL = Math.min(AT_SEL, AT_HITS.length - 1);
+  box.innerHTML = '';
+  AT_HITS.forEach((p, i) => {
+    const r = el('div', 'slash-item' + (i === AT_SEL ? ' on' : ''));
+    r.setAttribute('role', 'option');
+    const dir = p.endsWith('/');
+    const name = p.replace(/\/$/, '').split('/').pop();
+    r.innerHTML = '<b>@' + esc(name) + (dir ? '/' : '') + '</b><span>' + esc(dir ? 'folder · ' + p : p) + '</span>';
+    r.onmousedown = (e) => { e.preventDefault(); pickAt(p); };
+    box.appendChild(r);
+  });
+}
+function pickAt(p){
+  const pr = $('prompt'), tok = atToken();
+  if (!tok) return;
+  const token = '@' + (/\s/.test(p) ? '"' + p + '"' : p) + ' ';
+  const caret = pr.selectionStart || 0;
+  pr.value = pr.value.slice(0, tok.start) + token + pr.value.slice(caret);
+  const at = tok.start + token.length;
+  $('atMenu').hidden = true; AT_HITS = [];
+  pr.focus(); pr.setSelectionRange(at, at);
+  pr.dispatchEvent(new Event('input', { bubbles: true }));
+}
+$('prompt').addEventListener('input', () => { AT_SEL = 0; paintAtMenu(); });
+$('prompt').addEventListener('click', () => paintAtMenu());
+$('prompt').addEventListener('keydown', (e) => {
+  const box = $('atMenu');
+  if (!box || box.hidden || !AT_HITS.length) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    e.preventDefault(); e.stopImmediatePropagation();
+    AT_SEL = (AT_SEL + (e.key === 'ArrowDown' ? 1 : AT_HITS.length - 1)) % AT_HITS.length;
+    paintAtMenu();
+  } else if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+    e.preventDefault(); e.stopImmediatePropagation();
+    pickAt(AT_HITS[AT_SEL]);
+  } else if (e.key === 'Escape') {
+    e.preventDefault(); e.stopImmediatePropagation();
+    box.hidden = true; AT_HITS = [];
   }
 }, true);
 

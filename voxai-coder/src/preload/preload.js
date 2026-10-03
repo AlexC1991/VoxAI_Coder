@@ -111,6 +111,21 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
   agentPermission: (permId, allowed, always) => ipcRenderer.invoke('agent:permission', { permId, allowed, always: !!always }),
   agentAnswer: (inputId, answer, cancelled) => ipcRenderer.invoke('agent:user-input-answer', { inputId, answer, cancelled: !!cancelled }),
   agentLive: (sessionId) => ipcRenderer.invoke('agent:live', sessionId),
+  // Review and ship: the session folder's changes, hunk by hunk; commit, push, pull request, checks.
+  review: {
+    status: (sessionId) => ipcRenderer.invoke('review:status', { sessionId }),
+    diff: (sessionId, file, untracked) => ipcRenderer.invoke('review:diff', { sessionId, file, untracked }),
+    revertHunk: (sessionId, file, index, header) => ipcRenderer.invoke('review:revertHunk', { sessionId, file, index, header }),
+    discard: (sessionId, file, kind) => ipcRenderer.invoke('review:discard', { sessionId, file, kind }),
+    commit: (sessionId, files, message) => ipcRenderer.invoke('review:commit', { sessionId, files, message }),
+    push: (sessionId) => ipcRenderer.invoke('review:push', { sessionId }),
+    pr: (sessionId, title, body) => ipcRenderer.invoke('review:pr', { sessionId, title, body }),
+    checks: (sessionId) => ipcRenderer.invoke('review:checks', { sessionId }),
+    failedLog: (sessionId, link) => ipcRenderer.invoke('review:failedLog', { sessionId, link }),
+    message: (sessionId, files) => ipcRenderer.invoke('review:message', { sessionId, files }),
+  },
+  // The project's files and folders, for the @ picker in the message box.
+  filesList: (workdir) => ipcRenderer.invoke('files:list', workdir),
   // A message sent while a run is going: the live run reads it at its next turn. Returns
   // { ok, live }; live:false means nothing is running, so queue it instead.
   agentSteer: (sessionId, text) => ipcRenderer.invoke('agent:steer', { sessionId, text }),
@@ -146,6 +161,43 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
   openrouterUsage: () => ipcRenderer.invoke('openrouter:usage'),
   openrouterKeys: () => ipcRenderer.invoke('openrouter:keys'),   // each key on the account and its spend (no secrets)
   // Models on this PC (main/local-engine.js).
+  // Terminal panel: a real shell. `send` is keystrokes into the pty and `onData` is its
+  // output -- neither is routed through the model, so a password typed at a sudo prompt
+  // never leaves this channel.
+  terminal: {
+    open: (arg) => ipcRenderer.invoke('term:open', arg || {}),
+    write: (id, data) => ipcRenderer.send('term:write', { id, data }),
+    resize: (id, cols, rows) => ipcRenderer.send('term:resize', { id, cols, rows }),
+    close: (id) => ipcRenderer.send('term:close', { id }),
+    list: () => ipcRenderer.invoke('term:list'),
+    // A command the agent is running in this panel (see main/interactive.js).
+    ready: (m) => ipcRenderer.send('term:ready', m || {}),
+    onRunPrepare: (cb) => {
+      const fn = (_e, m) => cb(m);
+      ipcRenderer.on('term:prepare', fn);
+      return () => ipcRenderer.removeListener('term:prepare', fn);
+    },
+    onRunBind: (cb) => {
+      const fn = (_e, m) => cb(m);
+      ipcRenderer.on('term:bind', fn);
+      return () => ipcRenderer.removeListener('term:bind', fn);
+    },
+    onRunDone: (cb) => {
+      const fn = (_e, m) => cb(m);
+      ipcRenderer.on('term:done', fn);
+      return () => ipcRenderer.removeListener('term:done', fn);
+    },
+    onData: (cb) => {
+      const fn = (_e, m) => cb(m);
+      ipcRenderer.on('term:data', fn);
+      return () => ipcRenderer.removeListener('term:data', fn);
+    },
+    onExit: (cb) => {
+      const fn = (_e, m) => cb(m);
+      ipcRenderer.on('term:exit', fn);
+      return () => ipcRenderer.removeListener('term:exit', fn);
+    },
+  },
   local: {
     state: () => ipcRenderer.invoke('local:state'),
     install: () => ipcRenderer.invoke('local:install'),

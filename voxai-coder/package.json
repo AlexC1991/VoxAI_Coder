@@ -41,7 +41,8 @@
     "asarUnpack": [
       "node_modules/koffi/**",
       "node_modules/@koromix/**",
-      "resources/uia/**"
+      "resources/uia/**",
+      "node_modules/node-pty/**"
     ],
     "win": {
       "icon": "resources/icon.ico",
@@ -71,10 +72,14 @@
         "AppImage"
       ],
       "artifactName": "VoxAI-Coder-${version}.${ext}"
-    }
+    },
+    "npmRebuild": false
   },
   "dependencies": {
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/xterm": "^6.0.0",
     "electron-updater": "^6.8.9",
-    "koffi": "^3.3.1"
+    "koffi": "^3.3.1",
+    "node-pty": "^1.1.0"
   }
 }
