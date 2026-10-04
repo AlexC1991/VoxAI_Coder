@@ -123,6 +123,24 @@ function noteFree(model) {
  */
 const localEndpoint = { url: () => null };
 const isLocal = (model) => /^local\//.test(String(model || ''));
+
+/**
+ * The cheaper, slower tier. "(batch)" models are half price but OpenRouter serves them only
+ * through its Batch API: answers come back within 24 hours, which no agent turn can wait for,
+ * and a chat request for one fails because there is no endpoint to route it to. OpenAI and
+ * Google sell the same discount live as a "flex" tier; ":floor" lets a flex endpoint serve
+ * when it is the cheapest and falls back to the normal tier (at the normal price) when flex is
+ * busy, so a run never fails for it. main sets flexRoute.use to whether the user switched it
+ * on for this model.
+ */
+const flexRoute = { use: () => false };
+function wireModel(model) {
+  let m = String(model || '');
+  if (isLocal(m)) return m;
+  m = m.replace(/:batch$/, '');   // an id saved before batch models left the picker
+  try { if (flexRoute.use(m)) m += ':floor'; } catch { /* plain model */ }
+  return m;
+}
 async function postLocal(body, signal) {
   const base = typeof localEndpoint.url === 'function' ? localEndpoint.url() : null;
   if (!base) throw Object.assign(new Error('The local model is not running. Start it in Settings → Local models, or pick another model.'), { status: 0 });
@@ -286,7 +304,7 @@ async function chatCompletions(opts) {
   if (!model) throw new Error('voxai: model id missing');
 
   const body = {
-    model,
+    model: wireModel(model),
     // Prompt caching is PREFIX-based: the provider matches from byte 0 and stops at
     // the first difference. applyCacheBreakpoints marks the stable head so the
     // system prompt + tool schemas (~4.5k tokens here) are read from cache instead
@@ -615,7 +633,7 @@ async function chatOnce({ apiKey, host = DEFAULT_HOST, model, messages, maxToken
       'HTTP-Referer': 'https://voxai.coder',
       'X-Title': 'VoxAI Coder',
     },
-    body: JSON.stringify({ model, messages, max_tokens: maxTokens, stream: false, ...(extra || {}) }),
+    body: JSON.stringify({ model: wireModel(model), messages, max_tokens: maxTokens, stream: false, ...(extra || {}) }),
     signal,
   });
   const text = await res.text();
@@ -624,4 +642,4 @@ async function chatOnce({ apiKey, host = DEFAULT_HOST, model, messages, maxToken
   return JSON.parse(text);
 }
 
-module.exports = { chatCompletions, chatOnce, responseError, freeUse, localEndpoint, isLocal, recoverToolCalls, watchLocalSpeed, DEFAULT_HOST, applyCacheBreakpoints, cacheMode, reasoningParam, normalizeReasoning, nearestEffort, EFFORTS };
+module.exports = { chatCompletions, chatOnce, responseError, freeUse, localEndpoint, flexRoute, wireModel, isLocal, recoverToolCalls, watchLocalSpeed, DEFAULT_HOST, applyCacheBreakpoints, cacheMode, reasoningParam, normalizeReasoning, nearestEffort, EFFORTS };

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-73E6EIBDgF3KDtO5lRjRuJBx/Ap6jAy+EjoJhnPCko4='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-f8iOWwgD61vRzHdMjzliuvBH6DC5zw00RxHQcdmuTmE='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -4234,7 +4234,7 @@ function renderAccessMenu(){
 }
 
 function refreshChips(){
-  $('chipModelVal').textContent = modelLabel(activeModel());
+  $('chipModelVal').textContent = modelLabel(activeModel()) + (flexOn(activeModel()) ? ' · flex' : '');
   $('chipModel').title = activeModel() || '';
   try { paintTeamChip(); paintShareBadge(); } catch {}
   paintReasonChip();
@@ -4262,6 +4262,7 @@ let MODEL_SEARCH = '';
 let SESS_PRICE = null; // {promptPer1M?!: nil -> use cents} for the ACTIVE model
 function modelPriceFor(id){
   const m = (ALL_MODELS || []).find(function(x){ return x.id === id; }) || {};
+  const fx = flexOn(id); if (fx) return { promptCents: fx.promptCents, completionCents: fx.completionCents };
   return { promptCents: m.promptCents != null ? m.promptCents : null, completionCents: m.completionCents != null ? m.completionCents : null };
 }
 
@@ -4285,9 +4286,67 @@ async function loadModels(){
       SESS_PRICE = modelPriceFor(S.openrouterModel);
       refreshChips();
       if ($('chipModel').classList.contains('open')) renderModelMenu();
+      fixBatchModels();
       const av = actView(); if (av) updateSessStats(av);
     } else if (facts) { facts.textContent = 'Could not load models: ' + ((r && r.error) || 'unknown error'); }
   } catch (e) { if (facts) facts.textContent = 'Could not load models: ' + ((e && e.message) || e); }
+}
+
+// ---- the cheaper, slower tier ----
+// "(batch)" models are half price, but OpenRouter runs them only through its Batch API, with
+// answers some time in the next 24 hours: no agent can wait that long for every step, and a
+// chat request for one fails. They are not offered. OpenAI and Google sell the same price live
+// as a "flex" tier (slower, falls back to the normal tier when busy); a model that has one gets
+// a switch at the top of the picker. main records it and sends the model with ":floor".
+const FLEX = {};   // model id -> { flex, promptCents, completionCents } from its endpoint list
+function flexOn(id){ const f = S && S.flexModels; return (id && f && f[id]) || null; }
+async function flexInfo(id){
+  if (!id || !window.voxai.modelFlex) return null;
+  if (FLEX[id]) return FLEX[id];
+  try { const r = await window.voxai.modelFlex(id); if (r && r.ok) FLEX[id] = r; return FLEX[id] || null; } catch { return null; }
+}
+/** The switch, for the model the picker is choosing for. Shown only once a flex tier is known. */
+function flexRow(box, id){
+  const m = modelEntry(id);
+  if (!m || !m.batch || /^local\//.test(id)) return;
+  const info = FLEX[id];
+  if (!info) { flexInfo(id).then((r) => { if (r && r.flex && $('menuModel') && $('menuModel').closest('.chip.open')) renderModelMenu(); }); return; }
+  if (!info.flex) return;
+  const on = !!flexOn(id);
+  box.appendChild(el('div', 'mp-label', '<span>' + esc(modelLabel(id)) + '</span><span>normally ' + esc(modelPrice(Object.assign({}, m, { id: '' }))) + '</span>'));
+  const r = menuRow('Cheaper, slower', on, per1M(info.promptCents) + ' · ' + per1M(info.completionCents));
+  const why = 'Sends ' + modelLabel(id) + ' on the flex tier: the "(batch)" price, live. Replies take longer, and when flex is busy it is answered at the normal price instead.';
+  r.title = why;
+  r.onmouseenter = () => { box.querySelectorAll('.hot').forEach((x) => x.classList.remove('hot')); r.classList.add('hot'); $('pkId').textContent = why; $('pkId').title = why; };
+  r.onclick = async (e) => {
+    e.stopPropagation();
+    S = await window.voxai.setModelFlex(id, !on, info);
+    SESS_PRICE = modelPriceFor(activeModel());
+    refreshChips(); renderModelMenu();
+    const av = actView(); if (av) updateSessStats(av);
+  };
+  box.appendChild(r);
+}
+/**
+ * A model saved as its "(batch)" entry, before those left the picker: the same model, on flex
+ * when it has that tier. Said once, so the change of name is not a mystery.
+ */
+async function leaveBatch(id, apply){
+  if (!/:batch$/.test(String(id || ''))) return id;
+  const base = id.replace(/:batch$/, '');
+  const info = await flexInfo(base);
+  if (info && info.flex && !flexOn(base)) { try { S = await window.voxai.setModelFlex(base, true, info); } catch {} }
+  await apply(base);
+  toast(modelLabel(base) + ' (batch) can take up to 24 hours to answer, so this session now uses ' + modelLabel(base)
+    + (info && info.flex ? ' on the cheaper, slower flex tier (the same price, live).' : ' at its normal price: it has no cheaper live tier.'));
+  return base;
+}
+
+async function fixBatchModels(){
+  const v = actView();
+  if (v && /:batch$/.test(v.model || '')) await leaveBatch(v.model, (b) => setModel(b));
+  else if (/:batch$/.test(S.openrouterModel || '')) await leaveBatch(S.openrouterModel, async (b) => { S = await window.voxai.saveSettings({ openrouterModel: b }); refreshChips(); });
+  if (v && /:batch$/.test(v.coderModel || '')) await leaveBatch(v.coderModel, (b) => setCoder(b));
 }
 
 // ---- the model picker: plain names from OpenRouter's own catalogue ----
@@ -4360,6 +4419,7 @@ function per1M(cents){
   return '$' + (Math.round(d * 100) / 100);
 }
 function modelPrice(m){
+  const fx = m && flexOn(m.id); if (fx) return per1M(fx.promptCents) + ' · ' + per1M(fx.completionCents);
   if (!m || (m.promptCents == null && m.completionCents == null)) return '';
   if (!Number(m.promptCents) && !Number(m.completionCents)) return 'free';
   return per1M(m.promptCents) + ' \u00b7 ' + per1M(m.completionCents);
@@ -4437,6 +4497,7 @@ function renderModelMenu(){
     if (sh) { const b = el('span', 'shr', 'shares data'); b.title = shareSentence(m.id, sh); r.querySelector('.nm').after(b); }
     // A model on this PC: how fast it writes here, as measured when it was first loaded.
     if (m.local && m.tps > 0) { const b = el('span', 'shr', esc(m.tps + ' tok/s')); b.title = 'Writes about ' + m.tps + ' tokens a second on this PC (measured when it was first loaded)'; r.querySelector('.nm').after(b); }
+    if (flexOn(m.id)) { const b = el('span', 'shr', 'flex'); b.title = 'Cheaper, slower: sent on the flex tier'; r.querySelector('.nm').after(b); }
     if (m.tools === false) r.style.opacity = '.6';
     const no = refusedWhy(m.id);
     if (no) {
@@ -4478,6 +4539,7 @@ function renderModelMenu(){
       else { const r = menuRow(modelLabel(id), id === cur, ''); r.dataset.id = id; r.onmouseenter = () => pkFoot(id); r.onclick = async (e) => { e.stopPropagation(); await pick(id); }; box.appendChild(r); }
     });
   }
+  if (!q && PK_VIEW === 'home') flexRow(box, cur);
   if (!q && PK_VIEW === 'home') {
     box.appendChild(el('div', 'mp-sep'));
     const counts = new Map();
@@ -4629,6 +4691,7 @@ async function openSession(id){
     v.workdir = full.workdir;   // the context bar needs the real path, not just the label
     v.model = full.model || '';  // what a run in THIS session will actually use
     v.coderModel = full.coderModel || '';   // Team: who writes the code under it ('' = off)
+    if (/:batch$/.test(v.model) || /:batch$/.test(v.coderModel)) setTimeout(fixBatchModels, 0);
     // Fix 1: restore the persisted usage ledger so cost/cache history survives restarts.
     v.cost = 0; v.tokens = 0; v.rate = 0; v.inTokens = 0; v.outTokens = 0; v.cacheReadTokens = 0; v.cacheWriteTokens = 0;
     if (full.stats) {

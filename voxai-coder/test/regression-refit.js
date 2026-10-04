@@ -2844,6 +2844,33 @@ async function drain(gen) {
       && re.test('http://a') && re.test('about:blank') && re.test('localhost:3000') && CU.includes(String(re)), 'regex');
   }
 
+  // ------------------------------------------------------------------ [FX]
+  console.log('\n[FX] "(batch)" models are not offered; the flex tier gives their price live');
+  {
+    const OR = require(path.join(ROOT, 'src/backend/providers/openrouter.js'));
+    const was = OR.flexRoute.use;
+    OR.flexRoute.use = (m) => m === 'openai/gpt-6-sol';
+    check('a model switched to flex goes out as ":floor"; others, local ones and a saved ":batch" id go out as the plain model',
+      OR.wireModel('openai/gpt-6-sol') === 'openai/gpt-6-sol:floor' && OR.wireModel('openai/gpt-6-sol:batch') === 'openai/gpt-6-sol:floor'
+      && OR.wireModel('anthropic/claude-sonnet-5.5:batch') === 'anthropic/claude-sonnet-5.5' && OR.wireModel('deepseek/deepseek-v4.1-flash') === 'deepseek/deepseek-v4.1-flash'
+      && OR.wireModel('local/qwen.gguf') === 'local/qwen.gguf', [OR.wireModel('openai/gpt-6-sol'), OR.wireModel('anthropic/claude-sonnet-5.5:batch')]);
+    OR.flexRoute.use = () => { throw new Error('no settings'); };
+    check('a failing flex lookup sends the plain model', OR.wireModel('openai/gpt-6-sol') === 'openai/gpt-6-sol', OR.wireModel('openai/gpt-6-sol'));
+    OR.flexRoute.use = was;
+    const ORs = read('src/backend/providers/openrouter.js');
+    check('both the streamed and the one-shot request use wireModel', ORs.includes('    model: wireModel(model),\n') && ORs.includes('body: JSON.stringify({ model: wireModel(model), messages, max_tokens: maxTokens'), 'wire');
+    const MF = read('src/main/main.js');
+    check('the catalogue hides "(batch)" entries and marks the model they belong to; flex is on only where it was switched on',
+      MF.includes("if (/:batch$/.test(m.id)) m.coding = false;") && MF.includes("if (batched.has(m.id)) m.batch = true;")
+      && MF.includes("flexRoute.use = (model) => { const f = getSettings(true).flexModels; return !!(f && f[model]); };"), 'catalogue');
+    check('a flex tier is read from the endpoint list ("<provider>/flex" taking tools), and switching on needs one', MF.includes("/\\/flex$/.test(String(e.tag || '')) && e.pricing && (e.supported_parameters || []).includes('tools')")
+      && MF.includes("if (on && price && price.flex) f[base] ="), 'endpoints');
+    const HF = read('src/renderer/index.html');
+    check('the picker has the switch, prices and the chip follow it, and a saved "(batch)" model moves to its live model', HF.includes("if (!q && PK_VIEW === 'home') flexRow(box, cur);")
+      && HF.includes("const fx = flexOn(id); if (fx) return { promptCents: fx.promptCents, completionCents: fx.completionCents };")
+      && HF.includes("(flexOn(activeModel()) ? ' · flex' : '')") && HF.includes('      fixBatchModels();') && read('src/preload/preload.js').includes("modelFlex: (id) => ipcRenderer.invoke('models:flex', id),"), 'picker');
+  }
+
   try { fs.rmSync(WD, { recursive: true, force: true }); } catch {}
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

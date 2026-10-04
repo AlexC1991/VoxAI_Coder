@@ -148,6 +148,9 @@ function getSettings(redacted = true) {
       : (typeof raw.localModelsDir === 'string' && raw.localModelsDir.trim() ? [raw.localModelsDir] : []),
     // Claude keeps the conversation cached for an hour instead of five minutes (writes cost more).
     claudeCacheHour: raw.claudeCacheHour === true,
+    // "Cheaper, slower": models sent on OpenRouter's flex tier (openrouter.js flexRoute), with the
+    // flex price seen when it was switched on. id -> { promptCents, completionCents, at }.
+    flexModels: raw.flexModels && typeof raw.flexModels === 'object' && !Array.isArray(raw.flexModels) ? raw.flexModels : {},
     splitLayout: raw.splitLayout && typeof raw.splitLayout === 'object' ? raw.splitLayout : null,
     trayHintShown: raw.trayHintShown === true,
     // Per-project: has the user said "always show previews here"? Claude Code saves
@@ -514,6 +517,9 @@ const localEngine = localEngineMod.createLocalEngine({
   onState: (st) => { try { const c = allRenderers(); c && c.send('local:state', st); } catch {} },
 });
 require('../backend/providers/openrouter').localEndpoint.url = () => localEngine.url();
+// Flex only where it was switched on, and only once a flex endpoint was seen for that model:
+// ":floor" on a model without one just sorts its providers by price, which is not what was asked.
+require('../backend/providers/openrouter').flexRoute.use = (model) => { const f = getSettings(true).flexModels; return !!(f && f[model]); };
 // What "slow" is measured against, and where a slow request is said: a toast in every window
 // (a Team coder's own warnings are not shown in the chat).
 require('../backend/providers/openrouter').localEndpoint.expected = () => { const s = localEngine.state(); return { tps: s.tps, pps: s.pps }; };
@@ -2102,6 +2108,38 @@ ipcMain.handle('openrouter:generations', async (_e, { limit = 40, cursor } = {})
 
 // OpenRouter model catalog (for the composer model picker)
   ipcMain.handle('openrouter:models', () => fetchModels());
+  // Does this model have a flex tier, and at what price? Read from its endpoint list (public,
+  // no credits). Six hours is plenty: tiers come and go over weeks, not minutes.
+  const flexSeen = new Map();
+  ipcMain.handle('models:flex', async (_e, id) => {
+    const base = String(id || '').replace(/:batch$/, '');
+    if (!/^[\w.-]+\/[\w.:-]+$/.test(base) || /^local\//.test(base)) return { ok: true, flex: false };
+    const hit = flexSeen.get(base);
+    if (hit && Date.now() - hit.at < 6 * 3600 * 1000) return hit.r;
+    try {
+      const host = (getSettings(true).openrouterHost || 'https://openrouter.ai').replace(/\/+$/, '');
+      const [a, b] = base.split('/');
+      const res = await fetch(host + '/api/v1/models/' + encodeURIComponent(a) + '/' + encodeURIComponent(b) + '/endpoints');
+      if (!res.ok) return { ok: false, error: 'HTTP ' + res.status };
+      const eps = ((await res.json()).data || {}).endpoints || [];
+      const cents = (v) => (v != null && v !== '' ? parseFloat(v) * 100 : null);
+      // Flex endpoints are tagged "<provider>/flex" (openai/flex, google-vertex/global/flex).
+      const flex = eps.filter((e) => /\/flex$/.test(String(e.tag || '')) && e.pricing && (e.supported_parameters || []).includes('tools'))
+        .map((e) => ({ promptCents: cents(e.pricing.prompt), completionCents: cents(e.pricing.completion) }))
+        .sort((x, y) => (x.promptCents + x.completionCents) - (y.promptCents + y.completionCents));
+      const r = flex.length ? { ok: true, flex: true, ...flex[0] } : { ok: true, flex: false };
+      flexSeen.set(base, { at: Date.now(), r });
+      return r;
+    } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+  });
+  // Switch the cheaper tier on or off for one model. On only after a flex endpoint was seen.
+  ipcMain.handle('models:setFlex', async (_e, { id, on, price }) => {
+    const base = String(id || '').replace(/:batch$/, '');
+    const f = { ...(getSettings(true).flexModels || {}) };
+    if (on && price && price.flex) f[base] = { promptCents: price.promptCents, completionCents: price.completionCents, at: new Date().toISOString() };
+    else delete f[base];
+    return saveSettings({ flexModels: f });
+  });
   async function fetchModels() {
     const s = getSettings(false);
     if (!s.openrouterKey) return { ok: false, error: 'no-key' };
@@ -2150,6 +2188,10 @@ ipcMain.handle('openrouter:generations', async (_e, { limit = 40, cursor } = {})
             && m.architecture.output_modalities.length === 1 && m.architecture.output_modalities[0] === 'text'),
         };
       });
+      // "(batch)" entries run only through OpenRouter's Batch API (answers within 24 hours), so
+      // they are never offered; the model they belong to says it has a cheaper tier to look for.
+      const batched = new Set(models.filter((m) => /:batch$/.test(m.id)).map((m) => m.id.replace(/:batch$/, '')));
+      for (const m of models) { if (batched.has(m.id)) m.batch = true; if (/:batch$/.test(m.id)) m.coding = false; }
       // Every model stays known for capability checks (an older session may name one),
       // but the picker is offered only the ones that can code.
       // The models on this PC join the list, free.
