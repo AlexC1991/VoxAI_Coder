@@ -1,9 +1,11 @@
 # Linux build — instructions for the Linux side of this machine
 
-Windows and Linux are on the same PC. Windows released **VoxAI Coder 0.2.82** on
-2026-10-04 (CodeRook `voxai-coder` **v102**, git commit `b642ad1`). That release has
+Windows and Linux are on the same PC. Windows released **VoxAI Coder 0.2.83** on
+2026-10-04 (CodeRook `voxai-coder` **v104**, git commit `17d2ce6`). That release has
 the Windows installer only. Linux's job is to add the AppImage, the Linux installer
-script and the signed Linux manifest **to the same 0.2.82 release**.
+script and the signed Linux manifest **to the same 0.2.83 release**.
+
+0.2.82 never got a Linux build; skip it, 0.2.83 includes everything in it.
 
 Do this for every Windows release: the version to build is whatever
 `voxai-coder/package.json` says.
@@ -35,7 +37,7 @@ Already have `~/voxai-build` from an earlier release:
 cd ~/voxai-build && cbx get
 ```
 
-Check it is the right version (should print 0.2.82 for this release):
+Check it is the right version (should print 0.2.83 for this release):
 
 ```bash
 grep '"version"' ~/voxai-build/voxai-coder/package.json
@@ -68,27 +70,28 @@ npm run dist:linux
 
 `npm test` must exit 0 (the tests are platform-aware). `dist:linux` makes, in `release/`:
 
-- `VoxAI-Coder-0.2.82.AppImage`
-- `VoxAI-Coder-0.2.82-Linux.sh` — the installer people download: it fetches that version's
+- `VoxAI-Coder-0.2.83.AppImage`
+- `VoxAI-Coder-0.2.83-Linux.sh` — the installer people download: it fetches that version's
   AppImage, checks its SHA-512, installs it under `~/.local` with a menu entry, and starts it.
 
 ## 4. Quick check (optional, ~2 minutes)
 
 ```bash
-./release/VoxAI-Coder-0.2.82.AppImage
+./release/VoxAI-Coder-0.2.83.AppImage
 ```
 
-It should open. New in 0.2.82 and worth a look on Linux:
+It should open. New since 0.2.80 and worth a look on Linux:
 
 - the **>_** terminal panel (uses your `$SHELL`; this is the node-pty that `npm ci` compiled);
 - the **±** Review changes screen on a git folder;
-- typing **@** in the message box lists the project's files.
+- typing **@** in the message box lists the project's files;
+- with a Gemini or GPT model chosen, the model picker shows a **Cheaper, slower** switch.
 
 "Models on this PC" are Windows-only for now and say so in Settings.
 
 Close it before releasing.
 
-## 5. Add the Linux files to the 0.2.82 release
+## 5. Add the Linux files to the 0.2.83 release
 
 Dry run first, then the real one:
 
@@ -97,13 +100,13 @@ npm run release -- --linux --dry-run
 npm run release -- --linux
 ```
 
-This attaches `VoxAI-Coder-0.2.82.AppImage`, `VoxAI-Coder-0.2.82-Linux.sh` and the signed
-`update-linux.json` to the existing **v0.2.82** release on `voxai-coder-releases`, then reads
+This attaches `VoxAI-Coder-0.2.83.AppImage`, `VoxAI-Coder-0.2.83-Linux.sh` and the signed
+`update-linux.json` to the existing **v0.2.83** release on `voxai-coder-releases`, then reads
 both update feeds back. It must end with both lines:
 
 ```
-latest.yml offers 0.2.82: signature, manifest and installer all check out.
-latest-linux.yml offers 0.2.82: signature, manifest and installer all check out.
+latest.yml offers 0.2.83: signature, manifest and installer all check out.
+latest-linux.yml offers 0.2.83: signature, manifest and installer all check out.
 ```
 
 It refuses (and changes nothing) if the Windows release is missing, the build did not
@@ -111,7 +114,7 @@ finish, the `.sh` was made for a different AppImage, or the key does not match.
 
 ## 6. Afterwards
 
-- Installed Linux copies on 0.2.80 will now update to 0.2.82 by themselves.
+- Installed Linux copies on 0.2.80 will now update to 0.2.83 by themselves.
 - Do **not** bump the version, and do **not** run `npm run release` without `--linux`
   (that would publish a new Windows-less release).
 - If you had to change code to make Linux work, commit it in `~/voxai-build`, save it with
