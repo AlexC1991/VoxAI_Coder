@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-P/sx0zdowf6AIAxQly7n0sQgdHQ6lqao0KrKFD0m3j0='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-oOFhkhGu0giRw2cniWne0vaAgQXaHkTEBxhlYYv7mTo='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -245,7 +245,7 @@ tests"). Scroll the row instead of breaking words:
    underneath, half-hidden. Found in a live test. */
 #usageModalBg{z-index:60}
 .local-models,.local-dirs{padding:2px 16px 10px}.local-dirs:empty{display:none}.lm-row{display:flex;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--edge)}.lm-row:first-child{border-top:0}.lm-name{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.lm-name b{font:500 12.5px "Sometype Mono",monospace;color:var(--ink);overflow-wrap:anywhere}.lm-sub{color:var(--faint);font-size:11.5px;font-family:"Sometype Mono",monospace;overflow-wrap:anywhere}.lm-on{color:var(--gold);font:12px Chivo,sans-serif;margin-left:8px}.lm-row .btn{font-size:12.5px;padding:4px 11px}.lm-x{flex:none;border:0;background:none;color:var(--dim);font:12.5px Chivo,sans-serif;cursor:pointer;padding:3px 6px;border-radius:6px}.lm-x:hover{color:var(--del);background:var(--sel)}.local-models .ke{padding:12px 0;font-size:13px;color:var(--dim)}.local-models .lm-name b{font:600 13.5px Chivo,sans-serif}
-.acct-keys{padding:4px 14px 12px;overflow-x:auto}.acct-keys table{width:100%;border-collapse:collapse;font-size:12px}.acct-keys th{color:var(--mut);font-weight:500;text-align:right;padding:4px 6px}.acct-keys th:first-child,.acct-keys td:first-child{text-align:left}.acct-keys td{padding:5px 6px;text-align:right;border-top:1px solid var(--edge);font-variant-numeric:tabular-nums}.acct-keys .kt{font-size:10px;color:var(--gold);margin-left:6px}.acct-keys .ks{color:var(--mut);font-family:"Sometype Mono",monospace;font-size:11px}.acct-keys .ke{color:var(--mut);padding:6px 0}
+.acct-keys{padding:6px 16px 14px;overflow-x:auto;border-top:1px solid var(--edge)}.acct-keys table{width:100%;border-collapse:collapse;font-size:12px}.acct-keys th{color:var(--mut);font-weight:500;text-align:right;padding:4px 6px}.acct-keys th:first-child,.acct-keys td:first-child{text-align:left}.acct-keys td{padding:5px 6px;text-align:right;border-top:1px solid var(--edge);font-variant-numeric:tabular-nums}.acct-keys .kt{font-size:10px;color:var(--gold);margin-left:6px}.acct-keys .ks{color:var(--mut);font-family:"Sometype Mono",monospace;font-size:11px}.acct-keys .ke{color:var(--mut);padding:6px 0}
 .modal-bg.show{display:flex}
 /* ---- Settings: a sheet with sections ----
    It was one 560px column of 17 fields: API keys next to "hard limit fraction",
@@ -318,7 +318,7 @@ tests"). Scroll the row instead of breaking words:
 .rng input{width:170px;accent-color:var(--gold)}
 .rng output{font-family:"Sometype Mono",monospace;font-weight:600;font-size:13px;min-width:44px;text-align:right;color:var(--ink)}
 .bal{display:flex;flex-direction:column;align-items:flex-end;gap:6px}
-.bal b{font-family:"Sometype Mono",monospace;font-weight:600;font-size:18px;color:var(--ink)}
+.bal b{font-family:"Sometype Mono",monospace;font-weight:600;font-size:14.5px;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
 .sheet :is(button,input):focus-visible{outline:2px solid var(--goldedge);outline-offset:2px}
 
 .modal{width:560px;max-width:92vw;max-height:86vh;overflow:auto;background:var(--panel);border:1px solid var(--edge2);border-radius:10px;padding:18px}
@@ -544,6 +544,55 @@ tests"). Scroll the row instead of breaking words:
 .sk-help{margin:14px 2px 4px;font-size:12.5px;line-height:1.6;color:var(--faint)}
 .sk-help code{font-family:"Sometype Mono",monospace;font-size:12px;color:var(--dim)}
 .mem-empty{padding:18px 16px;font-size:13px;color:var(--dim);line-height:1.6}
+/* ---- Settings: Account ---- */
+/* A saved key shows as itself (its last four), not as an empty box. */
+.key-saved{flex:1;min-width:0;display:flex;align-items:center;gap:8px;background:var(--panel2);border:1px solid var(--edge2);border-radius:7px;padding:7px 10px;font:12.5px "Sometype Mono",monospace;color:var(--ink);white-space:nowrap;overflow:hidden}
+.key-saved[hidden]{display:none}
+.key-saved svg{flex:none;width:14px;height:14px;fill:none;stroke:var(--add);stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.key-saved span{overflow:hidden;text-overflow:ellipsis}
+.keyrow input[hidden]{display:none}
+.key-foot{display:flex;align-items:baseline;gap:10px;width:100%;min-width:0}
+.key-foot .set-state{flex:1;min-width:0}
+.set-state.ok{color:var(--add)} .set-state.bad{color:var(--del)}
+.key-swap{flex:none;border:0;background:none;padding:0;color:var(--dim);font:12px Chivo,sans-serif;cursor:pointer;text-decoration:underline;text-decoration-color:var(--edge2);text-underline-offset:3px}
+.key-swap:hover{color:var(--ink);text-decoration-color:var(--sub)}
+.key-swap:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:3px}
+#btnSave:disabled{border-color:var(--edge2);color:var(--faint);cursor:default;background:none}
+.set-hint.dirty{color:var(--gold)}
+/* updates: a new version reads as news, with its own action */
+.upd-row .set-lbl{display:flex;align-items:center;gap:8px}
+.upd-row.ready .set-lbl::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--gold);box-shadow:0 0 6px var(--goldedge)}
+.upd-row.ready .set-lbl{color:var(--gold)}
+/* usage: a header that stays, a body that scrolls, a footer that stays */
+.usage-modal{display:flex;flex-direction:column;padding:0;overflow:hidden;max-height:min(640px,84vh)}
+.um-head{display:flex;align-items:flex-start;gap:12px;padding:16px 18px 12px;border-bottom:1px solid var(--edge)}
+.um-head h2{margin:0;font-size:16px}
+.um-head .sub{margin:3px 0 0;font-size:12.5px;color:var(--dim)}
+.um-x{margin-left:auto;flex:none;border:0;background:none;color:var(--dim);font-size:14px;width:28px;height:28px;border-radius:7px;cursor:pointer}
+.um-x:hover{background:var(--sel);color:var(--ink)}
+.um-x:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
+.um-body{flex:1;min-height:0;overflow:auto;padding:14px 18px;display:flex;flex-direction:column;gap:14px}
+.um-foot{display:flex;gap:8px;justify-content:flex-end;padding:12px 18px;border-top:1px solid var(--edge)}
+.usage-modal .usage-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.usage-modal .us-box{min-width:0;padding:8px 11px;border:1px solid var(--edge);border-radius:8px;background:var(--panel2)}
+.usage-modal .us-k{font-size:10.5px;letter-spacing:.08em;font-weight:700;color:var(--faint)}
+.usage-modal .us-v{font:600 15px "Sometype Mono",monospace;color:var(--ink);margin-top:3px;font-variant-numeric:tabular-nums}
+.usage-modal .us-box:first-child .us-v{color:var(--gold)}
+.um-cols,.usage-modal .ug-row{display:grid;grid-template-columns:minmax(0,1fr) 92px 78px 74px;gap:10px;align-items:baseline}
+.um-cols{font-size:10.5px;letter-spacing:.08em;font-weight:700;color:var(--faint);text-transform:uppercase;padding:0 2px 6px;border-bottom:1px solid var(--edge)}
+.um-cols span:not(:first-child){text-align:right}
+.usage-modal .ug-row{border:0;border-bottom:1px solid var(--edge);border-radius:0;margin:0;padding:8px 2px;background:none}
+.usage-modal .ug-row .m{font-weight:600;font-size:13px}
+.usage-modal .ug-row .tk,.usage-modal .ug-row .t,.usage-modal .ug-row .cost{text-align:right;margin:0;font-variant-numeric:tabular-nums}
+@media (max-width:620px){.usage-modal .usage-summary{grid-template-columns:repeat(2,minmax(0,1fr))}.um-cols,.usage-modal .ug-row{grid-template-columns:minmax(0,1fr) 70px 64px}.um-cols span:nth-child(3),.usage-modal .ug-row .t{display:none}}
+/* the update note above the sidebar footer: dismissable */
+.upd-pill{cursor:default}
+.upd-pill .upd-txt{border:0;background:none;padding:0;color:inherit;font:inherit;text-align:left;cursor:pointer}
+.upd-pill .upd-txt:hover{color:var(--ink)}
+.upd-pill .upd-txt b{font-weight:600}
+.upd-pill .upd-txt:focus-visible,.upd-x:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:3px}
+.upd-x{flex:none;border:0;background:none;color:var(--sub);cursor:pointer;font-size:11px;width:20px;height:20px;border-radius:5px;line-height:1}
+.upd-x:hover{color:var(--ink);background:var(--sel)}
 /* ---- Settings: Apps (MCP) ---- */
 /* One list for what you have, a set of starting points to add from, and an editor that takes the page. */
 #mcpHome[hidden],.mcp-edit[hidden]{display:none}
@@ -1311,7 +1360,7 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
       <div class="search">⌕ <input id="q" placeholder="Search sessions"><button class="sel-btn" id="btnSelect" type="button" title="Select sessions to delete several at once (Ctrl+click and Shift+click work too)">Select</button></div>
       <div class="sesslist" id="sessions"></div>
       <div class="sel-bar" id="selBar" hidden><span class="sel-count" id="selCount"></span><button type="button" id="selAll" title="Select every session in the list">All</button><button type="button" class="danger" id="selDelete" title="Move the selected sessions to the Recycle Bin (Delete)">Delete</button><button type="button" id="selCancel" title="Clear the selection (Esc)">Cancel</button></div>
-      <button class="upd-pill" id="updPill" type="button" hidden><span class="upd-dot"></span><span class="upd-txt" id="updTxt"></span></button>
+      <div class="upd-pill" id="updPill" hidden><span class="upd-dot"></span><button type="button" class="upd-txt" id="updTxt"></button><button type="button" class="upd-x" id="updX" aria-label="Hide this until later" title="Hide this until later">✕</button></div>
       <button class="side-foot" id="sideStatus" type="button" title="Account and balance">
         <span class="sf-dot" id="backendState"></span>
         <span class="sf-label" id="backendDetail">Starting…</span>
@@ -1469,22 +1518,20 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
   </div>
 </div>
 
-<div class="modal-bg" id="usageModalBg"><div class="modal" style="width:680px">
-  <h2>OpenRouter usage</h2>
-  <p class="sub" id="usageModalSub">Loading…</p>
-  <div class="usage-summary" id="usageSummary" style="display:none">
-    <div class="us-box" style="border-color:var(--goldedge)"><div class="us-k">ACCOUNT AVAILABLE</div><div class="us-v" id="usAvail">—</div></div>
-    <div class="us-box"><div class="us-k">ACCOUNT USED</div><div class="us-v" id="usAcctUsed">—</div></div>
-    <div class="us-box"><div class="us-k">ACCOUNT PURCHASED</div><div class="us-v" id="usAcctTotal">—</div></div>
-    <div class="us-box"><div class="us-k">KEY LEFT</div><div class="us-v" id="usKeyLeft">—</div></div>
-    <div class="us-box"><div class="us-k">KEY LIMIT</div><div class="us-v" id="usKeyLimit">—</div></div>
-    <div class="us-box"><div class="us-k">KEY USED</div><div class="us-v" id="usKeyUsed">—</div></div>
+<div class="modal-bg" id="usageModalBg"><div class="modal usage-modal" style="width:680px" role="dialog" aria-modal="true" aria-labelledby="usageTitle">
+  <div class="um-head"><div><h2 id="usageTitle">OpenRouter usage</h2><p class="sub" id="usageModalSub">Loading…</p></div><button type="button" class="um-x" id="btnUsageX" aria-label="Close usage">✕</button></div>
+  <div class="um-body">
+    <div class="usage-summary" id="usageSummary" style="display:none">
+      <div class="us-box"><div class="us-k">ACCOUNT AVAILABLE</div><div class="us-v" id="usAvail">—</div></div>
+      <div class="us-box"><div class="us-k">ACCOUNT USED</div><div class="us-v" id="usAcctUsed">—</div></div>
+      <div class="us-box"><div class="us-k">ACCOUNT PURCHASED</div><div class="us-v" id="usAcctTotal">—</div></div>
+      <div class="us-box"><div class="us-k">KEY LEFT</div><div class="us-v" id="usKeyLeft">—</div></div>
+      <div class="us-box"><div class="us-k">KEY LIMIT</div><div class="us-v" id="usKeyLimit">—</div></div>
+      <div class="us-box"><div class="us-k">KEY USED</div><div class="us-v" id="usKeyUsed">—</div></div>
+    </div>
+    <div><div class="um-cols"><span>Model</span><span>Tokens</span><span>Requests</span><span>Cost</span></div><div id="usageRows"></div></div>
   </div>
-  <div id="usageRows" style="margin-top:12px"></div>
-  <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:14px">
-    <button class="btn ghost" id="btnUsageMore" style="display:none">Load more</button>
-    <button class="btn" id="btnUsageClose">Close</button>
-  </div>
+  <div class="um-foot"><button class="btn ghost" id="btnUsageMore" style="display:none">Load more</button><button class="btn" id="btnUsageClose">Close</button></div>
 </div></div>
 
 <div class="modal-bg" id="newSessModalBg"><div class="modal" style="width:480px">
@@ -1516,9 +1563,18 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
     <section class="set-page" data-set="account">
       <header class="set-top"><h3>Account</h3><p>Your OpenRouter keys. Stored in the OS keychain when available and only ever sent to OpenRouter.</p></header>
       <div class="set-scroll">
-        <div class="set-group"><div class="set-row wide"><div class="set-txt"><div class="set-lbl">OpenRouter key</div><div class="set-desc">Every model call and web search is billed to this key.</div></div><div class="set-ctl"><div class="keyrow"><input id="fKey" type="password" placeholder="sk-or-v1-…" autocomplete="off" aria-label="OpenRouter key"><button class="btn ghost" id="btnTest" type="button">Test</button></div><div class="set-state" id="keyState">not set</div></div></div><div class="set-row wide"><div class="set-txt"><div class="set-lbl">Management key <span class="opt">optional</span></div><div class="set-desc">Adds your full account usage history. Not needed to run the agent.</div></div><div class="set-ctl"><div class="keyrow"><input id="fMgmtKey" type="password" placeholder="sk-or-v1-…" autocomplete="off" aria-label="Management key"><button class="btn ghost" id="btnTestMgmt" type="button">Test</button></div><div class="set-state" id="mgmtKeyState">not set</div></div></div><div class="set-actions"><span class="set-hint">Keys are saved only when you press Save keys.</span><button class="btn" id="btnSave" type="button">Save keys</button></div></div>
-        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Balance</div><div class="set-desc">Read from OpenRouter when the app starts and after each run.</div></div><div class="set-ctl"><div class="bal"><b id="acctBalance">—</b></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Usage history</div><div class="set-desc">Per-model spend on this key.</div></div><div class="set-ctl"><button class="btn ghost" id="btnUsage" type="button">Open usage</button></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Keys on this account</div><div class="set-desc">What each key has spent, to spot spending that is not VoxAI’s. Needs the management key.</div></div><div class="set-ctl"><button class="btn ghost" id="btnKeys" type="button">Show keys</button></div></div><div class="acct-keys" id="acctKeys" hidden></div></div>
-        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Updates</div><div class="set-desc" id="updDesc">Checks for new versions shortly after the app starts, every 30 minutes, and when you come back to the window.</div></div><div class="set-ctl"><button class="btn ghost" id="btnUpdCheck" type="button">Check now</button></div></div></div>
+        <div class="set-group">
+          <div class="set-row wide"><div class="set-txt"><div class="set-lbl">OpenRouter key</div><div class="set-desc">Every model call and web search is billed to this key.</div></div><div class="set-ctl"><div class="keyrow"><div class="key-saved" id="fKeySaved" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span id="fKeyMask"></span></div><input id="fKey" type="password" placeholder="Paste your key: sk-or-v1-…" autocomplete="off" aria-label="OpenRouter key"><button class="btn ghost" id="btnTest" type="button">Test</button></div><div class="key-foot"><span class="set-state" id="keyState">Not set yet.</span><button type="button" class="key-swap" id="btnKeySwap" hidden>Replace</button></div></div></div>
+          <div class="set-row wide"><div class="set-txt"><div class="set-lbl">Management key <span class="opt">optional</span></div><div class="set-desc">Adds your full account usage history. Not needed to run the agent.</div></div><div class="set-ctl"><div class="keyrow"><div class="key-saved" id="fMgmtSaved" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span id="fMgmtMask"></span></div><input id="fMgmtKey" type="password" placeholder="Paste your key: sk-or-v1-…" autocomplete="off" aria-label="Management key"><button class="btn ghost" id="btnTestMgmt" type="button">Test</button></div><div class="key-foot"><span class="set-state" id="mgmtKeyState">Not set.</span><button type="button" class="key-swap" id="btnMgmtSwap" hidden>Replace</button></div></div></div>
+          <div class="set-actions"><span class="set-hint" id="keyHint">Nothing to save.</span><button class="btn" id="btnSave" type="button" disabled>Save keys</button></div>
+        </div>
+        <div class="set-group">
+          <div class="set-row"><div class="set-txt"><div class="set-lbl">Balance</div><div class="set-desc">Read from OpenRouter when the app starts and after each run.</div></div><div class="set-ctl"><div class="bal"><b id="acctBalance">—</b></div></div></div>
+          <div class="set-row"><div class="set-txt"><div class="set-lbl">Usage history</div><div class="set-desc">What each model has cost on this key in the last 30 days.</div></div><div class="set-ctl"><button class="btn ghost" id="btnUsage" type="button">Open usage</button></div></div>
+          <div class="set-row"><div class="set-txt"><div class="set-lbl">Keys on this account</div><div class="set-desc">What each key has spent, to spot spending that is not VoxAI’s. Needs the management key.</div></div><div class="set-ctl"><button class="btn ghost" id="btnKeys" type="button" aria-expanded="false" aria-controls="acctKeys">Show keys</button></div></div>
+          <div class="acct-keys" id="acctKeys" hidden></div>
+        </div>
+        <div class="set-group"><div class="set-row upd-row" id="updRow"><div class="set-txt"><div class="set-lbl" id="updLbl">Updates</div><div class="set-desc" id="updDesc">Checks when the app opens, when you open Settings, and every 30 minutes.</div></div><div class="set-ctl"><button class="btn ghost" id="btnUpdCheck" type="button">Check now</button></div></div></div>
       </div>
     </section>
 
@@ -6614,6 +6670,13 @@ function openModal(page){
   prefillAdvanced();
   showSetPage(typeof page === 'string' ? page : 'account');
 }
+/** Settings opened: look for an update, unless one was looked for a minute ago or is on its way. */
+function checkUpdatesSoon(){
+  if (!window.voxai || !window.voxai.updates || typeof UPD === 'undefined') return;
+  if (['off', 'checking', 'downloading', 'ready'].includes(UPD.state)) return;
+  if (UPD.checkedAt && Date.now() - UPD.checkedAt < 60000) return;
+  window.voxai.updates.check().then((st) => { if (st) { UPD = st; paintUpdate(); } }).catch(() => {});
+}
 function showSetPage(key){
   document.querySelectorAll('.set-nav button[data-set]').forEach((b) => {
     if (b.dataset.set === key) b.setAttribute('aria-current', 'page'); else b.removeAttribute('aria-current');
@@ -6623,6 +6686,7 @@ function showSetPage(key){
   if (key === 'keys') renderKeys();
   if (key === 'local') renderLocal();
   if (key === 'skills') loadSkills();
+  if (key === 'account') { paintKeys(); checkUpdatesSoon(); }
   if (key === 'mcp') { mcpClose(); loadMcp(); }
 }
 /** Paint the switch, the engine picker, the percentages and the presets from the fields. */
@@ -6694,11 +6758,11 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('modal
 
 $('btnTestMgmt').onclick = async () => {
   const k = $('fMgmtKey').value || (S && S.hasManagementKey ? undefined : '');
-  if (!k) { $('mgmtKeyState').textContent = 'Paste a management key to test.'; return; }
-  $('mgmtKeyState').textContent = 'testing management key…';
+  if (!k) { keyState('mg', 'Paste a management key to test it.'); return; }
+  keyState('mg', 'Testing…');
   try {
     const r = await window.voxai.openrouterTestMgmt(k);
-    if (!r.ok) { $('mgmtKeyState').textContent = 'FAILED: ' + (r.error || 'unknown'); return; }
+    if (!r.ok) { keyState('mg', 'Did not work: ' + (r.error || 'no answer from OpenRouter') + '.', 'bad'); return; }
     let msg = '';
     const c = r.credits || {};
     if (c.ok && c.body && c.body.data) {
@@ -6706,27 +6770,25 @@ $('btnTestMgmt').onclick = async () => {
       const tot = d.total_credits != null ? d.total_credits : null;
       const use = d.total_usage != null ? d.total_usage : null;
       const left = (tot != null && use != null) ? tot - use : null;
-      msg = 'credits OK: ' + fmtUsd(left != null ? left*100 : (tot != null ? tot*100 : 0)) + ' available' + (left != null ? ' · ' + fmtUsd(tot*100) + ' purchased' : '') + ' · ' + fmtUsd(use != null ? use*100 : 0) + ' used';
+      msg = 'Works: ' + fmtUsd(left != null ? left*100 : (tot != null ? tot*100 : 0)) + ' available';
     } else if (c.status) {
-      msg = 'credits HTTP ' + c.status + (c.status === 403 ? ' (not accepted)' : c.status === 401 ? ' (invalid key)' : '');
+      keyState('mg', c.status === 401 ? 'OpenRouter says this key is not valid.' : c.status === 403 ? 'OpenRouter did not accept it as a management key.' : 'OpenRouter answered ' + c.status + '.', 'bad');
+      return;
     }
-    const k2 = r.key || {};
-    if (k2.ok && k2.body && k2.body.data) msg += (msg ? ' · ' : '') + 'key: ' + (k2.body.data.management ? 'management ✓' : (k2.body.data.label || 'ok'));
     const lk = r.listKeys || {};
-    if (lk.ok) msg += (msg ? ' · ' : '') + 'can list keys ✓';
-    else if (lk.status === 403) msg += (msg ? ' · ' : '') + 'list keys 403 (not a management key!)';
-    $('mgmtKeyState').textContent = msg || 'done — see result';
-  } catch (e) { $('mgmtKeyState').textContent = 'Failed: ' + ipcMessage(e); }
+    if (lk.status === 403) { keyState('mg', 'This is a normal key, not a management key: it cannot list the keys on the account.', 'bad'); return; }
+    keyState('mg', (msg || 'Works') + (lk.ok ? ', and it can list your keys.' : '.'), 'ok');
+  } catch (e) { keyState('mg', 'Did not work: ' + ipcMessage(e), 'bad'); }
 };
 
 $('btnTest').onclick = async () => {
   const k = $('fKey').value || (S && S.hasOpenRouterKey ? undefined : '');
-  $('keyState').textContent = 'testing…';
+  if (k === '') { keyState('or', 'Paste a key to test it.'); return; }
+  keyState('or', 'Testing…');
   try {
-    const r = await window.voxai.llmTestKey(k, undefined);
-    const t = r && r.choices && r.choices[0] && r.choices[0].message && r.choices[0].message.content;
-    $('keyState').textContent = 'key OK · ' + (t || 'ok');
-  } catch (e) { $('keyState').textContent = 'Failed: ' + ipcMessage(e); }
+    await window.voxai.llmTestKey(k, undefined);
+    keyState('or', 'Works: OpenRouter answered with this key.', 'ok');
+  } catch (e) { keyState('or', 'Did not work: ' + ipcMessage(e), 'bad'); }
 };
 /**
  * Save the settings. Everything but the keys saves as it changes; keys only when
@@ -6763,10 +6825,10 @@ async function saveSettingsNow(withKeys){
     return false;
   }
   if (withKeys) {
-    $('keyState').textContent = S.hasOpenRouterKey ? ('saved \u00b7 ' + S.keyStore) : 'not set';
-    $('mgmtKeyState').textContent = S.hasManagementKey ? ('saved \u00b7 ' + S.mkeyStore) : 'not set';
     // Do not leave a secret sitting in a field once it is stored.
     $('fKey').value = ''; $('fMgmtKey').value = '';
+    KEY_EDIT.or = false; KEY_EDIT.mg = false;
+    paintKeys();
     refreshUsage(); loadModels();
   }
   refreshChips();
@@ -6785,7 +6847,7 @@ function flashSettingsSaved(text, isErr){
   clearTimeout(setFlashTimer);
   setFlashTimer = setTimeout(() => el2.classList.remove('show'), isErr ? 5000 : 1600);
 }
-$('btnSave').onclick = () => saveSettingsNow(true);
+$('btnSave').onclick = () => { if (keysDirty()) saveSettingsNow(true); };
 (function wireSettings(){
   const sheet = document.querySelector('#modalBg .sheet');
   if (!sheet) return;
@@ -6867,6 +6929,9 @@ if ($('btnUsage')) $('btnUsage').onclick = openUsage;
 /** Each key on the account and its spend, VoxAI's marked: the rest is spending VoxAI did not do. */
 async function showKeys(){
   const box = $('acctKeys'); if (!box) return;
+  const btn = $('btnKeys');
+  if (!box.hidden) { box.hidden = true; box.innerHTML = ''; if (btn) { btn.textContent = 'Show keys'; btn.setAttribute('aria-expanded', 'false'); } return; }
+  if (btn) { btn.textContent = 'Hide keys'; btn.setAttribute('aria-expanded', 'true'); }
   box.hidden = false; box.innerHTML = '<div class="ke">Loading…</div>';
   let r = null;
   try { r = await window.voxai.openrouterKeys(); } catch (e) { r = { ok: false, error: String((e && e.message) || e) }; }
@@ -6972,6 +7037,9 @@ if (window.voxai.local && window.voxai.local.onSlow) window.voxai.local.onSlow((
   toast(info.message);
 });
 $('btnUsageClose').onclick = closeUsage;
+$('btnUsageX').onclick = closeUsage;
+// Esc closes the usage window, not the Settings under it as well.
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('usageModalBg').classList.contains('show')) { e.stopImmediatePropagation(); closeUsage(); } }, true);
 $('btnUsageMore').onclick = () => loadUsage(false);
 $('usageModalBg').addEventListener('click', (e)=>{ if(e.target.id === 'usageModalBg') closeUsage(); });
 
@@ -6982,7 +7050,7 @@ async function loadUsage(reset){
   let bal = null;
   try { bal = await window.voxai.openrouterUsage(); } catch(e){ bal = {ok:false,error:String(e&&e.message||e)}; }
   if (bal && bal.ok) {
-    $('usageSummary').style.display = 'flex';
+    $('usageSummary').style.display = 'grid';
     const acct = bal.credits || {}; const key = bal.key || {};
     $('usAvail').textContent = (acct.left != null ? fmtUsdD(acct.left) : (acct.total != null ? fmtUsdD(acct.total) : '—'));
     $('usAcctUsed').textContent = acct.usage != null ? fmtUsdD(acct.usage) : '—';
@@ -7011,8 +7079,10 @@ async function loadUsage(reset){
     g.rows.forEach((r) => {
       const row = el('div','ug-row');
       const m = el('span','m', esc(r.model || ''));
-      const tk = el('span','tk', (fmtNum(r.nativeTotal)) + ' tok');
-      const t = el('span','t', r.requestCount ? (fmtNum(r.requestCount) + ' req') : '');
+      // Short counts: the column heads say what they are, and 1,655,591,944 ran into the next one.
+      const tk = el('span','tk', fmtCount(r.nativeTotal));
+      tk.title = fmtNum(r.nativeTotal) + ' tokens';
+      const t = el('span','t', r.requestCount ? fmtCount(r.requestCount) : '');
       const cost = el('span','cost', r.cost != null ? fmtUsdD(r.cost) : '');
       row.appendChild(m); row.appendChild(tk); row.appendChild(t); row.appendChild(cost);
       box.appendChild(row);
@@ -7022,6 +7092,13 @@ async function loadUsage(reset){
   }
 }
 function fmtNum(n){ if(n==null) return '0'; return Number(n).toLocaleString('en-US'); }
+function fmtCount(n){
+  n = Number(n || 0);
+  if (n >= 1e9) return (n / 1e9).toFixed(2).replace(/\.?0+$/, '') + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M';
+  if (n >= 1e4) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'k';
+  return n.toLocaleString('en-US');
+}
 function fmtTime(iso){ if(!iso) return ''; const d=new Date(iso); if(isNaN(d)) return ''; return d.toLocaleString([], {month:'short', day:'numeric', hour:'2-digit', minute:'2-digit'}); }
 
 function fmtTok(n){
@@ -8380,6 +8457,52 @@ async function loadSkills(){
   };
 })();
 
+// ---- Settings > Account: saved keys, Save keys only when there is something to save ----
+// A saved key shows as itself (sk-or-v1-…last four) with Replace; the input only appears to
+// paste a new one. Save keys stays off until a key has been typed.
+const KEY_EDIT = { or: false, mg: false };
+const KEY_UI = {
+  or: { has: () => S && S.hasOpenRouterKey, tail: () => S && S.keyTail, store: () => S && S.keyStore, saved: 'fKeySaved', mask: 'fKeyMask', input: 'fKey', state: 'keyState', swap: 'btnKeySwap', none: 'Not set yet.' },
+  mg: { has: () => S && S.hasManagementKey, tail: () => S && S.mkeyTail, store: () => S && S.mkeyStore, saved: 'fMgmtSaved', mask: 'fMgmtMask', input: 'fMgmtKey', state: 'mgmtKeyState', swap: 'btnMgmtSwap', none: 'Not set.' },
+};
+function keyState(which, text, tone){
+  const st = $(KEY_UI[which].state); if (!st) return;
+  st.textContent = text; st.classList.toggle('ok', tone === 'ok'); st.classList.toggle('bad', tone === 'bad');
+}
+function paintKeys(){
+  for (const which of ['or', 'mg']) {
+    const u = KEY_UI[which]; if (!$(u.input)) continue;
+    const has = !!u.has(), editing = KEY_EDIT[which] || !has;
+    $(u.saved).hidden = editing;
+    $(u.input).hidden = !editing;
+    $(u.mask).textContent = 'sk-or-v1-' + '•'.repeat(8) + (u.tail() || '');
+    const sw = $(u.swap); sw.hidden = !has; sw.textContent = KEY_EDIT[which] ? 'Keep the saved key' : 'Replace';
+    if (!has) keyState(which, u.none);
+    else if (KEY_EDIT[which]) keyState(which, 'Paste the new key, then Save keys.');
+    else keyState(which, 'Saved' + (u.store() === 'keychain' ? ' in the system keychain' : '') + '.');
+  }
+  keysDirty();
+}
+/** Save keys lights up only when a key has been typed. */
+function keysDirty(){
+  const dirty = !!(($('fKey') && $('fKey').value.trim()) || ($('fMgmtKey') && $('fMgmtKey').value.trim()));
+  const b = $('btnSave'); if (b) b.disabled = !dirty;
+  const h = $('keyHint'); if (h) { h.textContent = dirty ? 'Not saved yet.' : 'Nothing to save.'; h.classList.toggle('dirty', dirty); }
+  return dirty;
+}
+(function wireKeys(){
+  for (const which of ['or', 'mg']) {
+    const u = KEY_UI[which]; if (!$(u.input)) continue;
+    $(u.input).addEventListener('input', keysDirty);
+    $(u.swap).onclick = () => {
+      KEY_EDIT[which] = !KEY_EDIT[which];
+      if (!KEY_EDIT[which]) $(u.input).value = '';
+      paintKeys();
+      if (KEY_EDIT[which]) $(u.input).focus();
+    };
+  }
+})();
+
 // ---- Settings > Apps (MCP) ----
 // Programs that lend the agent their tools. They could only be set by hand in the
 // settings file; here they are picked from a few known apps or added by command, tried,
@@ -9134,8 +9257,7 @@ function addCodeCopy(root){
   seedStarters();
   S=await window.voxai.getSettings();
   SESS_PRICE = modelPriceFor(S.openrouterModel);
-  $('keyState').textContent = S.hasOpenRouterKey ? 'Saved' + (S.keyStore === 'keychain' ? ' in the system keychain' : '') + '. Leave it empty to keep it.' : 'Not set yet.';
-  $('mgmtKeyState').textContent = S.hasManagementKey ? 'Saved' + (S.mkeyStore === 'keychain' ? ' in the system keychain' : '') + '. Leave it empty to keep it.' : 'Not set, so the account balance is hidden.';
+  paintKeys();
   $('sessSub').textContent=S.workingDir;
   // The folder in the header opens in File Explorer: this session's, or the one a new session starts in.
   $('whDir').onclick = () => { window.voxai.sessionsReveal(activeId || null).catch(() => {}); };
@@ -9183,26 +9305,35 @@ function paintUpdate(){
   const at = st.checkedAt ? new Date(st.checkedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
   const lines = {
     off: st.reason || '',
-    idle: 'checks shortly after the app starts, then every 30 minutes',
+    idle: 'checks when the app opens, when you open Settings, and every 30 minutes',
     checking: 'checking for updates\u2026',
     current: 'up to date' + (at ? ' \u00b7 checked ' + at : ''),
     downloading: 'downloading ' + st.next + ' (' + (st.percent || 0) + '%)',
-    ready: st.next + ' is downloaded; restart to use it',
+    ready: st.next + ' is downloaded. Restart now, or later when it suits you',
     refused: st.error || 'an update was refused',
     error: 'could not check: ' + (st.error || 'unknown error') + ' \u00b7 trying again in a few minutes',
   };
   if (desc) desc.textContent = ver + (lines[st.state] ? ' \u00b7 ' + lines[st.state] : '');
+  const row = $('updRow'), lbl = $('updLbl');
+  if (row) row.classList.toggle('ready', st.state === 'ready');
+  if (lbl) lbl.textContent = st.state === 'ready' ? 'New update ready' : st.state === 'downloading' ? 'Downloading an update' : 'Updates';
+  if (desc && st.state === 'ready') desc.textContent = 'You have ' + (st.version || 'this version') + '. Version ' + st.next + ' is downloaded: restart now, or later when it suits you.';
   if ($('setVersion') && st.version) $('setVersion').textContent = 'VoxAI Coder ' + st.version;
   const btn = $('btnUpdCheck');
   if (btn) {
     btn.disabled = ['off', 'checking', 'downloading'].includes(st.state);
     btn.textContent = st.state === 'ready' ? 'Restart now' : 'Check now';
+    btn.className = st.state === 'ready' ? 'btn' : 'btn ghost';
   }
   if (!pill) return;
   pill.classList.remove('ready', 'dl', 'bad');
+  // Put away with its ✕: it stays away for that version, and Settings > Account still has it.
+  let away = ''; try { away = localStorage.getItem('voxUpdAway') || ''; } catch {}
+  if (st.next && away === st.state + ':' + st.next) { pill.hidden = true; return; }
   if (st.state === 'ready') {
     pill.hidden = false; pill.classList.add('ready');
-    txt.innerHTML = 'Update <b>' + esc(st.next) + '</b> ready \u00b7 Restart';
+    txt.innerHTML = '<b>New update ready</b> \u00b7 Restart';
+    txt.title = 'Version ' + st.next + (st.notes ? '. What\u2019s new: ' + st.notes : '');
     pill.title = st.notes ? 'What\u2019s new: ' + st.notes : 'Restart to finish updating';
   } else if (st.state === 'downloading') {
     pill.hidden = false; pill.classList.add('dl');
@@ -9223,7 +9354,8 @@ async function restartIntoUpdate(){
   if (!ok) { $('updTxt').textContent = 'Could not restart into the update'; setTimeout(paintUpdate, 3000); }
 }
 if (window.voxai && window.voxai.updates) {
-  $('updPill').onclick = () => { if (UPD.state === 'ready') restartIntoUpdate(); else if (UPD.state === 'refused') $('updPill').hidden = true; };
+  $('updTxt').onclick = () => { if (UPD.state === 'ready') restartIntoUpdate(); else openModal('account'); };
+  $('updX').onclick = () => { try { localStorage.setItem('voxUpdAway', UPD.state + ':' + (UPD.next || '')); } catch {} $('updPill').hidden = true; };
   $('btnUpdCheck').onclick = async () => {
     if (UPD.state === 'ready') { restartIntoUpdate(); return; }
     const st = await window.voxai.updates.check(); if (st) { UPD = st; paintUpdate(); }

@@ -107,6 +107,10 @@ function decryptSecret(blob) {
   decrypted.set(blob.store + ':' + blob.enc, plain);
   return plain;
 }
+function keyTail(blob) {
+  if (!blob || !blob.enc) return '';
+  try { const k = String(decryptSecret(blob) || '').trim(); return k.length >= 12 ? k.slice(-4) : ''; } catch { return ''; }
+}
 function decryptSecretNow(blob) {
   if (blob.store === 'keychain' && safeStorage.isEncryptionAvailable())
     return safeStorage.decryptString(Buffer.from(blob.enc, 'base64'));
@@ -184,6 +188,9 @@ function getSettings(redacted = true) {
     hasManagementKey: !!(raw.managementKey && raw.managementKey.enc),
     managementKey: redacted ? undefined : decryptSecret(raw.managementKey),
     mkeyStore: (raw.managementKey && raw.managementKey.store) || 'none',
+    // The last four characters only, so Settings can show which key is saved.
+    keyTail: keyTail(raw.openrouterKey),
+    mkeyTail: keyTail(raw.managementKey),
   };
 }
 function saveSettings(patch) {
