@@ -139,6 +139,8 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
   sessionsShowExport: (id) => ipcRenderer.invoke('sessions:showExport', id),
   skillsList: (workdir) => ipcRenderer.invoke('skills:list', { workdir }),
   skillsOpenFolder: () => ipcRenderer.invoke('skills:openFolder'),
+  skillsReveal: (workdir, root) => ipcRenderer.invoke('skills:reveal', { workdir, root }),
+  skillsCreate: (name) => ipcRenderer.invoke('skills:create', { name }),
   mcpList: () => ipcRenderer.invoke('mcp:list'),
   mcpSave: (name, cfg, was) => ipcRenderer.invoke('mcp:save', { name, cfg, was }),
   mcpRemove: (name) => ipcRenderer.invoke('mcp:remove', { name }),
@@ -148,6 +150,7 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
   memoryList: (workdir) => ipcRenderer.invoke('memory:list', { workdir }),
   memoryDelete: (workdir, query) => ipcRenderer.invoke('memory:delete', { workdir, query }),
   memoryForget: (workdir, exact, index) => ipcRenderer.invoke('memory:delete', { workdir, exact, index }),
+  memoryRestore: (workdir, fact, index) => ipcRenderer.invoke('memory:restore', { workdir, fact, index }),
   onAgentEvent: (cb) => {
     const fn = (_e, msg) => cb(msg);
     ipcRenderer.on('agent:event', fn);

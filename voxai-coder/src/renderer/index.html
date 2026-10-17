@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-9RNglGd9YEml76qCGOD/u0KFyeKbVyo4ApwOFDmO0QY='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-FyoyWpvCrOW0HShQGbl5leyeaTl02m6t67oaS57/7Gc='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -539,18 +539,6 @@ tests"). Scroll the row instead of breaking words:
 .mem-fact .mf-text{flex:1;font-size:13.5px;line-height:1.5;color:var(--ink);overflow-wrap:anywhere;white-space:pre-wrap}
 .mem-fact .mf-del{flex:none;border:1px solid transparent;background:transparent;color:var(--dim);cursor:pointer;font:12.5px Chivo,sans-serif;padding:3px 9px;border-radius:6px}
 .mem-fact .mf-del:hover{color:var(--del);border-color:var(--edge2)}
-.sk-row{align-items:stretch}
-.sk-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
-.sk-top{display:flex;align-items:center;gap:8px}
-.sk-name{font-family:"Sometype Mono",monospace;font-size:13px;color:var(--ink)}
-.sk-src{font-size:12px;color:var(--faint)}
-.sk-src::before{content:"\00b7";margin-right:8px}
-.sk-desc{font-size:13px;line-height:1.5;color:var(--dim);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.sk-row.open .sk-desc{display:block}
-.sk-row{cursor:pointer}
-.sk-row:hover .sk-name{color:var(--gold)}
-.sk-desc.none{color:var(--faint);font-style:italic}
-.sk-open{margin-left:auto;flex:none}
 .sk-help{margin:14px 2px 4px;font-size:12.5px;line-height:1.6;color:var(--faint)}
 .sk-help code{font-family:"Sometype Mono",monospace;font-size:12px;color:var(--dim)}
 .mem-empty{padding:18px 16px;font-size:13px;color:var(--dim);line-height:1.6}
@@ -724,6 +712,62 @@ tests"). Scroll the row instead of breaking words:
 .cx-foot .mcp-link{margin-left:0}
 .cx-foot details{max-width:60ch}
 .cx-foot details .set-note{margin-top:8px}
+/* ---- Settings: Memory and Skills ---- */
+/* Whose list it is, a search, then the list: one fact or skill per row, the rest a click away. */
+.mm-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.mm-ic{flex:none;display:grid;place-items:center;width:34px;height:34px;border-radius:8px;background:var(--panel2);color:var(--sub)}
+.mm-ic svg{width:17px;height:17px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.mm-proj{flex:1;min-width:160px;display:flex;flex-direction:column;gap:1px}
+.mm-proj b{font-size:14px;font-weight:600;color:var(--ink)}
+.mm-proj span{font:11.5px "Sometype Mono",monospace;color:var(--faint);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mm-search{display:flex;align-items:center;gap:9px;padding:8px 12px;border:1px solid var(--edge2);border-radius:8px;background:var(--panel2)}
+.mm-search:focus-within{border-color:var(--goldedge)}
+.mm-search svg{flex:none;width:15px;height:15px;fill:none;stroke:var(--sub);stroke-width:2;stroke-linecap:round}
+.mm-search input{flex:1;min-width:0;border:0;background:none;outline:0;color:var(--ink);font:13.5px Chivo,sans-serif;padding:0}
+.sheet .mm-search input:focus-visible{outline:0}
+.mm-search input::placeholder{color:var(--faint)}
+.mm-fact{display:flex;align-items:flex-start;gap:10px;padding:12px 10px 12px 14px;border-top:1px solid var(--edge)}
+.mm-fact:first-child{border-top:0}
+.mm-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.mm-text{font-size:13.5px;line-height:1.55;color:var(--ink);overflow-wrap:anywhere;white-space:pre-wrap}
+.mm-text.clamp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.mm-text mark,.sk-row mark{background:rgba(200,169,97,.28);color:inherit;border-radius:2px;padding:0 1px}
+.mm-meta{display:flex;align-items:baseline;gap:12px;font-size:11.5px;color:var(--faint)}
+.mm-more{border:0;background:none;padding:0;color:var(--dim);font:11.5px Chivo,sans-serif;cursor:pointer;text-decoration:underline;text-decoration-color:var(--edge2);text-underline-offset:3px}
+.mm-more:hover{color:var(--ink)}
+.mm-x{flex:none;display:grid;place-items:center;width:30px;height:30px;border:0;border-radius:7px;background:none;color:var(--faint);cursor:pointer;opacity:.7}
+.mm-x svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.mm-fact:hover .mm-x,.mm-x:focus-visible{opacity:1}
+.mm-x:hover{color:var(--del);background:var(--sel)}
+.mm-more:focus-visible,.mm-x:focus-visible,.sk-head:focus-visible,.sk-link:focus-visible{outline:2px solid var(--gold);outline-offset:1px;border-radius:5px}
+/* skills */
+.sk-new{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:12px 14px;border:1px solid var(--goldedge);border-radius:10px;background:var(--bg);margin:0}
+.sk-new[hidden]{display:none}
+.sk-new label{font-size:12.5px;font-weight:600;color:var(--mut)}
+.sk-new input{flex:1;min-width:180px;background:var(--panel2);border:1px solid var(--edge2);border-radius:7px;color:var(--ink);padding:6px 10px;font:12.5px "Sometype Mono",monospace;outline:0}
+.sk-new input:focus{border-color:var(--goldedge)}
+.sheet .sk-new input:focus-visible{outline:0}
+.sk-new-say{flex-basis:100%;font-size:12px;color:var(--faint)}
+.sk-new-say.bad{color:var(--del)}
+.sk-groups{display:flex;flex-direction:column;gap:14px}
+.sk-group .set-sub{display:flex;align-items:baseline;gap:8px;margin:0 0 8px}
+.sk-group .set-sub span{font:11px "Sometype Mono",monospace;letter-spacing:0;text-transform:none;color:var(--faint)}
+.sk-row{border-top:1px solid var(--edge)}
+.sk-row:first-child{border-top:0}
+.sk-head{display:flex;align-items:flex-start;gap:10px;width:100%;border:0;background:none;text-align:left;padding:11px 14px;cursor:pointer;color:inherit;font:inherit}
+.sk-head:hover{background:var(--panel)}
+.sk-head .sk-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.sk-head .sk-name{font:13px "Sometype Mono",monospace;color:var(--ink)}
+.sk-head .sk-desc{font-size:12.5px;line-height:1.5;color:var(--dim);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.sk-row.open .sk-head .sk-desc{display:block}
+.sk-head .sk-desc.none{color:var(--gold);font-style:normal}
+.sk-head svg{flex:none;width:12px;height:12px;margin-top:4px;fill:none;stroke:var(--sub);stroke-width:2;stroke-linecap:round;transition:transform .15s}
+.sk-row.open .sk-head svg{transform:rotate(90deg)}
+.sk-detail{display:flex;align-items:center;gap:12px;padding:0 14px 12px 14px}
+.sk-detail[hidden]{display:none}
+.sk-detail code{flex:1;min-width:0;font:11.5px "Sometype Mono",monospace;color:var(--faint);overflow-wrap:anywhere}
+.sk-link{flex:none;border:0;background:none;padding:0;color:var(--dim);font:12.5px Chivo,sans-serif;cursor:pointer;text-decoration:underline;text-decoration-color:var(--edge2);text-underline-offset:3px}
+.sk-link:hover{color:var(--ink)}
 /* ---- Settings: Apps (MCP) ---- */
 /* One list for what you have, a set of starting points to add from, and an editor that takes the page. */
 #mcpHome[hidden],.mcp-edit[hidden]{display:none}
@@ -1789,18 +1833,22 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
       </div>
     </section>
     <section class="set-page" data-set="memory" hidden>
-      <header class="set-top"><h3>Memory</h3><p>What the agent has chosen to remember about this project. It reads these at the start of every run. Remove any that are wrong or out of date.</p></header>
+      <header class="set-top"><h3>Memory</h3><p>What the agent has chosen to remember about this project. It reads these at the start of every run, so remove any that are wrong or out of date.</p></header>
       <div class="set-scroll">
-        <div class="mem-bar"><span class="mem-where" id="memWhere"></span><input id="memSearch" type="search" placeholder="Search" aria-label="Search remembered facts" autocomplete="off"><span class="mem-count" id="memCount"></span></div>
+        <div class="mm-top"><span class="mm-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></span><div class="mm-proj"><b id="memWhere">No project open</b><span id="memPath"></span></div><span class="mcp-count" id="memCount"></span></div>
+        <label class="mm-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="memSearch" type="search" placeholder="Search what it remembers" autocomplete="off" aria-label="Search remembered facts"></label>
         <div class="mem-list" id="memBody"></div>
+        <p class="sk-help">The agent saves a fact when it learns something worth keeping: a convention, a decision, where things live. You can also ask it to remember something. Facts are kept in the project, in <code>.voxai/memory.json</code>.</p>
       </div>
     </section>
     <section class="set-page" data-set="skills" hidden>
-      <header class="set-top"><h3>Skills</h3><p>Instructions the agent loads when a task needs them: how to use a tool, a service or the preview browser. It sees each skill's one-line description at the start of every run and loads the whole skill when a task calls for it.</p></header>
+      <header class="set-top"><h3>Skills</h3><p>Instructions the agent loads when a task needs them: how to use a tool, a service or the preview browser. It sees each skill’s one-line description at the start of every run, and loads the whole skill when a task calls for it.</p></header>
       <div class="set-scroll">
-        <div class="mem-bar"><span class="mem-where" id="skWhere"></span><span class="mem-count" id="skCount"></span><button type="button" class="btn ghost sk-open" id="skOpen">Open my skills folder</button></div>
-        <div class="mem-list" id="skBody"></div>
-        <p class="sk-help">To add a skill, make a folder with a <code>SKILL.md</code> in your skills folder (for all projects) or in a project's <code>.voxai/skills</code> folder (for that project). Start the file with a <code>name:</code> and a one-line <code>description:</code> between <code>---</code> lines; the description is what the agent reads to decide when to load it. Skills in Claude Code's and Codex's folders are read too.</p>
+        <div class="mm-top"><span class="mm-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5zM5 19.5A1.5 1.5 0 0 0 6.5 21H19M9 7h6M9 10.5h4"/></svg></span><div class="mm-proj"><b id="skWhere">No project open</b><span id="skCount"></span></div><button type="button" class="btn ghost" id="skOpen">Open my skills folder</button><button type="button" class="btn" id="skNew">New skill</button></div>
+        <form class="sk-new" id="skNewBox" hidden><label for="skNewName">Name</label><input id="skNewName" autocomplete="off" spellcheck="false" placeholder="e.g. deploy-to-cloudflare"><button class="btn" type="submit">Create and open</button><button class="btn ghost" type="button" id="skNewCancel">Cancel</button><span class="sk-new-say" id="skNewSay">A folder with a SKILL.md to fill in, opened in your editor.</span></form>
+        <label class="mm-search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="skSearch" type="search" placeholder="Search skills" autocomplete="off" aria-label="Search skills"></label>
+        <div id="skBody" class="sk-groups"></div>
+        <p class="sk-help">A skill is a folder with a <code>SKILL.md</code> that starts with a <code>name:</code> and a one-line <code>description:</code> between <code>---</code> lines. Yours apply to every project; a project’s own go in its <code>.voxai/skills</code> folder. Skills in Claude Code’s and Codex’s folders are read too.</p>
       </div>
     </section>
     <section class="set-page" data-set="mcp" hidden>
@@ -8804,34 +8852,74 @@ window.__syncTitlebar = syncTitlebarTitle;
 })();
 
 // ---- Settings > Skills ----
-/** Every skill the agent can load for the open project, first match by name. */
+// Grouped by where each comes from (this project, yours, built in, Claude Code, Codex), each one
+// line until opened, with a search, its folder a click away, and New skill to start one.
+const SK_GROUPS = [['project', 'This project'], ['yours', 'Yours'], ['built in', 'Built into VoxAI'], ['Claude Code', 'From Claude Code'], ['Codex', 'From Codex'], ['VOXAI_SKILLS_DIR', 'From VOXAI_SKILLS_DIR']];
+let SK_LIST = [];
+const SK_OPEN = new Set();
+/** `text` with every match of `q` marked, as HTML. */
+function markMatch(text, q){
+  const t = String(text || '');
+  if (!q) return esc(t);
+  const lo = t.toLowerCase(), out = []; let i = 0, j;
+  while ((j = lo.indexOf(q, i)) !== -1) { out.push(esc(t.slice(i, j)), '<mark>', esc(t.slice(j, j + q.length)), '</mark>'); i = j + q.length; }
+  out.push(esc(t.slice(i)));
+  return out.join('');
+}
 async function loadSkills(){
   const box = $('skBody');
   if (!box || !window.voxai || !window.voxai.skillsList) return;
   const wd = memoryDir();
   let r = null;
   try { r = await window.voxai.skillsList(wd); } catch {}
-  const list = (r && r.skills) || [];
-  const where = $('skWhere'); if (where) where.textContent = wd ? 'For ' + folderName(wd) : 'No project open';
-  const cnt = $('skCount'); if (cnt) cnt.textContent = list.length + (list.length === 1 ? ' skill' : ' skills');
+  SK_LIST = (r && r.skills) || [];
+  $('skWhere').textContent = wd ? 'Skills for ' + folderName(wd) : 'Skills';
+  renderSkills();
+}
+function renderSkills(){
+  const box = $('skBody'); if (!box) return;
+  const q = (($('skSearch') && $('skSearch').value) || '').trim().toLowerCase();
+  const list = SK_LIST.filter((s) => !q || (s.name + ' ' + (s.description || '')).toLowerCase().includes(q));
+  const none = SK_LIST.filter((s) => !s.description).length;
+  $('skCount').textContent = (q ? list.length + ' of ' : '') + SK_LIST.length + (SK_LIST.length === 1 ? ' skill' : ' skills') + (none ? ' · ' + none + ' without a description' : '');
   box.innerHTML = '';
-  if (!list.length) { box.appendChild(el('div', 'mem-empty', 'No skills yet. Open your skills folder to add one.')); return; }
-  for (const s of list) {
-    const row = el('div', 'mem-fact sk-row');
-    const main = el('div', 'sk-main');
-    const top = el('div', 'sk-top');
-    const nm = el('span', 'sk-name'); nm.textContent = s.name;
-    const src = el('span', 'sk-src'); src.textContent = s.source;
-    top.appendChild(nm); top.appendChild(src);
-    const d = el('div', 'sk-desc');
-    d.textContent = s.description || 'No description, so the agent is not told about it: add a description line to its SKILL.md.';
-    if (!s.description) d.classList.add('none');
-    main.appendChild(top); main.appendChild(d);
-    main.title = s.root || '';
-    row.appendChild(main);
-    // Long descriptions show two lines; a click opens the rest.
-    row.onclick = () => row.classList.toggle('open');
-    box.appendChild(row);
+  if (!list.length) {
+    box.appendChild(el('div', 'mem-empty', q ? 'No skill matches “' + esc(q) + '”.' : 'No skills yet. Press New skill to write your first one.'));
+    return;
+  }
+  const known = new Set(SK_GROUPS.map((g) => g[0]));
+  const groups = SK_GROUPS.concat([...new Set(list.map((s) => s.source).filter((x) => !known.has(x)))].map((x) => [x, x]));
+  for (const [src, label] of groups) {
+    const mine = list.filter((s) => s.source === src);
+    if (!mine.length) continue;
+    const g = el('div', 'sk-group');
+    g.appendChild(el('h4', 'set-sub', esc(label) + ' <span>' + mine.length + '</span>'));
+    const l = el('div', 'mem-list');
+    for (const s of mine) {
+      const key = src + ':' + s.name;
+      const open = SK_OPEN.has(key);
+      const row = el('div', 'sk-row' + (open ? ' open' : ''));
+      const head = el('button', 'sk-head'); head.type = 'button'; head.setAttribute('aria-expanded', String(open));
+      const main = el('span', 'sk-main');
+      main.appendChild(el('span', 'sk-name', markMatch(s.name, q)));
+      const d = el('span', 'sk-desc' + (s.description ? '' : ' none'), s.description ? markMatch(s.description, q) : 'No description, so the agent is never told about it. Add a description: line to its SKILL.md.');
+      main.appendChild(d);
+      head.appendChild(main);
+      head.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>');
+      const det = el('div', 'sk-detail'); det.hidden = !open;
+      const p = el('code'); p.textContent = s.root || ''; det.appendChild(p);
+      const go = el('button', 'sk-link', 'Open its folder'); go.type = 'button';
+      go.onclick = async () => {
+        let res = null; try { res = await window.voxai.skillsReveal(memoryDir(), s.root); } catch (e) { res = { ok: false, error: String((e && e.message) || e) }; }
+        if (!res || !res.ok) toast('Could not open it' + (res && res.error ? ': ' + res.error : '.'));
+      };
+      det.appendChild(go);
+      head.onclick = () => { if (SK_OPEN.has(key)) SK_OPEN.delete(key); else SK_OPEN.add(key); renderSkills(); };
+      row.appendChild(head); row.appendChild(det);
+      l.appendChild(row);
+    }
+    g.appendChild(l);
+    box.appendChild(g);
   }
 }
 (function(){
@@ -8840,6 +8928,22 @@ async function loadSkills(){
     let r = null;
     try { r = await window.voxai.skillsOpenFolder(); } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
     if (!r || !r.ok) toast('Could not open the folder' + (r && r.error ? ': ' + r.error : '.'));
+  };
+  if ($('skSearch')) $('skSearch').addEventListener('input', renderSkills);
+  const form = $('skNewBox'); if (!form) return;
+  const say = $('skNewSay'), hint = say.textContent;
+  $('skNew').onclick = () => { form.hidden = false; say.textContent = hint; say.classList.remove('bad'); $('skNewName').value = ''; $('skNewName').focus(); };
+  $('skNewCancel').onclick = () => { form.hidden = true; };
+  form.onsubmit = async (e) => {
+    e.preventDefault();
+    let r = null;
+    try { r = await window.voxai.skillsCreate($('skNewName').value); } catch (err) { r = { ok: false, error: String((err && err.message) || err) }; }
+    if (!r || !r.ok) { say.textContent = (r && r.error) || 'Could not create it.'; say.classList.add('bad'); return; }
+    form.hidden = true;
+    SK_OPEN.add('yours:' + r.name);
+    flashSettingsSaved(r.name + ' created');
+    if (!r.opened) toast('Created ' + r.file);
+    loadSkills();
   };
 })();
 
@@ -9385,16 +9489,23 @@ async function mcpRunTest(name, cfg, inRow){
   };
 })();
 
-// ---- project memory panel ----
-let MEM_FACTS = [];
-/**
- * Settings > Memory: what the agent has remembered about the open session's project
- * (<project>/.voxai/memory.json). The page had been lost in a redesign, so facts could
- * be added but never seen or removed; its code read the global working folder rather
- * than the session's project, and deleted every fact that began with the same 40
- * characters.
- */
 function memoryDir(){ return viewDir(actView()) || (S && S.workingDir) || ''; }
+// ---- Settings > Memory ----
+// Each fact as written, newest first, with when it was remembered; long ones show three lines
+// until opened. Forget is a click, and the toast has Undo, which puts it back where it was.
+let MEM_FACTS = [];
+const MEM_OPEN = new Set();
+function agoText(iso){
+  const t = Date.parse(iso || ''); if (!t) return '';
+  const s = Math.max(0, (Date.now() - t) / 1000);
+  if (s < 90) return 'just now';
+  const m = s / 60, h = m / 60, d = h / 24;
+  if (m < 60) return Math.round(m) + ' minutes ago';
+  if (h < 24) return Math.round(h) + (Math.round(h) === 1 ? ' hour ago' : ' hours ago');
+  if (d < 14) return Math.round(d) + (Math.round(d) === 1 ? ' day ago' : ' days ago');
+  if (d < 60) return Math.round(d / 7) + ' weeks ago';
+  return new Date(t).toLocaleDateString([], { day: 'numeric', month: 'short', year: 'numeric' });
+}
 async function loadMemory(){
   if (!window.voxai || !window.voxai.memoryList) return;
   const wd = memoryDir();
@@ -9404,36 +9515,51 @@ async function loadMemory(){
     if (r && r.ok) facts = r.facts || [];
   } catch {}
   MEM_FACTS = facts;
-  const where = $('memWhere'); if (where) { where.textContent = wd ? 'For ' + folderName(wd) : 'No project open'; where.title = wd || ''; }
+  $('memWhere').textContent = wd ? folderName(wd) : 'No project open';
+  $('memPath').textContent = wd || ''; $('memPath').title = wd || '';
   renderMemory();
 }
 function renderMemory(){
   const box = $('memBody'); const cnt = $('memCount');
   if (!box) return;
   const q = ($('memSearch') ? $('memSearch').value || '' : '').trim().toLowerCase();
-  const shown = MEM_FACTS.map((f, i) => ({ f, i })).filter(({ f }) => !q || String(f.text || '').toLowerCase().includes(q));
+  const shown = MEM_FACTS.map((f, i) => ({ f, i })).filter(({ f }) => !q || String(f.text || '').toLowerCase().includes(q)).reverse();
   if (cnt) cnt.textContent = q ? shown.length + ' of ' + MEM_FACTS.length : MEM_FACTS.length + (MEM_FACTS.length === 1 ? ' fact' : ' facts');
   box.innerHTML = '';
   if (!shown.length) {
     box.appendChild(el('div', 'mem-empty', q ? 'Nothing remembered matches “' + esc(q) + '”.'
-      : 'Nothing remembered for this project yet. When the agent decides something is worth keeping — a convention, a decision, where things live — it appears here.'));
+      : 'Nothing remembered for this project yet. When the agent learns something worth keeping, such as a convention, a decision or where things live, it appears here.'));
     return;
   }
   for (const { f, i } of shown) {
-    const row = el('div', 'mem-fact');
-    const txt = el('span', 'mf-text'); txt.textContent = String(f.text || '');
-    const del = el('button', 'mf-del', 'Forget');
-    del.type = 'button';
-    del.title = 'Remove this from the project’s memory';
+    const text = String(f.text || '');
+    const row = el('div', 'mm-fact');
+    const body = el('div', 'mm-body');
+    const open = MEM_OPEN.has(text) || !!q;
+    const txt = el('div', 'mm-text' + (open ? '' : ' clamp'), markMatch(text, q));
+    body.appendChild(txt);
+    const meta = el('div', 'mm-meta');
+    const when = agoText(f.at); if (when) { const w = el('span'); w.textContent = 'Remembered ' + when; w.title = new Date(f.at).toLocaleString(); meta.appendChild(w); }
+    const more = el('button', 'mm-more', open ? 'Show less' : 'Show all'); more.type = 'button'; more.hidden = true;
+    more.onclick = () => { if (MEM_OPEN.has(text)) MEM_OPEN.delete(text); else MEM_OPEN.add(text); renderMemory(); };
+    meta.appendChild(more);
+    body.appendChild(meta);
+    row.appendChild(body);
+    const del = el('button', 'mm-x', '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>');
+    del.type = 'button'; del.title = 'Forget this'; del.setAttribute('aria-label', 'Forget: ' + text.slice(0, 80));
     del.onclick = async () => {
       del.disabled = true;
+      const wd = memoryDir();
       let r = null;
-      try { r = await window.voxai.memoryForget(memoryDir(), String(f.text || ''), i); } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
-      if (!r || !r.ok) toast((r && r.error) || 'Could not remove it.');
+      try { r = await window.voxai.memoryForget(wd, text, i); } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
+      if (!r || !r.ok) { toast((r && r.error) || 'Could not forget it.'); del.disabled = false; return; }
+      toast('Forgotten.', { label: 'Undo', onClick: async () => { try { await window.voxai.memoryRestore(wd, f, i); } catch {} loadMemory(); } });
       await loadMemory();
     };
-    row.appendChild(txt); row.appendChild(del);
+    row.appendChild(del);
     box.appendChild(row);
+    // "Show all" only on a fact that is cut short.
+    if (!q) requestAnimationFrame(() => { if (open || txt.scrollHeight > txt.clientHeight + 2) more.hidden = false; });
   }
 }
 (function(){

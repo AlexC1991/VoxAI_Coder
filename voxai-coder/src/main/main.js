@@ -1222,6 +1222,25 @@ app.whenReady().then(() => {
     const err = await require('electron').shell.openPath(d);
     return { ok: !err, path: d, error: err || '' };
   });
+  // One skill's folder: only a folder the skill finder itself listed, never a path the page names.
+  ipcMain.handle('skills:reveal', async (_e, arg) => {
+    const root = String((arg && arg.root) || '');
+    const found = await require('../backend/tools/skills').findSkills({ workdir: String((arg && arg.workdir) || ''), userData: userData() });
+    if (!found.some((s) => s.root === root)) return { ok: false, error: 'That skill is no longer there.' };
+    const err = await require('electron').shell.openPath(root);
+    return { ok: !err, error: err || '' };
+  });
+  // A new skill of your own: a folder with a SKILL.md to fill in, opened in your editor.
+  ipcMain.handle('skills:create', async (_e, arg) => {
+    const name = String((arg && arg.name) || '').trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 60);
+    if (!name) return { ok: false, error: 'Give it a short name: letters, digits and dashes.' };
+    const dir = path.join(userData(), 'skills', name), file = path.join(dir, 'SKILL.md');
+    if (fs.existsSync(file)) return { ok: false, error: `You already have a skill called "${name}".` };
+    await fs.promises.mkdir(dir, { recursive: true });
+    await fs.promises.writeFile(file, `---\nname: ${name}\ndescription: One line on when to use this skill. The agent reads this line at the start of every run to decide when to load the rest.\n---\n\n# ${name}\n\nWhat to do, step by step, when this skill is loaded.\n`, 'utf8');
+    const err = await require('electron').shell.openPath(file);
+    return { ok: true, name, file, opened: !err };
+  });
   // Settings > Apps (MCP): programs that lend the agent their tools (a browser, Blender,
   // Windows apps). They were only ever set by hand in the settings file.
   const mcp = require('../backend/tools/mcp');
@@ -1955,6 +1974,18 @@ app.whenReady().then(() => {
     const mem = require('../backend/tools/memory');
     const facts = await mem.loadMemory(workdir || os.homedir());
     return { ok: true, facts };
+  });
+  // Undo on the Memory page: a forgotten fact goes back where it was.
+  ipcMain.handle('memory:restore', async (_e, { workdir, fact, index }) => {
+    const mem = require('../backend/tools/memory');
+    const text = String((fact && fact.text) || '').trim();
+    if (!text) return { ok: false, error: 'Nothing to put back.' };
+    const facts = await mem.loadMemory(workdir || os.homedir());
+    if (facts.some((f) => f.text === text)) return { ok: true, restored: 0 };
+    const at = Number.isInteger(index) ? Math.max(0, Math.min(facts.length, index)) : facts.length;
+    facts.splice(at, 0, { text, at: String((fact && fact.at) || new Date().toISOString()) });
+    await mem.saveMemory(workdir || os.homedir(), facts);
+    return { ok: true, restored: 1 };
   });
   ipcMain.handle('memory:delete', async (_e, { workdir, query, exact, index }) => {
     const mem = require('../backend/tools/memory');
