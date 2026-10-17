@@ -167,6 +167,17 @@ const textOf = (m) => (typeof m.content === 'string' ? m.content : (m.content ||
     check('the catalogue carries each model\'s tier, and the Context page says it', MM.includes("priceTier: require('../backend/profiles').profileOf(m.id).priceTier || 0,") && HM.includes("' bills a whole request at a higher rate past ' + kTok(Number(m.priceTier))"), 'not shown');
   }
 
+  // ------------------------------------------------------------------ [P4]
+  console.log('\n[P4] short in-between messages');
+  {
+    const { _systemPrompt } = require(path.join(ROOT, 'src/backend/agent.js'));
+    const sp = _systemPrompt('C:/w', 'full', false, '', true);
+    const quiet = sp.indexOf('keep the text between tool calls to one short sentence, or none');
+    const close = sp.indexOf('When you finish, close with one short message');
+    check('the prompt asks for one short sentence between steps, code only in files', quiet > 0 && sp.includes('Put code only in files, through write, edit or patch -- never in a message.') && sp.includes('paste tool output back'), quiet);
+    check('and it comes before the closing-message rules, which still stand', quiet > 0 && close > quiet, { quiet, close });
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

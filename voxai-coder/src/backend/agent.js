@@ -488,6 +488,13 @@ const SYSTEM = (workdir, access, planMode = false, durable = '', webSearchOn = t
   `confirming each with a tool (git status, cbx status, the test output, the app started from fresh) -- not from memory, ` +
   `notes, build_state or earlier sessions, which can be out of date. If a part could not be done, say plainly which and why. ` +
   `To stop a program you started, end it by the pid you were given, as a command on its own -- never by name. ` +
+  // Every word a model writes is billed at the output rate, several times the input rate, and
+  // newer models write far more than the last (Gemini 4 and Grok 4.7 about twice their
+  // predecessors' output per task): the text between steps is where most of it goes unread.
+  `While you work, keep the text between tool calls to one short sentence, or none: do not announce at length what ` +
+  `you are about to do, restate a file you read or wrote, repeat the plan already in the todo list, or paste tool ` +
+  `output back. Put code only in files, through write, edit or patch -- never in a message. What you write costs ` +
+  `several times what you read. ` +
   // Some models closed in clipped fragments ("Fixed nav. Tests pass."), others in a long report
   // with headings: one shape for all of them.
   `When you finish, close with one short message in plain, complete sentences, the way you would tell a colleague ` +
