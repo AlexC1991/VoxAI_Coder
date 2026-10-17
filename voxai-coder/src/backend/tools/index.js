@@ -170,8 +170,28 @@ const write = tool('write', 'Create or overwrite a file (creates parent dirs).',
  * at a fuzzy match and silently editing the wrong region.
  */
 function locate(text, before) {
-  const exact = text.indexOf(before);
-  if (exact !== -1) return { start: exact, end: exact + before.length, how: 'exact' };
+  const all = locateAll(text, before);
+  return all.length ? all[0] : null;
+}
+
+/**
+ * Every place `before` matches: exact matches if there are any, else the whitespace-tolerant
+ * ones. An edit that matched in several places used to change the first and say nothing -- the
+ * model edited one of three alike lines, saw no effect where it looked, and went round again.
+ */
+function locateAll(text, before) {
+  const hits = [];
+  if (before) for (let at = text.indexOf(before); at !== -1; at = text.indexOf(before, at + before.length)) hits.push({ start: at, end: at + before.length, how: 'exact' });
+  if (hits.length) return hits;
+  const one = locateTrimmed(text, before, 0);
+  for (let h = one; h; h = locateTrimmed(text, before, h.line + 1)) hits.push(h);
+  return hits;
+}
+
+/** The 1-based line each match starts on, for telling the model where they are. */
+function lineOf(text, index) { let n = 1; for (let i = 0; i < index; i++) if (text.charCodeAt(i) === 10) n++; return n; }
+
+function locateTrimmed(text, before, fromLine) {
 
   const needle = before.split('\n').map((l) => l.trim());
   // strip a trailing blank line produced by a template literal
@@ -183,7 +203,7 @@ function locate(text, before) {
   let pos = 0;
   for (const l of lines) { starts.push(pos); pos += l.length + 1; }
 
-  for (let i = 0; i + needle.length <= lines.length; i++) {
+  for (let i = fromLine; i + needle.length <= lines.length; i++) {
     let ok = true;
     for (let j = 0; j < needle.length; j++) {
       if (lines[i + j].trim() !== needle[j]) { ok = false; break; }
@@ -192,14 +212,14 @@ function locate(text, before) {
     const start = starts[i];
     const lastIdx = i + needle.length - 1;
     const end = starts[lastIdx] + lines[lastIdx].length;
-    return { start, end, how: 'line-trimmed' };
+    return { start, end, how: 'line-trimmed', line: lastIdx };
   }
   return null;
 }
 
-const edit = tool('edit', 'Replace the first occurrence of `before` with `after` in a file. Matching is exact, with a fallback that ignores per-line leading/trailing whitespace.', {
+const edit = tool('edit', 'Replace `before` with `after` in a file. `before` must match exactly one place: if it appears more than once the edit is refused and says where, so include enough surrounding lines to make it unique, or set replace_all to change every one. Matching is exact, with a fallback that ignores per-line leading/trailing whitespace.', {
   type: 'object',
-  properties: { path: { type: 'string' }, before: { type: 'string' }, after: { type: 'string' } },
+  properties: { path: { type: 'string' }, before: { type: 'string' }, after: { type: 'string' }, replace_all: { type: 'boolean', description: 'Change every place `before` appears, not just one.' } },
   required: ['path', 'before', 'after'],
 }, async (args, ctx) => {
   // Models trained on other tools send old_string/new_string. That crashed with
@@ -216,7 +236,14 @@ const edit = tool('edit', 'Replace the first occurrence of `before` with `after`
   const text = await fsp.readFile(full, 'utf8');
   const eol = eolOf(text);
 
-  const hit = locate(text, toEol(before, eol)) || (eol === '\r\n' ? locate(text, before) : null);
+  let hits = locateAll(text, toEol(before, eol));
+  if (!hits.length && eol === '\r\n') hits = locateAll(text, before);
+  const hit = hits[0] || null;
+  if (hits.length > 1 && !args.replace_all) {
+    const at = hits.slice(0, 6).map((h) => lineOf(text, h.start));
+    throw new Error(`edit: 'before' appears ${hits.length} times in ${p} (lines ${at.join(', ')}${hits.length > 6 ? ', ...' : ''}), so nothing was changed. `
+      + 'Include more of the lines around the one you mean so it matches once, or set replace_all: true to change every one.');
+  }
   if (!hit) {
     // Give the retry something to aim at: the model cannot fix a match it cannot see.
     const firstLine = String(before).split('\n').find((l) => l.trim()) || '';
@@ -236,10 +263,12 @@ const edit = tool('edit', 'Replace the first occurrence of `before` with `after`
     );
   }
 
-  const next = text.slice(0, hit.start) + toEol(after, eol) + text.slice(hit.end);
+  // From the last match back, so the earlier positions still hold.
+  let next = text;
+  for (const h of hits.slice().reverse()) next = next.slice(0, h.start) + toEol(after, eol) + next.slice(h.end);
   await fsp.writeFile(full, next, 'utf8');
   markSeen(full, next);
-  return withVerification({ path: full, replaced: hit.end - hit.start, match: hit.how }, full, p);
+  return withVerification({ path: full, replaced: hit.end - hit.start, match: hit.how, ...(hits.length > 1 ? { places: hits.length } : {}) }, full, p);
 });
 
 const glob = tool('glob', 'List files matching a glob-ish pattern (supports * and **).', {

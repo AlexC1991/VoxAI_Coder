@@ -211,6 +211,40 @@ const textOf = (m) => (typeof m.content === 'string' ? m.content : (m.content ||
     fs.rmSync(WD, { recursive: true, force: true });
   }
 
+  // ------------------------------------------------------------------ [P6]
+  console.log('\n[P6] edits refuse text that matches more than once');
+  {
+    const tools = require(path.join(ROOT, 'src/backend/tools'));
+    const WD = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-cost6-'));
+    const ctx = { workdir: WD, session: { messages: [] }, emit: () => {}, checkPermission: async () => {}, resolveIn: (w, p) => path.resolve(w, p), getSettings: () => ({}), getAccess: () => 'full' };
+    const { ALL } = tools.buildTools(ctx);
+    const T = (n) => ALL.find((t) => t.def.function.name === n);
+    const F = path.join(WD, 'a.js');
+    const body = 'function a() {\n  return null;\n}\nfunction b() {\n  return null;\n}\nfunction c() {\n  return 1;\n}\n';
+    const tryRun = async (name, args) => { try { return { ok: true, r: await T(name).run(args, ctx) }; } catch (e) { return { ok: false, e: e.message }; } };
+    fs.writeFileSync(F, body);
+    await T('read').run({ path: 'a.js' }, ctx);
+    let r = await tryRun('edit', { path: 'a.js', before: '  return null;', after: '  return 0;' });
+    check('edit: text in two places is refused, with the lines, and the file is untouched', !r.ok && /appears 2 times in a\.js \(lines 2, 5\), so nothing was changed/.test(r.e) && fs.readFileSync(F, 'utf8') === body, r.e);
+    r = await tryRun('edit', { path: 'a.js', before: 'function b() {\n  return null;', after: 'function b() {\n  return 0;' });
+    check('edit: with one more line it matches once and changes just that one', r.ok && fs.readFileSync(F, 'utf8') === body.replace('function b() {\n  return null;', 'function b() {\n  return 0;'), r.e);
+    fs.writeFileSync(F, body); await T('read').run({ path: 'a.js' }, ctx);
+    r = await tryRun('edit', { path: 'a.js', before: '  return null;', after: '  return 0;', replace_all: true });
+    check('edit: replace_all changes every one', r.ok && !fs.readFileSync(F, 'utf8').includes('return null') && r.r.places === 2, r.e || r.r);
+    fs.writeFileSync(F, body); await T('read').run({ path: 'a.js' }, ctx);
+    r = await tryRun('edit', { path: 'a.js', before: 'return null;', after: 'return 0;' });
+    check('edit: the whitespace-tolerant match counts every place too', !r.ok && /appears 2 times/.test(r.e), r.e);
+    r = await tryRun('edit', { path: 'a.js', before: '  return 1;', after: '  return 2;' });
+    check('edit: text in one place still just works', r.ok && fs.readFileSync(F, 'utf8').includes('return 2;'), r.e);
+    fs.writeFileSync(F, body); await T('read').run({ path: 'a.js' }, ctx);
+    r = await tryRun('patch', { path: 'a.js', edits: [{ old: '  return 1;', new: '  return 3;' }, { old: '  return null;', new: '  return 0;' }] });
+    check('patch: an edit matching twice refuses the whole patch, the file untouched', !r.ok && /edit #1: 'old' appears 2 times \(lines 2, 5\)/.test(r.e) && fs.readFileSync(F, 'utf8') === body, r.e);
+    r = await tryRun('patch', { path: 'a.js', edits: [{ old: '  return null;', new: '  return 0;', all: true }] });
+    check('patch: all: true changes every one', r.ok && !fs.readFileSync(F, 'utf8').includes('return null'), r.e);
+    check('both tools tell the model up front', /must match exactly one place/.test(T('edit').def.function.description) && JSON.stringify(T('patch').def).includes('must appear exactly once'), 'silent');
+    fs.rmSync(WD, { recursive: true, force: true });
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

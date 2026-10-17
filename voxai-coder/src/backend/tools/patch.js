@@ -35,7 +35,7 @@ function makePatchTool({ resolveIn, checkPermission }) {
                 properties: {
                   old: { type: 'string', description: 'Exact existing text to replace.' },
                   new: { type: 'string', description: 'Replacement text.' },
-                  all: { type: 'boolean', description: 'Replace every occurrence when true (default false = first only).' },
+                  all: { type: 'boolean', description: 'Replace every occurrence when true. Without it, `old` must appear exactly once, or the patch is refused and says where.' },
                 },
                 required: ['old', 'new'],
                 additionalProperties: false,
@@ -69,6 +69,14 @@ function makePatchTool({ resolveIn, checkPermission }) {
         } else {
           const idx = text.indexOf(e.old);
           if (idx === -1) throw new Error(`patch edit #${i}: 'old' not found — ${JSON.stringify(e.old.slice(0, 60))}`);
+          // In more than one place it would change the first and say nothing: refused, with where.
+          const count = countOccurrences(text, e.old);
+          if (count > 1) {
+            const lines = [];
+            for (let at = text.indexOf(e.old); at !== -1 && lines.length < 6; at = text.indexOf(e.old, at + e.old.length)) lines.push(text.slice(0, at).split('\n').length);
+            throw new Error(`patch edit #${i}: 'old' appears ${count} times (lines ${lines.join(', ')}${count > 6 ? ', ...' : ''}), so nothing was changed. `
+              + 'Include more of the surrounding lines so it matches once, or set all: true on that edit to change every one.');
+          }
           text = text.slice(0, idx) + e.new + text.slice(idx + e.old.length);
           applied.push({ edit: i, occurrences: 1 });
         }
