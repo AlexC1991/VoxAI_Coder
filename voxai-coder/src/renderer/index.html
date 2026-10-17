@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-nZ6i6rWnypH51FZA+sjWjGM1UTkjCUi3cH4Z+JBifMQ='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-l1vcwp0seSQ72LlBagrFr7JLgBRtkA2choViWCyDKgE='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -421,6 +421,11 @@ tests"). Scroll the row instead of breaking words:
 @keyframes rowIn{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
 .statusline{animation:fadeIn .18s ease}
 .md .typewrap{white-space:pre-wrap;overflow-wrap:break-word}
+/* a streamed answer: each finished paragraph fades in once; the one being written grows in place */
+.md-part{animation:partIn .32s ease both}
+@keyframes partIn{from{opacity:0;transform:translateY(3px)}to{opacity:1;transform:none}}
+.md-part > :first-child,.md-live > :first-child{margin-top:0}
+.md-part > :last-child{margin-bottom:.5em}
 .md .cursor{display:inline-block;width:7px;height:1em;min-height:7px;background:var(--gold);margin-left:1px;vertical-align:-1px;animation:blink 1s step-end infinite}
 @keyframes blink{0%,49%{opacity:1}50%,100%{opacity:0}}
 /* ---- message queue (Codex-style tray) ---- */
@@ -617,7 +622,15 @@ tests"). Scroll the row instead of breaking words:
 /* thread rhythm: answers read as prose, not as a stack of announcements */
 .md{font-size:15px;line-height:1.65;text-wrap:pretty;overflow-wrap:break-word}
 .user{align-self:flex-end;max-width:80%;background:var(--panel2);border:0;border-radius:14px 14px 4px 14px;padding:10px 14px;font-size:14.5px;line-height:1.55}
-.steer-tag{display:flex;align-items:center;gap:6px;margin-bottom:6px;font-family:"Sometype Mono",monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--gold)}
+/* what you said while it worked: a compact note in your colour, and whether Vox has read it */
+.user.steer{max-width:70%;padding:8px 12px 9px;font-size:13.5px;background:rgba(200,169,97,.07);box-shadow:inset 0 0 0 1px var(--goldedge);border-radius:12px 12px 4px 12px;animation:runIn .2s ease}
+.steer-tag{display:flex;align-items:center;gap:7px;margin-bottom:4px;font:500 11.5px Chivo,sans-serif;color:var(--gold)}
+.steer-tag .tr-ic{width:13px;height:13px;stroke:var(--gold)}
+.steer-state{margin-left:auto;padding-left:14px;font:11px "Sometype Mono",monospace;color:var(--faint);white-space:nowrap}
+.user.steer.pending .steer-state::before{content:'';display:inline-block;width:6px;height:6px;margin-right:6px;border-radius:50%;background:var(--gold);vertical-align:1px;animation:blink 1.2s step-end infinite}
+.user.steer.read .steer-state{color:var(--add)}
+.user.steer.read .steer-state::before{content:'\2713';margin-right:5px}
+.steer-text{color:var(--ink)}
 .col{gap:16px}
 /* the plan: a tab on the box's top edge, the whole plan in a drawer that rises behind it */
 .plan-tab{position:relative;display:flex;align-items:flex-end;height:30px;padding-left:16px;margin-bottom:-7px;z-index:4}  /* -7: the composer's 6px gap, plus 1px over the box border so the tab joins it */
@@ -844,6 +857,20 @@ tests"). Scroll the row instead of breaking words:
 .sh-goal[hidden]{display:none}
 /* "Worked for 23m 14s \u00b7 $0.38 \u00b7 8.7M tokens": quiet, under the answer. */
 .run-took{font:11.5px "Sometype Mono",monospace;color:var(--faint);margin:2px 0 6px}
+/* a finished turn, folded: the last few actions faded above a button, then the answer */
+.turn-work{display:flex;flex-direction:column;gap:6px;margin:2px 0 8px;animation:runIn .22s ease}
+.turn-work.folded > .turn-body{display:none}
+.turn-work:not(.folded) > .turn-peek{display:none}
+.turn-body{display:flex;flex-direction:column;gap:10px}
+.turn-peek{display:flex;flex-direction:column;pointer-events:none;-webkit-mask-image:linear-gradient(to bottom,transparent,#000 70%);mask-image:linear-gradient(to bottom,transparent,#000 70%)}
+.turn-peek .top{display:flex;align-items:center;gap:9px;min-height:26px;color:var(--dim);font-size:13px;min-width:0}
+.turn-peek .tr-chev,.turn-peek .tr-meta{display:none}
+.turn-toggle{align-self:flex-start;max-width:100%;white-space:nowrap;display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 12px 0 9px;border:1px solid var(--edge2);border-radius:999px;background:var(--panel);color:var(--mut);font:12.5px Chivo,sans-serif;cursor:pointer;transition:color .12s,border-color .12s,background .12s}
+.turn-toggle:hover{color:var(--ink);border-color:var(--sub);background:var(--panel2)}
+.turn-toggle svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;transition:transform .15s}
+.turn-toggle[aria-expanded="true"] svg{transform:rotate(180deg)}
+.turn-toggle .turn-took{font:11.5px "Sometype Mono",monospace;color:var(--faint);padding-left:7px;border-left:1px solid var(--edge2);overflow:hidden;text-overflow:ellipsis;min-width:0}
+.turn-work:not(.folded) > .turn-toggle{margin-top:2px}
 .run-cost{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:4px;font-size:11px}
 .rc-it{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
 .rc-it i{width:6px;height:6px;border-radius:2px;background:var(--edge2);flex:none}
@@ -864,6 +891,23 @@ tests"). Scroll the row instead of breaking words:
 .sh-eyes-ic{font-size:12px;line-height:1}
 .sh-goal #shGoalTxt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;color:var(--fg,inherit)}
 .sh-goal-ic{font-size:14px;line-height:1}
+/* the goal, as a card: what it works toward, where it stands, what it has taken */
+.sh-goalcard{color:var(--mut);gap:9px;padding:5px 6px 5px 5px;margin:-2px 0;border-radius:9px;background:rgba(200,169,97,.06);box-shadow:inset 0 0 0 1px var(--goldedge)}
+.gc-ic{display:grid;place-items:center;width:24px;height:24px;flex:none;border-radius:7px;background:rgba(200,169,97,.13);color:var(--gold)}
+.gc-ic svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8}
+.gc-lab{flex:none;font:600 11.5px Chivo,sans-serif;color:var(--gold)}
+.gc-txt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink);font-size:13px}
+/* where it stands: plain coloured words with a dot, not a capsule */
+.gc-state{flex:none;font:500 12px Chivo,sans-serif;color:var(--mut)}
+.gc-state::before{content:'';display:inline-block;width:6px;height:6px;margin-right:6px;border-radius:50%;background:currentColor;vertical-align:1px}
+.gc-state.is-working{color:var(--add)}
+.gc-state.is-working::before{animation:blink 1.2s step-end infinite}
+.gc-state.is-checking{color:var(--gold)}
+.gc-state.is-paused{color:var(--dim)}
+/* what it has taken, readable at a glance */
+.gc-meta{flex:none;font:12px "Sometype Mono",monospace;color:var(--mut);padding-left:9px;border-left:1px solid var(--edge2)}
+.gc-meta:empty{display:none}
+.sh-goalcard #shGoalTxt{color:var(--ink)}
 .sh-work{color:var(--mut)}
 .sh-work .spin{width:12px;height:12px;flex:none;border-radius:50%;background:conic-gradient(var(--gold) 0 90deg,rgba(200,169,97,.18) 90deg 360deg);-webkit-mask:radial-gradient(circle,transparent 52%,#000 54%);mask:radial-gradient(circle,transparent 52%,#000 54%);animation:spin .85s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
@@ -900,11 +944,13 @@ tests"). Scroll the row instead of breaking words:
 /* queued messages, opened on top of the box */
 .qrows{display:flex;flex-direction:column;border-bottom:1px solid var(--edge)}
 .qrows[hidden]{display:none}
-.qhead{display:flex;align-items:center;gap:8px;padding:8px 12px 3px 14px;font:10.5px "Sometype Mono",monospace;letter-spacing:.14em;text-transform:uppercase;color:var(--sub)}
+.qhead{display:flex;align-items:center;gap:8px;padding:8px 12px 4px 14px;font:12px Chivo,sans-serif;color:var(--sub)}
+.qhead .q-title{font-weight:600;color:var(--mut)}
+.qhead .q-count{min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:rgba(200,169,97,.13);color:var(--gold);font:600 11px "Sometype Mono",monospace;display:inline-grid;place-items:center}
+.qhead .q-when{color:var(--faint)}
 .qhead .q-clear{margin-left:auto;border:0;background:none;color:var(--sub);cursor:pointer;font:12px Chivo,sans-serif;letter-spacing:0;text-transform:none;padding:2px 6px;border-radius:5px}
 .qhead .q-clear:hover{color:var(--del);background:var(--sel)}
 .q-pill{display:flex;align-items:center;gap:10px;padding:6px 12px 6px 8px;font-size:13px;color:var(--mut)}
-.q-pill + .q-pill{border-top:1px solid var(--edge)}
 .q-grip{flex:none;display:flex;align-items:center;justify-content:center;width:16px;height:22px;color:var(--sub);cursor:grab;border:0;background:transparent;padding:0;border-radius:4px}
 .q-grip:hover{color:var(--ink)}
 .q-grip:active{cursor:grabbing;color:var(--gold)}
@@ -913,7 +959,14 @@ tests"). Scroll the row instead of breaking words:
 .q-pill.drop-before{box-shadow:inset 0 2px 0 0 var(--gold)}
 .q-pill.drop-after{box-shadow:inset 0 -2px 0 0 var(--gold)}
 .qrows.reordering .q-text{user-select:none}
-.q-idx{font:11px "Sometype Mono",monospace;color:var(--gold);width:14px;flex:none;text-align:center}
+.q-idx{font:600 10.5px "Sometype Mono",monospace;color:var(--gold);width:18px;height:18px;flex:none;border-radius:50%;background:rgba(200,169,97,.1);display:grid;place-items:center}
+/* a queued row is just its words until you point at it: then its handle and actions show */
+.q-pill{border-radius:8px;margin:0 6px;transition:background .12s}
+.q-pill:hover,.q-pill:focus-within{background:var(--panel2)}
+.q-pill .q-grip,.q-pill .q-act{opacity:0;transition:opacity .12s}
+.q-pill:hover .q-grip,.q-pill:hover .q-act,.q-pill:focus-within .q-grip,.q-pill:focus-within .q-act{opacity:1}
+.q-pill + .q-pill{border-top:0}
+.qrows{padding-bottom:6px}
 .q-text{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .q-steer{display:flex;align-items:center;gap:4px;min-width:0;flex:0 1 auto;color:var(--gold);font-size:12px;font-style:italic;white-space:nowrap;overflow:hidden}
 .q-steer-x{border:0;background:transparent;color:var(--sub);cursor:pointer;font-size:12px;padding:0 2px;flex:none}
@@ -1173,7 +1226,7 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
           <div class="shelf" id="shelf" hidden>
             <span class="sh-goal sh-loop" id="shLoop" hidden><span class="sh-goal-ic" aria-hidden="true">↻</span><span id="shLoopTxt"></span><button class="sh-lnk" id="shLoopStop" type="button">Stop loop</button></span>
             <span class="sh-eyes" id="shEyes" hidden><span class="sh-eyes-ic" aria-hidden="true">◐</span><span id="shEyesTxt"></span></span>
-            <span class="sh-goal" id="shGoal" hidden><span class="sh-goal-ic" aria-hidden="true">◎</span><span id="shGoalTxt"></span><button class="sh-lnk" id="shGoalClear" type="button">Clear goal</button></span>
+            <span class="sh-goal sh-goalcard" id="shGoal" hidden><span class="gc-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1" fill="currentColor"/></svg></span><span class="gc-lab">Goal</span><span id="shGoalTxt" class="gc-txt"></span><span id="shGoalState" class="gc-state"></span><span id="shGoalMeta" class="gc-meta"></span><button class="sh-lnk" id="shGoalClear" type="button">Clear goal</button></span>
             <span class="sh-work" id="shWork" hidden><span class="spin"></span><span id="shWorkTxt">Working</span><span class="tm" id="shWorkTm"></span></span>
             <span class="sh-warn" id="shWarn" hidden><span id="shWarnTxt"></span><button class="sh-lnk" id="shCompact" type="button">Summarise now</button></span>
             <span class="sh-team" id="shTeam" hidden><span id="shTeamTxt"></span><button class="sh-lnk" id="shTeamTry" type="button">Try it</button><button class="sh-lnk q" id="shTeamNo" type="button">Not now</button></span>
@@ -1724,7 +1777,9 @@ function renderQueue(v){
   qb.hidden = false;
 
   const head = el('div', 'qhead');
-  head.appendChild(el('span', '', 'Queued \u00b7 sends when this run finishes'));
+  head.appendChild(el('span', 'q-title', 'Up next'));
+  head.appendChild(el('span', 'q-count', String(n)));
+  head.appendChild(el('span', 'q-when', v.stopRequested ? 'waiting for you: press Send to go on' : 'sends when this run finishes'));
   const clearBtn = el('button', 'q-clear', 'Clear all');
   clearBtn.type = 'button';
   clearBtn.title = 'Cancel all queued messages';
@@ -1984,10 +2039,15 @@ function paintShelf(){
     const on = !!(g && g.status === 'active');
     gb.hidden = !on;
     if (on) {
-      const state = g.paused ? 'paused' + (g.pausedReason ? ' \u2014 ' + g.pausedReason : '') : (v.goalChecking ? 'checking\u2026' : 'working');
-      $('shGoalTxt').textContent = 'Goal: ' + g.condition + '  \u00b7  ' + state
-        + (g.runs ? '  \u00b7  ' + g.runs + ' run' + (g.runs === 1 ? '' : 's') + ', $' + Number(g.spent || 0).toFixed(2) : '');
+      // A card: what it is working toward, where it stands, what it has taken. It was one line of
+      // link-blue text, "Goal: ... \u00b7 working \u00b7 2 runs, $0.00".
+      const state = g.paused ? 'paused' : (v.goalChecking ? 'checking' : 'working');
+      $('shGoalTxt').textContent = g.condition;
       $('shGoalTxt').title = g.condition + (g.last && g.last.reason ? '\n\nLast check: ' + g.last.reason : '');
+      const st = $('shGoalState');
+      st.textContent = state; st.className = 'gc-state is-' + state;
+      st.title = g.paused && g.pausedReason ? g.pausedReason : '';
+      $('shGoalMeta').textContent = g.runs ? g.runs + ' run' + (g.runs === 1 ? '' : 's') + ' \u00b7 $' + Number(g.spent || 0).toFixed(2) : '';
     }
   }
   const th = $('shTeam'), hint = v && v.teamHint;
@@ -2685,16 +2745,31 @@ function addUser(text, attachParts){
  * marked as steering so it is clear it directs the run's next turn rather than asking for something
  * new. It is NOT sent as a message of its own -- the text rides along with the queued message.
  */
-function addSteer(text){
-  const b = el('div', 'user');
+/**
+ * What you said while it worked: a compact note in your colour, saying whether Vox has read it yet.
+ * It was a full message bubble headed "STEERING CONVERSATION" that looked the same whether the run
+ * had picked it up or not. `rides` is a note on a queued message that goes out with it.
+ */
+function addSteer(text, rides){
+  const b = el('div', 'user steer ' + (rides ? 'rides' : 'pending'));
   const tag = el('div', 'steer-tag');
   tag.appendChild(trIcon('send'));
-  const lab = el('span', '', 'Steering conversation');
+  const lab = el('span', 'steer-lab', 'You steered');
   tag.appendChild(lab);
+  tag.appendChild(el('span', 'steer-state', rides ? 'Goes with your queued message' : 'Waiting for Vox to read it'));
   b.appendChild(tag);
-  const t = el('div'); t.textContent = text || ''; b.appendChild(t);
+  const t = el('div', 'steer-text'); t.textContent = text || ''; b.appendChild(t);
   const r = RR(); if(r){ r.appendChild(b); followThread(true); }
   return b;
+}
+/** The run picked up a steer (its 'steered' event): its note says so. */
+function markSteerRead(v, text){
+  if (!v || !v.root) return;
+  const notes = [...v.root.querySelectorAll('.user.steer.pending')];
+  const n = notes.reverse().find((x) => (x.querySelector('.steer-text') || {}).textContent === text) || notes[0];
+  if (!n) return;
+  n.classList.remove('pending'); n.classList.add('read');
+  const st = n.querySelector('.steer-state'); if (st) st.textContent = 'Vox has read it';
 }
 function setStatus(t){ const v = RT(); if(!v) return; setActivity(v, t.charAt(0).toUpperCase() + t.slice(1).replace(/\u2026$/, '')); }
 function clearStatus(){ const v = RT(); if(v && v.statusEl){ v.statusEl.remove(); v.statusEl = null; } }
@@ -2713,17 +2788,52 @@ function feedToken(v, text){
   v.pending += text;
   startTyping(v);
 }
+/**
+ * Where the finished paragraphs end: after the last blank line that is not inside a code fence.
+ * Everything before it is settled; only the paragraph after it is still being written.
+ */
+function settledUpTo(text){
+  let at = 0, fence = false;
+  const re = /```|\n[ \t]*\n/g;
+  let m;
+  while ((m = re.exec(text))) {
+    if (m[0] === '```') fence = !fence;
+    else if (!fence) at = m.index + m[0].length;
+  }
+  return at;
+}
+/**
+ * The answer as it streams, formatted as it goes. It was raw text typed out character by character
+ * -- "**bold**", "#" headings and table pipes as written -- then swapped for the formatted answer at
+ * the end, which jumped; and the whole answer was rebuilt every 16 ms. Now each paragraph is drawn
+ * once, fading in, when it is finished; only the one being written is redrawn, with the caret at
+ * its end. The final draw (finalizeStream) is the same text whole, so nothing jumps.
+ */
 function paintTyped(v){
-  if(!v.curStream) return;
-  // plain-text typewriter: caret trails the chars as they appear
-  v.curStream.innerHTML = '';
-  const pre = document.createElement('span');
-  pre.className = 'typewrap';
-  pre.textContent = holdRaw(v.shown);
-  v.curStream.appendChild(pre);
+  const box = v.curStream;
+  if(!box) return;
+  const text = holdRaw(v.shown);
+  const cut = settledUpTo(text);
+  if (!box._live || !box.contains(box._live)) {
+    box.textContent = '';
+    box._settled = 0;
+    box._live = el('div', 'md-live');
+    box.appendChild(box._live);
+  }
+  if (cut > box._settled) {
+    const part = el('div', 'md-part');
+    part.innerHTML = renderVTE(text.slice(box._settled, cut));
+    box.insertBefore(part, box._live);
+    box._settled = cut;
+  }
+  const live = text.slice(box._settled);
+  box._live.innerHTML = live.trim() ? renderVTE(live) : '';
   const cur = document.createElement('span');
   cur.className = 'cursor';
-  v.curStream.appendChild(cur);
+  // The caret sits at the end of the words, not on a line of its own under them.
+  let at = box._live;
+  while (at.lastElementChild && !/^(PRE|TABLE|IMG|HR|BR)$/.test(at.lastElementChild.tagName)) at = at.lastElementChild;
+  at.appendChild(cur);
   followThread();
 }
 function startTyping(v){
@@ -5186,6 +5296,7 @@ async function openSession(id){
   if (v.curStream) { try { v.curStream.classList.remove('live'); } catch {} v.curStream = null; }
   if (v.curRun) { v.curRun = null; }
   v.latestTool = null;
+  foldTurns(v);   // finished turns read as your message, a few steps and the answer
   const prevView = actView();
   if (prevView && prevView !== v) stashDraft(prevView);
   activeId = id; tellMainSession();
@@ -5448,7 +5559,7 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
   if (event.type === 'user_input' && event.inputId) (v.shownInputs || (v.shownInputs = new Set())).add(event.inputId);
   if (event.type === 'goal') { onGoalEvent(v, event); T = null; return; }
   if (event.type === 'loop') { onLoopEvent(v, event); T = null; return; }
-  if (event.type === 'run_summary') { if (Number(event.ms) >= 1000 && v.root) { v.root.appendChild(tookLine(event)); if (v === actView()) followThread(); } teamHintAfter(v, event); T = null; return; }
+  if (event.type === 'run_summary') { if (Number(event.ms) >= 1000 && v.root) { v.root.appendChild(tookLine(event)); if (v === actView()) followThread(); } foldTurns(v); teamHintAfter(v, event); T = null; return; }
   // A finished run takes its approval, if one was still showing, with it.
   if (['done', 'error', 'cancelled', 'limit_reached', 'budget_reached'].includes(event.type) && v.perm) {
     clearTimeout(v.perm.timer); v.perm = null; v.permQueue = []; if (sid === activeId) paintAsk();
@@ -5585,6 +5696,7 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
     // The run's changes belong on the strip: it was only re-read when a run hit a
     // limit, so an ordinary finish left "No uncommitted changes" beside a changed file.
     refreshSessionList(); refreshUsage(); if (sid === activeId) refreshCtx();
+    foldTurns(v);
     drainQueue(sid);
   } else if (event.type === 'display') {
     // The page web_fetch read belongs to its "Fetched" row, one click away -- it was a
@@ -5665,6 +5777,7 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
       // message stayed in the queue and was never steered (found in a live run).
         const vt = viewStore.get(sid);
         const w = String(event.text || '').trim();
+        markSteerRead(vt, w);   // its note in the thread now says Vox has read it
         // Traced because "the row stayed in the UI" is otherwise unanswerable: this line shows the
         // event arriving, whether a view was found, and which branch matched. 'whole=-1' means the
         // row was NOT sent by the Steer button (steeredWhole is only set there), so only its note
@@ -7188,6 +7301,7 @@ function stopCurrent(){
   if (!v || !v.busy) { updateSendState(); return; }
   // Stop means stop: queued messages wait for you rather than starting the next run.
   v.stopRequested = true;
+  renderQueue(v);   // its header now says the queue waits for you
   // A goal waits for you instead of starting its next run.
   if (v.goal && v.goal.status === 'active') { try { window.voxai.goalPause(v.id); } catch {} }
   const keys = [...(v.runKeys || [])];
@@ -7674,6 +7788,74 @@ async function goalCommand(v, text){
 }
 
 /** How long a run took, what it cost, how many tokens: one quiet line under its answer. */
+/**
+ * A finished turn folds the way Codex shows one: your message, the last few actions faded in a
+ * preview with "Show all N steps" under them, then the answer. Everything it did in between --
+ * narration, every action, every step -- used to stay open, so a long run pushed your question and
+ * its answer screens apart. The turn still running, and one that ended without an answer (stopped,
+ * an error), stay open. Safe to call again: a folded turn is left alone, except that a "Worked
+ * for ..." line that arrives after the fold is taken into its button.
+ */
+function foldTurns(v){
+  if (!v || !v.root) return;
+  const kids = [...v.root.children];
+  let start = -1;
+  for (let i = 0; i <= kids.length; i++) {
+    if (i < kids.length && !kids[i].classList.contains('user')) continue;
+    if (start >= 0) foldTurn(v, kids.slice(start + 1, i), i === kids.length);
+    start = i;
+  }
+}
+function foldTurn(v, items, last){
+  if (last && v.busy) return;
+  const took = items.find((e) => e.classList.contains('run-took'));
+  const done = items.find((e) => e.classList.contains('turn-work'));
+  if (done) {
+    if (took && !done._took) { done._took = took.dataset.summary || took.textContent.trim(); done._paint(); done.querySelector(':scope > .turn-body').appendChild(took); }
+    return;
+  }
+  // The answer: the last message after which nothing more was done.
+  let ans = -1;
+  for (let i = items.length - 1; i >= 0; i--) {
+    if (items[i].classList.contains('run')) break;
+    if (items[i].classList.contains('md') && (items[i].textContent || '').trim()) { ans = i; break; }
+  }
+  if (ans < 1) return;
+  const work = items.slice(0, ans);
+  const rows = work.flatMap((e) => (e.classList.contains('toolrow') ? [e] : [...e.querySelectorAll('.toolrow')]));
+  if (!rows.length) return;   // it only talked: nothing to fold
+  const box = el('div', 'turn-work folded');
+  work[0].before(box);
+  const peek = el('div', 'turn-peek');
+  peek.setAttribute('aria-hidden', 'true');
+  for (const r of rows.slice(-3)) {
+    const top = r.querySelector(':scope > .top');
+    if (!top) continue;
+    const c = top.cloneNode(true);
+    c.removeAttribute('role'); c.removeAttribute('title'); c.removeAttribute('aria-expanded');
+    peek.appendChild(c);
+  }
+  const body = el('div', 'turn-body');
+  for (const e of work) body.appendChild(e);
+  const btn = el('button', 'turn-toggle'); btn.type = 'button';
+  // The button says how long it took; the full line, with where the money went, opens with the steps.
+  box._took = took ? (took.dataset.summary || took.textContent.trim()) : '';
+  if (took) body.appendChild(took);
+  box._paint = () => {
+    const open = !box.classList.contains('folded');
+    const n = rows.length;
+    btn.textContent = '';
+    const chev = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    chev.setAttribute('viewBox', '0 0 24 24'); chev.innerHTML = '<path d="M6 9l6 6 6-6"/>';
+    btn.appendChild(chev);
+    btn.appendChild(document.createTextNode(open ? 'Hide the steps' : 'Show all ' + n + (n === 1 ? ' step' : ' steps')));
+    if (box._took) { const t = el('span', 'turn-took'); t.textContent = box._took; btn.appendChild(t); }
+    btn.setAttribute('aria-expanded', String(open));
+  };
+  btn.onclick = () => { box.classList.toggle('folded'); box._paint(); };
+  box.appendChild(peek); box.appendChild(body); box.appendChild(btn);
+  box._paint();
+}
 function tookLine(r){
   const ms = Math.max(0, Number(r.ms) || 0), s = Math.round(ms / 1000);
   const dur = s < 60 ? s + 's' : s < 3600 ? Math.floor(s / 60) + 'm ' + (s % 60) + 's' : Math.floor(s / 3600) + 'h ' + Math.floor((s % 3600) / 60) + 'm';
@@ -7684,6 +7866,7 @@ function tookLine(r){
   const t = Number(r.tokens) || 0;
   if (t > 0) bits.push((t >= 1e6 ? (t / 1e6).toFixed(1) + 'M' : t >= 1e3 ? Math.round(t / 1e3) + 'k' : t) + ' tokens');
   const line = el('div', 'run-took', esc(bits.join(' \u00b7 ')));
+  line.dataset.summary = bits.join(' \u00b7 ');   // what a folded turn's button says (foldTurns)
   // Where the money went (main.js, backend/costs.js): shown when there was money to speak of.
   const parts = Array.isArray(r.parts) ? r.parts : [], extras = Array.isArray(r.extras) ? r.extras : [];
   if (c >= 0.01 && (parts.length || extras.length)) {
@@ -7811,7 +7994,7 @@ async function send(){
     $('prompt').value = '';
     clearAttachments();
     renderQueue(v);
-    T = v; addSteer(text); T = null;
+    T = v; addSteer(text, true); T = null;
     // Nothing is running here, so the note rides along when this message finally sends: the row
     // keeps it (.steer is appended by drainQueue). steerLive() would find nothing to steer.
     return;

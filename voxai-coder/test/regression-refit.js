@@ -2046,7 +2046,16 @@ async function drain(gen) {
   {
     const HTML = read('src/renderer/index.html');
     const src = /function tookLine\(r\)\{[\s\S]*?\n\}/.exec(HTML);
-    const tl = vm.runInNewContext(`(() => { ${src[0]}; return tookLine; })()`, { el: (t, c, h) => ({ cls: c, text: h }), esc: (x) => x });
+    const tl = vm.runInNewContext(`(() => { ${src[0]}; return tookLine; })()`, { el: (t, c, h) => ({ cls: c, text: h, dataset: {} }), esc: (x) => x });
+    // A streamed answer is formatted as it goes: finished paragraphs are drawn once, and a blank
+    // line inside a code fence does not end one.
+    const su = vm.runInNewContext(`(() => { ${/function settledUpTo\(text\)\{[\s\S]*?\n\}/.exec(HTML)[0]}; return settledUpTo; })()`);
+    check('a streamed answer settles at paragraph ends, never inside a code block', su('One.\n\nTwo') === 6 && su('Code:\n\n```js\na\n\nb') === 7 && su('no break yet') === 0,
+      [su('One.\n\nTwo'), su('Code:\n\n```js\na\n\nb'), su('no break yet')]);
+    check('a finished turn folds to your message, a few steps and the answer: at its end, when its time arrives, and on reopening',
+      HTML.includes('function foldTurns(v){') && HTML.includes('    foldTurns(v);\n    drainQueue(sid);') && HTML.includes('} foldTurns(v); teamHintAfter(v, event);')
+      && HTML.includes('  foldTurns(v);   // finished turns read as your message, a few steps and the answer'), 'fold');
+    check('the goal is a card whose state is plain words, not a capsule', HTML.includes('class="sh-goal sh-goalcard" id="shGoal"') && HTML.includes(".gc-state{flex:none;font:500 12px Chivo,sans-serif;color:var(--mut)}"), 'goal');
     check('"Worked for 23m 14s · $0.38 · 8.7M tokens"', tl({ ms: 1394000, cost: 0.38, tokens: 8700000, end: 'done' }).text === 'Worked for 23m 14s · $0.38 · 8.7M tokens', tl({ ms: 1394000, cost: 0.38, tokens: 8700000, end: 'done' }));
     check('short, stopped and hour-long runs read right', tl({ ms: 9000, cost: 0.004, tokens: 12000, end: 'cancelled' }).text === 'Stopped after 9s · <$0.01 · 12k tokens'
       && tl({ ms: 3900000, end: 'done' }).text === 'Worked for 1h 5m', [tl({ ms: 9000, cost: 0.004, tokens: 12000, end: 'cancelled' }).text, tl({ ms: 3900000 }).text]);
@@ -2694,8 +2703,9 @@ async function drain(gen) {
     check('main keeps an inbox per session: agent:steer fills it while a run is live, the run drains it each turn, and an unread one is cleared when the run ends',
       Ms.includes("ipcMain.handle('agent:steer', (_e, { sessionId, text } = {}) => {") && Ms.includes('checkSteer: steerTake,') && Ms.includes('const steerTake = steerFor(sessionId);')
       && Ms.includes("const left = steerClear(sessionId);") && Ps.includes("agentSteer: (sessionId, text) => ipcRenderer.invoke('agent:steer', { sessionId, text }),"), 'main');
-    check('the page: Steer sends into the running turn, shows a "Steering conversation" bubble, and the row leaves the queue once the run has read it',
-      Hs.includes('async function steerLive(v, text) {') && Hs.includes("const lab = el('span', '', 'Steering conversation');") && Hs.includes("} else if (event.type === 'steered') {")
+    check('the page: Steer sends into the running turn, shows a "You steered" note that says when Vox has read it, and the row leaves the queue once the run has read it',
+      Hs.includes('async function steerLive(v, text) {') && Hs.includes("const lab = el('span', 'steer-lab', 'You steered');") && Hs.includes("} else if (event.type === 'steered') {")
+      && Hs.includes('markSteerRead(vt, w);')
       && Hs.includes('vt.queue.splice(whole, 1); syncSteer(vt); renderQueue(vt);') && Hs.includes('if (await steerQueuedNow(v, item)) return;'), 'page');
     check('a queue left waiting by a missed end event still sends (checked every 3 s, after asking main whether a run is really alive)', Hs.includes('async function drainQueue(sid, byHand){') && Hs.includes("try { live = await window.voxai.agentLive(sid); } catch { /* treat as not running */ }") && Hs.includes('}, 3000);'), 'watchdog');
   }
