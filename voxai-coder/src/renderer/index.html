@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-sG004sP81uFNB3MgF4Eyt2p0ye9vuRYZ/PEZvUmHYPs='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-nZ6i6rWnypH51FZA+sjWjGM1UTkjCUi3cH4Z+JBifMQ='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -7824,6 +7824,10 @@ async function send(){
 async function doSend(v, text, parts){
   v._goalPausedShown = null;   // a message picks a paused goal up; a later pause is news
   T = v; const bubble = addUser(text, parts); T = null;
+  // A message you send is a new run: an earlier Stop is over. Only slash commands, loops and goals
+  // cleared it, so after one Stop every message queued behind a later run waited for good -- the
+  // drain and its watchdog both still read "stopped".
+  v.stopRequested = false;
   v.busy = true; v.runT0 = Date.now(); v.activity = 'Thinking'; v.planLive = false;
   if (v === actView()) $('runDot').style.display = 'block';
   updateSendState(); refreshSessionList(); paintShelf();

@@ -249,6 +249,10 @@ async function drain(gen) {
     // A run with a queue could not be stopped; Stop then sent the queue.
     check('the button stops a run that has a queue', /if \(busy && !hasText\) \{\s*btn\.classList\.add\('stop'\)/.test(HTML), 'Send while queued');
     check('after Stop the queue waits', HTML.includes('if (v && v.stopRequested && !byHand)') && HTML.includes('v.stopRequested = true;'), 'Stop sends the queue');
+    // After one Stop, a message you send started a run with Stop still set, and everything queued
+    // behind that run waited for good: the drain and its watchdog both read "stopped".
+    const sendFn = HTML.slice(HTML.indexOf('async function doSend(v, text, parts){'), HTML.indexOf('const r = await window.voxai.agentSend(sid, text, parts);'));
+    check('a message you send ends an earlier Stop, so what is queued behind its run goes out', /\bv\.stopRequested = false;/.test(sendFn), 'stuck queue');
     check('an empty box sends the next queued message', HTML.includes('if (!text && !v.busy && v.queue && v.queue.length) { drainQueue(v.id, true); return; }'), 'dead Send');
     check('Stop reads as stopped, not an error', HTML.includes("el('div', 'fold', 'stopped')"), 'shown as Error');
 
