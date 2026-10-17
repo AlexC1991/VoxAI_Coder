@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-j5WDAcmIGPC6+IiBCO5nrau9o87AnCo24lnccaKBLDE='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-j/GIyM/3wLDb3Cav35aQlChHiovnB9Ggi9Szvj0obcs='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -3180,8 +3180,13 @@ const BASE_VERB = {
   'Called': 'Call', 'Checked sub-agents': 'Check sub-agents', 'Checked access': 'Check access',
 };
 const verbFor = (look, rec) => (rec && rec.ok === false ? (BASE_VERB[look.verb] || look.verb) : look.verb);
-/** What goes in the chip: a file's name (its path on hover), the command, the query. */
+/** A chip is a short label: a whole remembered fact or query ran across the row. All of it is on hover. */
 function rowChip(name, args){
+  const c = rowChipText(name, args);
+  return c && c.text.length > 72 ? { text: c.text.slice(0, 71).trimEnd() + '…', title: c.title || c.text } : c;
+}
+/** What goes in the chip: a file's name (its path on hover), the command, the query. */
+function rowChipText(name, args){
   const a = args || {};
   const base = (p) => String(p || '').split(/[\\/]/).filter(Boolean).pop() || String(p || '');
   if ((name === 'read' || name === 'write' || name === 'edit' || name === 'patch') && a.path) return { text: base(a.path), title: String(a.path) };
@@ -3310,11 +3315,14 @@ function shSteps(command){
   };
   for (let i = 0; i < s.length; i++) {
     const c = s[i], two = s.slice(i, i + 2);
-    if (quote) { if (c === '\\') cur += s[i++] || ''; else if (c === quote) quote = ''; cur += c; continue; }
+    // A backslash escapes only the quote or another backslash: "C:\Users\x" keeps every letter.
+    if (quote) { if (c === '\\' && (s[i + 1] === quote || s[i + 1] === '\\')) { cur += c + s[i + 1]; i++; continue; } if (c === quote) quote = ''; cur += c; continue; }
     if (c === "'" || c === '"' || c === '`') quote = c;
     else if (c === '(' || c === '{') depth++;
     else if (c === ')' || c === '}') depth = Math.max(0, depth - 1);
     else if (!depth && (two === '&&' || two === '||')) { flush(two); i++; continue; }
+    // cmd chains steps with a single "&" (bash backgrounds the step before it): either way, a new step.
+    else if (!depth && c === '&' && s[i - 1] !== '>' && s[i + 1] !== '>' && s[i - 1] !== '<') { flush('&'); continue; }
     else if (!depth && (c === ';' || c === '\n') && !cur.endsWith('\\')
       && !(/^\s*(for|while|until|if|case|select)\b/.test(cur) && !/\b(done|fi|esac)\s*$/.test(cur))) { flush(c === ';' ? ';' : ''); continue; }
     cur += c;
@@ -3323,14 +3331,37 @@ function shSteps(command){
   return steps;
 }
 const shProgram = (step) => (String(step).replace(/^[({\s]+/, '').split(/\s+/).find((w) => !/^[A-Za-z_]\w*=/.test(w)) || '');
+/** A step that only waits, prints a heading or sets the stage: a row is named after the first other one. */
+const shQuiet = (step) => SH_QUIET.has(shProgram(step)) || /^(ping\s+-n\s+\d+\s+127\.0\.0\.1|timeout\s+\/t\s|Start-Sleep\b)/i.test(String(step).trim());
+/**
+ * A step as a short label for its row: what it runs and on what, without where its output goes
+ * (2>NUL, 2>&1, > log), the filters it pipes into, quotes around plain paths, or the branches of an
+ * "if". `dir /b /s "A:\tmp\x" 2>NUL | findstr y` reads "dir /b /s A:\tmp\x"; the whole command
+ * is on hover and in the detail. Redirections and pipes are only looked for outside quotes.
+ */
+function shortStep(step){
+  const parts = String(step || '').replace(/\s+/g, ' ').trim().split(/("[^"]*"|'[^']*')/);
+  let out = '', dropNext = false;
+  for (let i = 0; i < parts.length; i++) {
+    let part = parts[i];
+    if (i % 2) { if (dropNext) dropNext = false; else out += /^["'][^\s"']+["']$/.test(part) ? part.slice(1, -1) : part; continue; }
+    const pipe = part.search(/(?<!\|)\|(?!\|)/);
+    if (pipe >= 0) part = part.slice(0, pipe);
+    part = part.replace(/\s*\d?>&\d/g, '').replace(/\s*(?:\d|&)?>>?\s*(\S+)?/g, (_, target) => { if (!target) dropNext = true; return ''; });
+    out += part;
+    if (pipe >= 0) break;
+  }
+  const text = out.replace(/^(if\s+(?:not\s+)?exist\s+\S+).*$/i, '$1').replace(/\s+/g, ' ').trim();
+  return text.length > 64 ? text.slice(0, 63).trimEnd() + '\u2026' : text;
+}
 /** A command's row: its past verb, its main step or script, and "+N steps". */
 function shellLook(command){
   const { scripts, rest } = shHeredocs(command);
   const steps = shSteps(rest).filter((st) => shProgram(st.text) !== 'cd');
-  const main = steps.find((st) => !SH_QUIET.has(shProgram(st.text))) || steps[0];
+  const main = steps.find((st) => !shQuiet(st.text)) || steps[0];
   const script = scripts.find((sc) => rest.includes(sc.path) || rest.includes(sc.path.split('/').pop()));
   const others = steps.length - (main ? 1 : 0);
-  let verb = 'Ran', target = (main ? main.text : String(command || '').replace(/\s+/g, ' ')).slice(0, 140);
+  let verb = 'Ran', target = shortStep(main ? main.text : String(command || ''));
   if (script) { verb = /test|spec|check/i.test(script.path) ? 'Ran a test script' : 'Ran a script'; target = script.path; }
   else if (scripts.length && !main) { verb = 'Wrote a script'; target = scripts[0].path; }
   return { verb, target, more: others > 0 ? '+' + others + (others === 1 ? ' step' : ' steps') : '', scripts, rest };
