@@ -1,9 +1,28 @@
-# VoxAI Coder: the app
+<div align="center">
+
+```
+██╗   ██╗ ██████╗ ██╗  ██╗ █████╗ ██╗    ██████╗ ██████╗ ██████╗ ███████╗██████╗
+██║   ██║██╔═══██╗╚██╗██╔╝██╔══██╗██║   ██╔════╝██╔═══██╗██╔══██╗██╔════╝██╔══██╗
+██║   ██║██║   ██║ ╚███╔╝ ███████║██║   ██║     ██║   ██║██║  ██║█████╗  ██████╔╝
+╚██╗ ██╔╝██║   ██║ ██╔██╗ ██╔══██║██║   ██║     ██║   ██║██║  ██║██╔══╝  ██╔══██╗
+ ╚████╔╝ ╚██████╔╝██╔╝ ██╗██║  ██║██║   ╚██████╗╚██████╔╝██████╔╝███████╗██║  ██║
+  ╚═══╝   ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝    ╚═════╝ ╚═════╝ ╚═════╝ ╚══════╝╚═╝  ╚═╝
+```
+
+**The app: working on the code**
+
+`[ Electron 44 ]`  `[ Node agent loop ]`  `[ MIT ]`
+
+</div>
 
 This folder is the Electron app. What it does, downloads and the first run are in the
-[README at the repository root](../README.md); this page is for working on the code.
+[README at the repository root](../README.md).
 
-## Run, test, build
+![VoxAI Coder: the chat and the preview](../docs/screenshots/chat-and-preview.png)
+
+---
+
+## ▓▒░ Run, test, build
 
 ```bash
 npm install
@@ -16,28 +35,64 @@ npm run release -- --notes "..."   # sign update.json and publish to CodeRook
 ```
 
 `src/renderer/index.html` carries a CSP hash for its inline script. Any edit to it needs
-`node scripts/csp.js` (start, dev, test and dist run it for you).
+`node scripts/csp.js`; start, dev, test and dist run it for you.
 
-## Where things are
+---
 
-| Path | What is there |
-|---|---|
-| `src/main/main.js` | Electron main: settings and keychain, sessions, runs, model catalogue, OpenRouter account, IPC |
-| `src/main/updater.js` | Auto-update from the CodeRook feed; checks the signed manifest |
-| `src/main/local-engine.js`, `hf.js` | llama.cpp engine for local models; Hugging Face search and downloads |
-| `src/main/terminal.js`, `interactive.js` | The terminal panel and interactive commands |
-| `src/preload/preload.js` | The context-isolated bridge, `window.voxai.*` |
-| `src/backend/agent.js` | The agent loop: prompt, tool calls, checks, events for the UI |
-| `src/backend/providers/openrouter.js` | Streaming provider (OpenRouter and local llama-server) |
-| `src/backend/team.js` | Team mode: a planner model and a cheaper coder |
-| `src/backend/prefix.js`, `profiles.js`, `prune.js`, `stuck.js`, `projectfacts.js`, `coststats.js` | Token and cost savings: the cached prompt, per-model cache and price rules, pruning, the stuck detector, project facts, cost per message |
-| `src/backend/compact.js` | Summarises long sessions |
-| `src/backend/sessions.js` | Session store (JSONL per session) |
-| `src/backend/commands.js` | Slash commands: `/goal`, `/review`, `/init`, `/rewind`, `/loop` |
-| `src/backend/tools/` | The tools: files, patch, shell and terminal, search, memory, skills, MCP, sub-agents, web search and fetch, preview browser, worktrees, snapshots |
-| `src/backend/cu/` | Computer use: Chrome/Edge over CDP and native Windows control (UI Automation) |
-| `src/renderer/index.html` | The whole UI |
-| `resources/skills/` | Built-in skills |
-| `resources/update-key.pem` | The **public** update key. The private key never goes in this repo. |
-| `test/` | Regression tests (`npm test` runs them all) |
-| `scripts/` | Build, CSP, release and icon helpers |
+## ▓▒░ How a run flows
+
+```
+  renderer (index.html)            main (main.js)                backend (agent.js)
+ ┌─────────────────────┐  IPC   ┌─────────────────────┐       ┌──────────────────────┐
+ │ chat, settings,     │ ─────▶ │ settings, keychain, │ ────▶ │ prompt + tools       │
+ │ preview, terminal   │        │ sessions, runs      │       │   │                  │
+ │                     │ ◀───── │                     │ ◀──── │   ▼                  │
+ └─────────────────────┘ events └─────────────────────┘ yield │ provider ─▶ model    │
+        preload.js                                            │   │                  │
+     (window.voxai.*)                                         │   ▼                  │
+                                                              │ tool calls ─▶ tools/ │
+                                                              └──────────────────────┘
+```
+
+---
+
+## ▓▒░ Where things are
+
+```
+src/
+├── main/
+│   ├── main.js            settings + keychain, sessions, runs, model catalogue, IPC
+│   ├── updater.js         auto-update from the CodeRook feed; checks the signed manifest
+│   ├── local-engine.js    llama.cpp engine for local models
+│   ├── hf.js              Hugging Face search and downloads
+│   └── terminal.js        the terminal panel (interactive.js: commands that need one)
+├── preload/preload.js     the context-isolated bridge, window.voxai.*
+├── backend/
+│   ├── agent.js           the agent loop: prompt, tool calls, checks, events for the UI
+│   ├── providers/         streaming provider (OpenRouter and local llama-server)
+│   ├── team.js            Team mode: a planner model and a cheaper coder
+│   ├── commands.js        /goal  /review  /init  /rewind  /loop
+│   ├── compact.js         summarises long sessions
+│   ├── sessions.js        session store (JSONL per session)
+│   ├── prefix.js          the fixed session prompt the provider can cache
+│   ├── profiles.js        per-model cache style and price tiers
+│   ├── prune.js           old tool output pruned in batches
+│   ├── stuck.js           notices when the model goes in circles
+│   ├── projectfacts.js    project overview, commands and the memory worth sending
+│   ├── coststats.js       what a message costs on each model
+│   ├── tools/             files, patch, shell + terminal, search, memory, skills, MCP,
+│   │                      sub-agents, web search + fetch, preview, worktrees, snapshots
+│   └── cu/                computer use: Chrome/Edge over CDP, native Windows (UIA)
+└── renderer/index.html    the whole UI
+
+resources/skills/          built-in skills
+resources/update-key.pem   the PUBLIC update key; the private key never goes in this repo
+test/                      regression tests (npm test runs them all)
+scripts/                   build, CSP, release and icon helpers
+```
+
+---
+
+## ▓▒░ License
+
+[MIT](../LICENSE), like the rest of the repository.
