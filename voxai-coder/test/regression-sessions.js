@@ -177,6 +177,48 @@ function loadWith(file, stubs) {
   check('the marker the agent writes is the one the renderer reads', TOOL_IMAGES_MARKER === '[VOX TOOL SCREENSHOTS]', TOOL_IMAGES_MARKER);
   check('compaction still writes its marker', read('src/backend/compact.js').includes('[VOX COMPACTED CONTEXT]'), 'renamed');
 
+  // ------------------------------------------------------------------ [CR]
+  // A real session's whole memory became 480 characters of nested recaps: each one took the last
+  // recap as "the goal", cut to 400 characters. What the user asked was gone.
+  console.log('\n[CR] a compacted session keeps what the user asked, and what is done');
+  {
+    const { compactSession } = require(path.join(ROOT, 'src/backend/compact.js'));
+    const turn = (i) => [
+      { role: 'assistant', content: `Step ${i} done.`, tool_calls: [{ id: 'w' + i, type: 'function', function: { name: 'write', arguments: JSON.stringify({ path: `src/part${i}.js`, content: 'x' }) } }] },
+      { role: 'tool', tool_call_id: 'w' + i, content: i === 3 ? 'DENIED_OR_ERROR: the disk is full' : 'x'.repeat(900) },
+    ];
+    const brief = 'Build a tower defence game with a level editor. ' + 'Waves get harder each round. '.repeat(30);
+    const s = {
+      todos: [{ text: 'Map and towers', done: true }, { text: 'Level editor', done: false }],
+      messages: [
+        { role: 'user', content: brief },
+        ...turn(1), ...turn(2),
+        { role: 'user', content: [{ type: 'text', text: 'Make the towers blue' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,AAAA' } }] },
+        { role: 'user', content: '[VOX PLAN] Before you finish: your plan has open steps.' },
+        ...turn(3), ...turn(4),
+        { role: 'user', content: '[VOX STEER] The user sent this while you were working: also add a pause button' },
+        ...Array.from({ length: 12 }, (_, i) => turn(5 + i)).flat(),
+      ],
+    };
+    compactSession(s, { contextLimit: 8000, force: true, keepRecent: 2 });
+    const first = s.messages[0].content;
+    check('the brief is kept in full, not cut to 400 characters', first.includes(brief.trim()), first.slice(0, 300));
+    check('a request sent with a picture is kept, and says so', first.includes('Make the towers blue (with 1 picture)'), 'lost');
+    check('words sent while it worked are the user\'s; the app\'s own notes are not', first.includes('also add a pause button') && !first.includes('Before you finish'), 'mixed');
+    check('the newest request is marked current', /\d+\. \[current\] \(sent while you were working\) also add a pause button/.test(first), 'unmarked');
+    check('it says which files are done, where the plan stands and what failed', first.includes('src/part1.js') && first.includes('[open] Level editor') && first.includes('the disk is full'), 'missing');
+    // Compact again: the last recap is carried forward, never nested inside the new one.
+    s.messages.push({ role: 'user', content: 'Now add sound' }, ...Array.from({ length: 12 }, (_, i) => turn(30 + i)).flat());
+    compactSession(s, { contextLimit: 8000, force: true, keepRecent: 2 });
+    const again = s.messages[0].content;
+    check('a second compaction carries the requests forward without nesting', (again.match(/VOX COMPACTED CONTEXT/g) || []).length === 1
+      && again.includes('Build a tower defence game') && again.includes('[current] Now add sound') && again.includes('src/part1.js'), again.slice(0, 400));
+    // A recap the old compactor nested is dropped, not carried on.
+    const old = { messages: [{ role: 'user', content: '[VOX COMPACTED CONTEXT]\n### Prior session context (compacted)\nGoal/direction: [VOX COMPACTED CONTEXT]' }, { role: 'user', content: 'fix the save menu' }, ...Array.from({ length: 12 }, (_, i) => turn(i)).flat()] };
+    compactSession(old, { contextLimit: 8000, force: true, keepRecent: 2 });
+    check('an old nested recap is dropped', !old.messages[0].content.includes('Prior session context') && old.messages[0].content.includes('fix the save menu'), old.messages[0].content.slice(0, 300));
+  }
+
   // ------------------------------------------------------------------ [AS]
   console.log('\n[AS] sub-agent timeout units');
   {

@@ -24,7 +24,7 @@
  */
 
 const COMPACT_KEEP_RECENT = 16;          // fallback guard: always keep this many messages
-const MAX_SUMMARY_CHARS = 6000;
+const MAX_SUMMARY_CHARS = 14000;  // the most a recap takes; a small context gets less (compactSession)
 
 function envNum(name, fallback) {
   const raw = process.env[name];
@@ -116,39 +116,140 @@ function splitPoint(msgs, recentTokensMax, keepMin = COMPACT_KEEP_RECENT) {
   return splitAt;
 }
 
-/** Build the terse recap from the oldest messages (no API call). */
-function buildRecap(old) {
-  const summaryBlocks = [];
-  let userGoal = '';
-  let chars = 0;
+/*
+ * The recap. It used to take the first user message as "the goal": after one compaction that
+ * message WAS the previous recap, so each recap nested the last one, cut to 400 characters, until
+ * a session's whole memory was 480 characters of "[VOX COMPACTED CONTEXT] ### Prior session
+ * context (compacted) Goal/direction: [VOX COMPACTED CONTEXT] ..." and nothing of what the user
+ * asked. It also skipped requests sent with attachments, counted the app's own notes ([VOX PLAN],
+ * [VOX GOAL]) as requests, filled up with the OLDEST tool output, and never said which files were
+ * done -- so the model lost what the user wanted, redid finished steps and went round in loops.
+ *
+ * Now: the user's requests in their own words (the newest marked current), carried forward from
+ * the previous recap rather than nested in it; the files changed; the plan; the newest progress
+ * notes and failures; and where the detail still is. Still free and local: no model call.
+ */
+const RECAP_HEAD = '### Earlier in this session (summarised; the newest messages follow below)';
+const SEC_REQUESTS = "The user's requests, in their words (oldest first):";
+const SEC_FILES = 'Files changed so far:';
+const SEC_PLAN = 'The plan:';
+const SEC_PROGRESS = 'Progress so far (newest last):';
+const SEC_PROBLEMS = 'Problems hit (newest last):';
+
+/** A user message's own words, or '' for the app's notes. Steering and commands are the user's. */
+function userWords(content) {
+  const parts = typeof content === 'string' ? [content]
+    : Array.isArray(content) ? content.filter((p) => p && p.type === 'text').map((p) => String(p.text || '')) : [];
+  const images = Array.isArray(content) ? content.filter((p) => p && p.type === 'image_url').length : 0;
+  const own = parts.map((t) => t.trim()).filter((t) => t && !/^\[VOX FILES\]/.test(t));
+  let text = own.join('\n\n').trim();
+  if (/^\[VOX STEER\]/.test(text)) text = text.replace(/^\[VOX STEER\]\s*The user sent this while you were working:\s*/, '(sent while you were working) ');
+  else if (/^\[VOX CMD\]/.test(text)) text = text.split('\n')[0].replace(/^\[VOX CMD\]\s*/, '');
+  else if (/^\[VOX[^\]]*\]/.test(text)) return '';
+  if (!text) return '';
+  return images ? `${text} (with ${images} ${images === 1 ? 'picture' : 'pictures'})` : text;
+}
+
+/** The sections of a recap this compactor wrote earlier (an old nested one yields nothing). */
+function readRecap(text) {
+  const out = { requests: [], files: [], progress: [], problems: [] };
+  if (!String(text).includes(RECAP_HEAD)) return out;
+  let section = '';
+  for (const line of String(text).split('\n')) {
+    if (line === SEC_REQUESTS) section = 'requests';
+    else if (line === SEC_FILES) section = 'files';
+    else if (line === SEC_PROGRESS) section = 'progress';
+    else if (line === SEC_PROBLEMS) section = 'problems';
+    else if (line === SEC_PLAN || line.startsWith('###') || line.startsWith('Carry on')) section = '';
+    else if (section === 'requests' && /^\d+\. /.test(line)) out.requests.push(line.replace(/^\d+\. (\[current\] )?/, ''));
+    else if (section === 'requests' && out.requests.length && line.startsWith('   ')) out.requests[out.requests.length - 1] += '\n' + line.slice(3);
+    else if (section === 'files' && line.trim()) out.files.push(...line.split(', ').map((f) => f.trim()).filter((f) => f && !/^\(\+\d+ more\)$/.test(f)));
+    else if ((section === 'progress' || section === 'problems') && line.startsWith('- ')) out[section].push(line.slice(2));
+  }
+  return out;
+}
+
+/** A tool call's arguments, parsed. */
+function callArgs(call) {
+  try { return JSON.parse((call.function && call.function.arguments) || '{}') || {}; } catch { return {}; }
+}
+
+/** Build the recap from the messages being folded away (no API call). */
+function buildRecap(old, opts = {}) {
+  const cap = Math.max(2500, Number(opts.maxChars) || MAX_SUMMARY_CHARS);
+  const requests = [], files = [], progress = [], problems = [];
   for (const m of old) {
-    if (chars >= MAX_SUMMARY_CHARS) break;
-    const c = m.content;
-    if (m.role === 'user' && typeof c === 'string') {
-      const t = c.trim();
-      if (t && t.length > 4) {
-        if (userGoal) summaryBlocks.push({ kind: 'user', text: t.slice(0, 400) });
-        else userGoal = t.slice(0, 400);
-        chars += t.length;
+    if (m.role === 'user') {
+      const raw = typeof m.content === 'string' ? m.content : '';
+      if (/^\[VOX COMPACTED CONTEXT\]/.test(raw)) {
+        const prev = readRecap(raw);
+        requests.push(...prev.requests); files.push(...prev.files);
+        progress.push(...prev.progress); problems.push(...prev.problems);
+        continue;
       }
-    } else if (m.role === 'assistant' && typeof c === 'string' && c && !m.tool_calls) {
-      const t = c.trim().slice(0, 300);
-      if (t) { summaryBlocks.push({ kind: 'assistant', text: t }); chars += t.length; }
-    } else if (m.role === 'tool' && typeof c === 'string' && c) {
-      let line = c.replace(/\s+/g, ' ').trim();
-      if (line.length > 160) line = line.slice(0, 160) + '…';
-      summaryBlocks.push({ kind: 'tool', text: line });
-      chars += line.length;
+      const words = userWords(m.content);
+      if (words.length > 1) requests.push(words);
+    } else if (m.role === 'assistant') {
+      const said = typeof m.content === 'string' ? m.content.replace(/\s+/g, ' ').trim() : '';
+      if (said) progress.push(said.length > 300 ? said.slice(0, 299) + '…' : said);
+      for (const call of m.tool_calls || []) {
+        const name = call.function && call.function.name, a = callArgs(call);
+        if (/^(write|edit|patch)$/.test(name) && a.path) files.push(String(a.path));
+        else if (name === 'fs' && (a.destination || a.path) && a.action !== 'stat') files.push(String(a.destination || a.path));
+      }
+    } else if (m.role === 'tool' && typeof m.content === 'string' && /^\s*DENIED_OR_ERROR:/.test(m.content)) {
+      const why = m.content.replace(/^\s*DENIED_OR_ERROR:\s*/, '').replace(/\s+/g, ' ').trim();
+      problems.push(why.length > 200 ? why.slice(0, 199) + '…' : why);
     }
   }
-  let recap = '### Prior session context (compacted)\n';
-  if (userGoal) recap += `Goal/direction: ${userGoal}\n\n`;
-  for (const b of summaryBlocks.slice(0, 40)) {
-    if (b.kind === 'user') recap += `- User asked: ${b.text}\n`;
-    else if (b.kind === 'assistant') recap += `- Done: ${b.text}\n`;
-    else recap += `- Tool: ${b.text}\n`;
+  const uniqueFiles = [...new Set(files.map((f) => f.replace(/\\/g, '/').replace(/^\.\//, '')))];
+  const plan = Array.isArray(opts.todos) ? opts.todos.filter(Boolean) : [];
+
+  // Room goes to the requests first (newest kept whole), then the rest, newest first.
+  const fit = (items, max) => items.map((t) => (t.length > max ? t.slice(0, max - 1) + '…' : t));
+  // The first request (how the session began) and the newest stay; the middle ones go first.
+  const reqBudget = Math.floor(cap * 0.55);
+  const size = (items) => items.reduce((n, t) => n + t.length, 0);
+  let reqs = fit(requests, 2500), left = 0;
+  while (reqs.length > 2 && size(reqs) > reqBudget) { reqs.splice(1, 1); left++; }
+  if (reqs.length === 2 && size(reqs) > reqBudget) reqs[0] = fit([reqs[0]], 600)[0];
+  if (reqs.length && size(reqs) > reqBudget) reqs[reqs.length - 1] = fit([reqs[reqs.length - 1]], Math.max(800, reqBudget - size(reqs.slice(0, -1))))[0];
+  const lines = [RECAP_HEAD];
+  if (reqs.length) {
+    lines.push(SEC_REQUESTS);
+    reqs.forEach((r, i) => {
+      const [first, ...rest] = r.split('\n');
+      lines.push(`${i + 1}. ${i === reqs.length - 1 ? '[current] ' : ''}${first}`, ...rest.map((l) => '   ' + l));
+      if (i === 0 && left) lines.push(`   (${left} later ${left === 1 ? 'request' : 'requests'} in between are not shown)`);
+    });
   }
-  return recap.slice(0, MAX_SUMMARY_CHARS);
+  if (uniqueFiles.length) {
+    const shown = uniqueFiles.slice(-60);
+    lines.push('', SEC_FILES, shown.join(', ') + (uniqueFiles.length > shown.length ? `, (+${uniqueFiles.length - shown.length} more)` : ''));
+  }
+  if (plan.length) {
+    lines.push('', SEC_PLAN, ...plan.slice(0, 20).map((t) => `${t.done ? '[done]' : '[open]'} ${String(t.text || '').slice(0, 160)}`));
+  }
+  const head = lines.join('\n');
+  const tailNote = '\nCarry on with the [current] request from where the newest messages below leave off: do not redo what is done. '
+    + 'This summary is short; read the files, your progress notes (build_state) and project memory again rather than guessing.';
+  let room = cap - head.length - tailNote.length;
+  const pick = (items, max) => {
+    const out = [];
+    for (let i = items.length - 1; i >= 0 && out.length < max; i--) {
+      const line = '- ' + items[i];
+      if (room - line.length - 1 < 0) break;
+      room -= line.length + 1;
+      out.unshift(line);
+    }
+    return out;
+  };
+  const shownProblems = pick(problems, 5);
+  const shownProgress = pick(progress, 15);
+  const body = [head];
+  if (shownProgress.length) body.push('', SEC_PROGRESS, ...shownProgress);
+  if (shownProblems.length) body.push('', SEC_PROBLEMS, ...shownProblems);
+  return (body.join('\n') + '\n' + tailNote).slice(0, cap);
 }
 
 /**
@@ -203,7 +304,8 @@ function compactSession(session, opts = {}) {
     if (splitAt <= 0) break;
     const old = msgs.slice(0, msgs.length - splitAt);
     const recent = msgs.slice(msgs.length - splitAt);
-    const recap = buildRecap(old);
+    // About a seventh of the room the conversation may use, so a 16k local model keeps space to work.
+    const recap = buildRecap(old, { maxChars: Math.min(MAX_SUMMARY_CHARS, Math.floor(budget * 4 * 0.15)), todos: session.todos });
     const compacted = [
       { role: 'user', content: `[VOX COMPACTED CONTEXT]\n${recap}` },
       ...recent,
