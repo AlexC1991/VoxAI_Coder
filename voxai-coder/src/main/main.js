@@ -2100,7 +2100,7 @@ ipcMain.handle('local:install', () => (LOCAL_SUPPORTED ? localEngine.install() :
 ipcMain.handle('local:devices', () => localEngine.devices());
 ipcMain.handle('local:models', () => {
   const dirs = localModelDirs();
-  return { dirs, engineDir: localEngine.engineDir(), models: localEngine.models(dirs).map((m) => ({ id: m.id, file: m.file, folder: m.folder, name: m.name, bytes: m.bytes, sidecar: !!m.sidecar })) };
+  return { dirs, engineDir: localEngine.engineDir(), ramBytes: os.totalmem(), models: localEngine.models(dirs).map((m) => ({ id: m.id, file: m.file, folder: m.folder, name: m.name, bytes: m.bytes, sidecar: !!m.sidecar, tps: m.tps || 0 })) };
 });
 ipcMain.handle('local:start', async (_e, file) => {
   const dirs = localModelDirs();
@@ -2123,6 +2123,22 @@ ipcMain.handle('local:removeDir', (_e, dir) => {
   modelCapCache.at = 0;
   return localModelDirs();
 });
+// Models from Hugging Face (hf.js): search, a model's files, and one download at a time into
+// the first models folder. A finished download is in the picker straight away.
+const hf = require('./hf');
+const hfDl = hf.createDownloader({
+  onState: (st) => { try { const c = allRenderers(); c && c.send('local:hf', st); } catch {} },
+  onDone: () => { modelCapCache.at = 0; },
+});
+const hfErr = (e) => ({ ok: false, error: /fetch failed|ENOTFOUND|ECONN/i.test(String(e && e.message)) ? 'Could not reach Hugging Face. Check your connection.' : String((e && e.message) || e) });
+ipcMain.handle('local:hfSearch', async (_e, q) => { try { return { ok: true, models: await hf.search(q) }; } catch (e) { return hfErr(e); } });
+ipcMain.handle('local:hfFiles', async (_e, repo) => { try { return { ok: true, files: await hf.files(String(repo || '')) }; } catch (e) { return hfErr(e); } });
+ipcMain.handle('local:hfDownload', async (_e, arg) => {
+  if (!LOCAL_SUPPORTED) return { ok: false, error: 'Models on this PC run on Windows only for now.' };
+  try { return { ok: true, state: await hfDl.start({ repo: String((arg && arg.repo) || ''), key: String((arg && arg.key) || ''), dir: localModelDirs()[0] }) }; } catch (e) { return hfErr(e); }
+});
+ipcMain.handle('local:hfCancel', () => hfDl.cancel());
+ipcMain.handle('local:hfState', () => hfDl.state());
 
 ipcMain.handle('openrouter:keys', async () => {
   const auth = orAuth();

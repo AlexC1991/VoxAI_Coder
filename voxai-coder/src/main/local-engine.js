@@ -36,8 +36,10 @@ const isLocalModel = (id) => /^local\//.test(String(id || ''));
 const fileOf = (id) => String(id || '').replace(/^local\//, '');
 
 /** "qwen2.5-coder-7b-instruct-q4_k_m.gguf" -> "Qwen2.5 Coder 7B Instruct (Q4_K_M)". */
+// The part number of a model split in parts: "...-00001-of-00004.gguf".
+const SPLIT = /-(\d{5})-of-(\d{5})\.gguf$/i;
 function labelOf(file) {
-  const base = String(file).replace(/\.gguf$/i, '').replace(/(\d)_(\d)/g, '$1.$2');   // qwen2_5 -> qwen2.5
+  const base = String(file).replace(SPLIT, '.gguf').replace(/\.gguf$/i, '').replace(/(\d)_(\d)/g, '$1.$2');   // qwen2_5 -> qwen2.5
   const q = /[._-](i?q\d[\w]*|f16|f32|bf16)$/i.exec(base);
   const name = (q ? base.slice(0, q.index) : base).split(/[-_]+/).filter(Boolean)
     .map((w) => (/^\d+(\.\d+)?[bm]$/i.test(w) ? w.toUpperCase() : w.charAt(0).toUpperCase() + w.slice(1))).join(' ');
@@ -196,12 +198,18 @@ function createLocalEngine({ baseDir, log = () => {}, onState = () => {} }) {
     const speedOf = (f, bytes) => { const k = Object.keys(tuned).find((x) => x.startsWith(`${f}|${bytes}|${ENGINE.build}|`)); return k ? tuned[k] : null; };
     for (const folder of (Array.isArray(folders) ? folders : [folders]).filter(Boolean)) {
     let files = [];
-    try { files = fs.readdirSync(folder).filter((f) => /\.gguf$/i.test(f) && !/mmproj/i.test(f) && !seen.has(f)); } catch { continue; }
+    let all = [];
+    try { all = fs.readdirSync(folder).filter((f) => /\.gguf$/i.test(f) && !/mmproj/i.test(f)); } catch { continue; }
+    // A model split in parts (-00001-of-00004.gguf) is one model: llama-server loads it from its
+    // first part. The later parts were each listed as a model of their own.
+    files = all.filter((f) => !seen.has(f) && !(SPLIT.test(f) && Number(SPLIT.exec(f)[1]) !== 1));
     for (const f of files) seen.add(f);
     out.push(...files.map((f) => {
       let sidecar = null;
       try { sidecar = JSON.parse(fs.readFileSync(path.join(folder, f + '.offload.json'), 'utf8')); } catch {}
-      let bytes = 0; try { bytes = fs.statSync(path.join(folder, f)).size; } catch {}
+      let bytes = 0;
+      const parts = SPLIT.test(f) ? all.filter((x) => x.replace(SPLIT, '') === f.replace(SPLIT, '')) : [f];
+      for (const p of parts) { try { bytes += fs.statSync(path.join(folder, p)).size; } catch {} }
       const t = speedOf(f, bytes);
       return { id: 'local/' + f, file: f, folder, name: labelOf(f), bytes, sidecar, tps: (t && t.tg) || 0 };
     }));

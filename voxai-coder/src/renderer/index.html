@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-R6z7a+ulx+0NSQDSL0ZL9yBgAszGIaFrStMUt4vQkdM='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-maPklwi5ilXl8eXkwK/fq3h6pwiUaemCCruhvrFFZfE='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -244,7 +244,6 @@ tests"). Scroll the row instead of breaking words:
 /* Usage opens from Settings, so it goes on top of it: at the same level it opened
    underneath, half-hidden. Found in a live test. */
 #usageModalBg{z-index:60}
-.local-models,.local-dirs{padding:2px 16px 10px}.local-dirs:empty{display:none}.lm-row{display:flex;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--edge)}.lm-row:first-child{border-top:0}.lm-name{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.lm-name b{font:500 12.5px "Sometype Mono",monospace;color:var(--ink);overflow-wrap:anywhere}.lm-sub{color:var(--faint);font-size:11.5px;font-family:"Sometype Mono",monospace;overflow-wrap:anywhere}.lm-on{color:var(--gold);font:12px Chivo,sans-serif;margin-left:8px}.lm-row .btn{font-size:12.5px;padding:4px 11px}.lm-x{flex:none;border:0;background:none;color:var(--dim);font:12.5px Chivo,sans-serif;cursor:pointer;padding:3px 6px;border-radius:6px}.lm-x:hover{color:var(--del);background:var(--sel)}.local-models .ke{padding:12px 0;font-size:13px;color:var(--dim)}.local-models .lm-name b{font:600 13.5px Chivo,sans-serif}
 .acct-keys{padding:6px 16px 14px;overflow-x:auto;border-top:1px solid var(--edge)}.acct-keys table{width:100%;border-collapse:collapse;font-size:12px}.acct-keys th{color:var(--mut);font-weight:500;text-align:right;padding:4px 6px}.acct-keys th:first-child,.acct-keys td:first-child{text-align:left}.acct-keys td{padding:5px 6px;text-align:right;border-top:1px solid var(--edge);font-variant-numeric:tabular-nums}.acct-keys .kt{font-size:10px;color:var(--gold);margin-left:6px}.acct-keys .ks{color:var(--mut);font-family:"Sometype Mono",monospace;font-size:11px}.acct-keys .ke{color:var(--mut);padding:6px 0}
 .modal-bg.show{display:flex}
 /* ---- Settings: a sheet with sections ----
@@ -609,6 +608,90 @@ tests"). Scroll the row instead of breaking words:
 .upd-pill .upd-txt:focus-visible,.upd-x:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:3px}
 .upd-x{flex:none;border:0;background:none;color:var(--sub);cursor:pointer;font-size:11px;width:20px;height:20px;border-radius:5px;line-height:1}
 .upd-x:hover{color:var(--ink);background:var(--sel)}
+/* ---- Settings: Local models ---- */
+/* The engine's state leads; then your models, getting more, and the folders they live in. */
+.lm-status{display:flex;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--edge);border-radius:10px;background:var(--bg)}
+.lm-dot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--faint)}
+.lm-dot.ok{background:var(--add);box-shadow:0 0 6px rgba(147,184,132,.45)}
+.lm-dot.busy{background:none;width:12px;height:12px;border:1.5px solid var(--edge2);border-top-color:var(--gold);animation:spin .8s linear infinite}
+.lm-dot.off{background:none;box-shadow:inset 0 0 0 1.5px var(--faint)}
+.lm-dot.bad{background:var(--del)}
+.lm-st-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.lm-st-txt b{font-size:13.5px;font-weight:600;color:var(--ink)}
+.lm-st-txt span{font-size:12.5px;color:var(--dim);line-height:1.45;overflow-wrap:anywhere}
+.lm-st-acts{flex:none;display:flex;gap:8px}
+.lm-bar{height:4px;border-radius:2px;background:var(--edge2);overflow:hidden;margin-top:6px;max-width:320px}
+.lm-bar i{display:block;height:100%;width:0;background:var(--gold);transition:width .3s}
+.lm-hw{display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px;padding:0 4px;font-size:12.5px}
+.lm-hw .lm-k{color:var(--faint)}
+.lm-hw .lm-v{color:var(--mut);overflow-wrap:anywhere}
+.local-models,.local-dirs{padding:2px 14px 6px}
+.local-dirs:empty{display:none}
+.local-models .ke{padding:14px 2px;font-size:13px;color:var(--dim);line-height:1.55}
+.lm-row{display:flex;align-items:center;gap:12px;padding:10px 2px;border-top:1px solid var(--edge)}
+.lm-row:first-child{border-top:0}
+.lm-ic{flex:none;display:grid;place-items:center;width:30px;height:30px;border-radius:7px;background:var(--panel2);color:var(--sub)}
+.lm-ic svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.lm-row.on .lm-ic{color:var(--add)}
+.lm-name{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.lm-name b{font:600 13.5px Chivo,sans-serif;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lm-sub{display:flex;flex-wrap:wrap;align-items:center;gap:2px 10px;font-size:12px;color:var(--faint)}
+.lm-sub .mono{font-family:"Sometype Mono",monospace;font-size:11.5px}
+.lm-fit{font-size:12px}
+.lm-fit.ok{color:var(--add)} .lm-fit.mid{color:var(--gold)} .lm-fit.bad{color:var(--del)}
+.lm-on{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--add);white-space:nowrap}
+.lm-on::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.lm-row .btn{flex:none;font-size:12.5px;padding:4px 12px}
+.lm-row[hidden]{display:none}
+.lm-more{display:block;width:100%;border:0;border-top:1px solid var(--edge);background:none;padding:10px 2px 6px;color:var(--dim);font:12.5px Chivo,sans-serif;text-align:left;cursor:pointer}
+.lm-more:hover{color:var(--ink)}
+.lm-more:focus-visible{outline:2px solid var(--gold);outline-offset:-2px;border-radius:4px}
+.lm-dir{display:flex;align-items:center;gap:10px;padding:9px 2px;border-top:1px solid var(--edge)}
+.lm-dir:first-child{border-top:0}
+.lm-dir .p{flex:1;min-width:0;font:12.5px "Sometype Mono",monospace;color:var(--mut);overflow-wrap:anywhere}
+.lm-dir .tag{flex:none;font-size:11.5px;color:var(--faint)}
+.lm-x{flex:none;border:0;background:none;color:var(--dim);font:12.5px Chivo,sans-serif;cursor:pointer;padding:3px 6px;border-radius:6px}
+.lm-x:hover{color:var(--del);background:var(--sel)}
+/* Hugging Face */
+.hf-box{display:flex;flex-direction:column}
+.hf-search{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--edge);margin:0}
+.hf-search svg{flex:none;width:15px;height:15px;fill:none;stroke:var(--sub);stroke-width:2;stroke-linecap:round}
+.hf-search input{flex:1;min-width:0;border:0;background:none;outline:0;color:var(--ink);font:13.5px Chivo,sans-serif;padding:4px 0}
+.hf-search input::placeholder{color:var(--faint)}
+.sheet .hf-search input:focus-visible{outline:0}
+.hf-search:focus-within{box-shadow:inset 0 -1px 0 var(--goldedge)}
+.hf-dl{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-bottom:1px solid var(--edge);background:var(--panel)}
+.hf-dl[hidden]{display:none}
+.hf-dl .top{display:flex;align-items:center;gap:10px}
+.hf-dl .top b{flex:1;min-width:0;font:600 13px Chivo,sans-serif;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hf-dl .lm-bar{max-width:none;margin:0}
+.hf-dl .meta{font:11.5px "Sometype Mono",monospace;color:var(--dim);font-variant-numeric:tabular-nums}
+.hf-dl.ok .meta{color:var(--add);font-family:Chivo,sans-serif;font-size:12.5px}
+.hf-dl.bad .meta{color:var(--del);font-family:Chivo,sans-serif;font-size:12.5px;line-height:1.45}
+.hf-list{max-height:420px;overflow:auto;padding:4px 6px 6px}
+.hf-list .ke{padding:14px 8px;font-size:13px;color:var(--dim)}
+.hf-repo{border-top:1px solid var(--edge)}
+.hf-repo:first-child{border-top:0}
+.hf-head{display:flex;align-items:center;gap:10px;width:100%;border:0;background:none;text-align:left;padding:9px 8px;border-radius:7px;cursor:pointer;color:var(--ink);font:inherit}
+.hf-head:hover{background:var(--sel)}
+.hf-head:focus-visible{outline:2px solid var(--gold);outline-offset:-2px}
+.hf-head .nm{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.hf-head .nm b{font:600 13px Chivo,sans-serif;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hf-head .nm span{font-size:11.5px;color:var(--faint)}
+.hf-head .st{flex:none;font:11.5px "Sometype Mono",monospace;color:var(--sub);font-variant-numeric:tabular-nums;white-space:nowrap}
+.hf-head svg{flex:none;width:12px;height:12px;fill:none;stroke:var(--sub);stroke-width:2;stroke-linecap:round;transition:transform .15s}
+.hf-repo.open .hf-head svg{transform:rotate(90deg)}
+.hf-files{padding:2px 8px 10px 8px}
+.hf-files .ke{padding:6px 0 4px;font-size:12.5px;color:var(--dim)}
+.hf-file{display:grid;grid-template-columns:minmax(76px,auto) 64px minmax(0,1fr) auto;gap:10px;align-items:center;padding:6px 0;border-top:1px solid var(--edge)}
+.hf-file:first-child{border-top:0}
+.hf-file .q{font:600 12.5px "Sometype Mono",monospace;color:var(--ink)}
+.hf-file .q small{display:block;font:500 10.5px Chivo,sans-serif;color:var(--gold);letter-spacing:.02em}
+.hf-file .sz{font:12px "Sometype Mono",monospace;color:var(--dim);text-align:right;font-variant-numeric:tabular-nums}
+.hf-file.too .q,.hf-file.too .sz{opacity:.55}
+.hf-file .btn{font-size:12px;padding:3px 11px}
+.hf-file .have{font-size:12px;color:var(--add);white-space:nowrap}
+@media (prefers-reduced-motion:reduce){.lm-dot.busy{animation:none}}
 /* ---- Settings: Apps (MCP) ---- */
 /* One list for what you have, a set of starting points to add from, and an editor that takes the page. */
 #mcpHome[hidden],.mcp-edit[hidden]{display:none}
@@ -1621,12 +1704,26 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
     <section class="set-page" data-set="local" hidden>
       <header class="set-top"><h3>Local models</h3><p>Models that run on this PC: free, and nothing leaves your machine. They show in the model picker under “This PC”, and make a good free coder in Team.</p></header>
       <div class="set-scroll">
-        <div class="set-group">
-          <div class="set-row"><div class="set-txt"><div class="set-lbl">Models folders</div><div class="set-desc" id="localDirTxt">Where your .gguf files are. Keep them on your fastest drive: an NVMe loads a model about half as fast again as a hard drive. ModelMaker offload plans (.offload.json) beside them are used, and the engine lives in the first folder.</div></div><div class="set-ctl"><button class="btn ghost" id="btnLocalDir" type="button">Add folder…</button></div></div><div class="local-dirs" id="localDirs"></div>
-          <div class="set-row"><div class="set-txt"><div class="set-lbl">Engine</div><div class="set-desc" id="localEngineTxt">llama.cpp (Vulkan), downloaded once and checked against its published checksum.</div></div><div class="set-ctl"><button class="btn ghost" id="btnLocalInstall" type="button">Get engine</button></div></div>
-          <div class="set-row"><div class="set-txt"><div class="set-lbl">Graphics card</div><div class="set-desc" id="localGpuTxt">Checking…</div></div></div>
+        <div class="lm-status" id="lmStatus">
+          <span class="lm-dot" id="lmDot" aria-hidden="true"></span>
+          <div class="lm-st-txt"><b id="localEngineLbl">Engine</b><span id="localEngineTxt">Checking…</span><div class="lm-bar" id="lmEngineBar" hidden><i></i></div></div>
+          <div class="lm-st-acts"><button class="btn" id="btnLocalInstall" type="button" hidden>Get engine</button><button class="btn ghost" id="btnLocalStop" type="button" hidden>Stop model</button></div>
         </div>
+        <div class="lm-hw"><span class="lm-k">Graphics card</span><span class="lm-v" id="localGpuTxt">Checking…</span><span class="lm-k">Memory</span><span class="lm-v" id="localRamTxt">—</span></div>
+
+        <div class="mcp-head"><h4>Your models</h4><span class="mcp-count" id="lmCount"></span></div>
         <div class="set-group"><div class="local-models" id="localModels"><div class="ke">Looking for models…</div></div></div>
+
+        <div class="mcp-head"><h4>Get a model from Hugging Face</h4></div>
+        <div class="set-group hf-box">
+          <form class="hf-search" id="hfForm" role="search"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg><input id="hfQ" type="search" placeholder="Search, e.g. qwen coder or llama 8b" autocomplete="off" spellcheck="false" aria-label="Search Hugging Face for models"><button class="btn ghost" id="hfGo" type="submit">Search</button></form>
+          <div class="hf-dl" id="hfDl" hidden aria-live="polite"></div>
+          <div class="hf-list" id="hfList"></div>
+        </div>
+
+        <div class="mcp-head"><h4>Folders</h4><button type="button" class="mcp-link" id="btnLocalDir">Add folder…</button></div>
+        <div class="set-group"><div class="local-dirs" id="localDirs"></div></div>
+        <p class="sk-help">Downloads go to the first folder, and the engine lives there too. Keep models on your fastest drive: an NVMe loads a model about half as fast again as a hard drive. ModelMaker offload plans (<code>.offload.json</code>) beside a model are used when it loads.</p>
       </div>
     </section>
     <section class="set-page" data-set="subs" hidden>
@@ -7036,59 +7133,108 @@ if ($('btnKeys')) $('btnKeys').onclick = showKeys;
 // ---- Settings → Local models (main/local-engine.js) ----
 let LOCAL_ST = null;
 const gbOf = (n) => (Number(n) / 1073741824).toFixed(1) + ' GB';
+// ---- Settings > Local models ----
+// The engine's state first, then your models (and whether each fits this PC), getting one from
+// Hugging Face, and the folders they live in. Downloads land in the first folder.
+let LOCAL_ALL = false, LOCAL_GPU = null, LOCAL_RAM = 0, LOCAL_FILES = new Set(), LOCAL_DIRS = [], HF_DL = null, HF_SEARCHED = false;
+const ICON_CHIP = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="6" y="6" width="12" height="12" rx="2"/><path d="M9 2v4M15 2v4M9 18v4M15 18v4M2 9h4M2 15h4M18 9h4M18 15h4"/></svg>';
+function gbs(n){ const g = Number(n || 0) / 1073741824; return (g >= 10 ? g.toFixed(0) : g.toFixed(1)) + ' GB'; }
+function fmtK(n){ n = Number(n) || 0; return n >= 1e6 ? (n / 1e6).toFixed(1).replace(/\.0$/, '') + 'M' : n >= 1e3 ? Math.round(n / 1e3) + 'k' : String(n); }
+/** Whether a model of `bytes` fits this PC: on the card, partly on it, or not at all. */
+function localFit(bytes){
+  const vram = LOCAL_GPU ? Number(LOCAL_GPU.totalMiB) * 1048576 : 0;
+  if (!vram && !LOCAL_RAM) return null;
+  if (vram && bytes < vram * 0.85) return { cls: 'ok', text: 'Fits your card' };
+  if (bytes < vram + LOCAL_RAM * 0.6) return { cls: 'mid', text: vram ? 'Partly on the card, slower' : 'On the CPU, slowly' };
+  return { cls: 'bad', text: 'Too big for this PC' };
+}
 function paintLocalEngine(){
-  const st = LOCAL_ST || {}, t = $('localEngineTxt'), b = $('btnLocalInstall');
-  if (!t || !b) return;
+  const st = LOCAL_ST || {}, t = $('localEngineTxt'), lbl = $('localEngineLbl'), dot = $('lmDot'), b = $('btnLocalInstall'), stop = $('btnLocalStop'), bar = $('lmEngineBar');
+  if (!t) return;
+  if (st.supported === false) {
+    lbl.textContent = 'Not available here'; t.textContent = 'Models on this PC run on Windows only for now: the engine is the Windows build of llama.cpp.';
+    dot.className = 'lm-dot off'; b.hidden = true; stop.hidden = true; bar.hidden = true; return;
+  }
+  const heads = { missing: 'Get the engine to run models', installing: 'Getting the engine', stopped: 'Ready', tuning: 'Loading for the first time', loading: 'Loading', ready: 'Running', stopping: 'Stopping' };
   const lines = {
-    missing: 'Not installed yet: llama.cpp (Vulkan), about 33 MB, checked against its published checksum.' + (st.error ? ' Last try: ' + st.error : ''),
-    installing: 'Downloading… ' + (st.percent || 0) + '%',
-    stopped: 'Installed (llama.cpp ' + (st.build || '') + '). Not running.' + (st.error ? ' Last stop: ' + st.error : ''),
-    tuning: 'First load of ' + (st.model || '') + ': ' + (st.how || '') + '… (once, about two minutes)',
-    loading: 'Loading ' + (st.model || '') + ' — ' + (st.how || '') + '…',
-    ready: 'Running ' + (st.model || '') + ' on ' + (st.device || 'this PC') + (st.ctx ? ', ' + Number(st.ctx).toLocaleString() + ' tokens of context' : '') + '.',
-    stopping: 'Stopping…',
+    missing: 'llama.cpp (Vulkan), about 33 MB, downloaded once and checked against its published checksum.' + (st.error ? ' Last try: ' + st.error : ''),
+    installing: (st.percent || 0) + '% of about 33 MB',
+    stopped: 'llama.cpp ' + (st.build || '') + ' is installed. Load a model below, or choose one under This PC in the model picker.' + (st.error ? ' Last stop: ' + st.error : ''),
+    tuning: (st.model || '') + ': ' + (st.how || 'measuring this PC') + '. Once per model, about two minutes.',
+    loading: (st.model || '') + (st.how ? ' · ' + st.how : ''),
+    ready: (st.model || '') + ' on ' + (st.device || 'this PC') + (st.ctx ? ' · ' + Number(st.ctx).toLocaleString() + ' tokens of context' : '') + (st.tps ? ' · ' + st.tps + ' tok/s' : ''),
+    stopping: '',
   };
-  t.textContent = st.supported === false ? 'Models on this PC run on Windows only for now: the engine VoxAI installs is the Windows build of llama.cpp.' : (lines[st.state] || '—');
-  if (st.supported === false) b.disabled = true;
+  const busy = ['installing', 'tuning', 'loading', 'stopping'].includes(st.state);
+  lbl.textContent = heads[st.state] || 'Engine';
+  t.textContent = lines[st.state] || '';
+  dot.className = 'lm-dot' + (st.state === 'ready' ? ' ok' : busy ? ' busy' : st.state === 'missing' ? ' off' : '');
   b.hidden = st.state !== 'missing';
+  stop.hidden = !['ready', 'loading', 'tuning'].includes(st.state);
+  bar.hidden = st.state !== 'installing';
+  if (!bar.hidden) bar.firstElementChild.style.width = (st.percent || 0) + '%';
 }
 async function renderLocal(){
   if (!window.voxai.local) return;
   try { LOCAL_ST = await window.voxai.local.state(); } catch {}
   paintLocalEngine();
-  const r = await window.voxai.local.models().catch(() => ({ dir: '', models: [] }));
+  const r = await window.voxai.local.models().catch(() => ({ dirs: [], models: [] }));
+  LOCAL_RAM = Number(r.ramBytes) || 0;
+  LOCAL_DIRS = r.dirs || [];
+  LOCAL_FILES = new Set((r.models || []).map((m) => String(m.file).toLowerCase()));
+  $('localRamTxt').textContent = LOCAL_RAM ? gbs(LOCAL_RAM) + ' of system memory' : '—';
+  // Folders: where models are looked for. The first also takes downloads and the engine.
   const dl = $('localDirs');
-  if (dl) {
-    dl.innerHTML = '';
-    (r.dirs || []).forEach((d, i) => {
-      const row = el('div', 'lm-row'), name = el('div', 'lm-name');
-      const b = document.createElement('b'); b.textContent = d; name.appendChild(b);
-      if (i === 0 && r.engineDir) { const sub = el('div', 'lm-sub'); sub.textContent = 'Engine: ' + r.engineDir; name.appendChild(sub); }
-      row.appendChild(name);
-      const x = el('button', 'lm-x', 'Remove'); x.type = 'button'; x.setAttribute('aria-label', 'Remove ' + d);
-      x.onclick = async () => { await window.voxai.local.removeDir(d); S = await window.voxai.getSettings(); loadModels(); renderLocal(); };
-      row.appendChild(x); dl.appendChild(row);
-    });
-  }
+  dl.innerHTML = '';
+  if (!LOCAL_DIRS.length) dl.appendChild(el('div', 'ke', 'No folder yet. Add the one your .gguf models are in, or one for downloads.'));
+  LOCAL_DIRS.forEach((d, i) => {
+    const row = el('div', 'lm-dir');
+    const p = el('span', 'p'); p.textContent = d; row.appendChild(p);
+    if (i === 0) row.appendChild(el('span', 'tag', 'downloads and engine'));
+    const x = el('button', 'lm-x', 'Remove'); x.type = 'button'; x.setAttribute('aria-label', 'Remove ' + d); x.title = 'Stops looking in this folder. The files stay where they are.';
+    x.onclick = async () => { await window.voxai.local.removeDir(d); S = await window.voxai.getSettings(); loadModels(); renderLocal(); };
+    row.appendChild(x); dl.appendChild(row);
+  });
+  // The card, for whether a model fits.
   const gpu = $('localGpuTxt');
-  if (gpu) {
-    if (LOCAL_ST && LOCAL_ST.state !== 'missing' && LOCAL_ST.state !== 'installing') {
-      const d = await window.voxai.local.devices().catch(() => []);
-      gpu.textContent = d.length ? d.map((x) => x.name + ' — ' + (x.totalMiB / 1024).toFixed(1) + ' GB, ' + (x.freeMiB / 1024).toFixed(1) + ' GB free').join(' · ') : 'None found: models run on the CPU (slower).';
-    } else gpu.textContent = 'Shown once the engine is installed.';
-  }
-  const box = $('localModels'); if (!box) return;
+  if (LOCAL_ST && !['missing', 'installing'].includes(LOCAL_ST.state)) {
+    const d = await window.voxai.local.devices().catch(() => []);
+    LOCAL_GPU = d.slice().sort((a, b) => b.totalMiB - a.totalMiB)[0] || null;
+    gpu.textContent = d.length ? d.map((x) => x.name + ' · ' + (x.totalMiB / 1024).toFixed(1) + ' GB, ' + (x.freeMiB / 1024).toFixed(1) + ' GB free').join('; ') : 'None found: models run on the CPU, slowly.';
+  } else gpu.textContent = 'Shown once the engine is installed.';
+  // Your models.
+  const box = $('localModels');
   box.innerHTML = '';
-  if (!(r.dirs || []).length) { box.appendChild(el('div', 'ke', 'Add the folder your models are in.')); return; }
-  if (!r.models.length) { box.appendChild(el('div', 'ke', 'No .gguf models in those folders.')); return; }
-  for (const m of r.models) {
-    const row = el('div', 'lm-row'), name = el('div', 'lm-name');
-    const b = document.createElement('b'); b.textContent = m.name; name.appendChild(b);
-    const on = LOCAL_ST && LOCAL_ST.model === m.file && (LOCAL_ST.state === 'ready' || LOCAL_ST.state === 'loading');
-    if (on) name.appendChild(el('span', 'lm-on', LOCAL_ST.state === 'ready' ? 'running' : 'loading'));
-    const sub = el('div', 'lm-sub'); sub.textContent = gbOf(m.bytes) + (m.sidecar ? ' · offload plan' : '') + ' · ' + (m.folder ? m.folder.replace(/[\\/]+$/, '') + '\\' : '') + m.file; name.appendChild(sub);
+  const ms = r.models || [];
+  $('lmCount').textContent = ms.length ? ms.length + (ms.length === 1 ? ' model' : ' models') : '';
+  if (!LOCAL_DIRS.length) box.appendChild(el('div', 'ke', 'No models yet. Download one from Hugging Face below, or add the folder your models are in.'));
+  else if (!ms.length) box.appendChild(el('div', 'ke', 'No .gguf models in your folders yet. Download one from Hugging Face below.'));
+  const noEngine = !LOCAL_ST || ['missing', 'installing'].includes(LOCAL_ST.state);
+  const isOn = (m) => LOCAL_ST && LOCAL_ST.model === m.file && ['ready', 'loading', 'tuning'].includes(LOCAL_ST.state);
+  // The one running, then ones used before (they have a speed), then the rest by name; a long
+  // folder shows the first few, so getting a model further down is not a long scroll away.
+  const sorted = ms.slice().sort((a, b) => (isOn(b) - isOn(a)) || ((b.tps > 0) - (a.tps > 0)) || a.name.localeCompare(b.name));
+  const SHOW = 6;
+  sorted.forEach((m, i) => {
+    const on = isOn(m);
+    const row = el('div', 'lm-row' + (on ? ' on' : ''));
+    if (i >= SHOW && !LOCAL_ALL) row.hidden = true;
+    row.appendChild(el('span', 'lm-ic', ICON_CHIP));
+    const name = el('div', 'lm-name');
+    const parts = /^(.*) \(([^)]+)\)$/.exec(m.name);
+    const b = el('b'); b.textContent = parts ? parts[1] : m.name; b.title = (m.folder ? m.folder.replace(/[\\/]+$/, '') + '\\' : '') + m.file; name.appendChild(b);
+    const sub = el('div', 'lm-sub');
+    const add = (cls, text, title) => { const s = el('span', cls); s.textContent = text; if (title) s.title = title; sub.appendChild(s); };
+    add('mono', gbs(m.bytes));
+    if (parts) add('mono', parts[2]);
+    const fit = localFit(m.bytes); if (fit) add('lm-fit ' + fit.cls, fit.text);
+    if (m.tps > 0) add('', m.tps + ' tok/s here', 'Measured on this PC when it was first loaded');
+    if (m.sidecar) add('', 'offload plan', 'Loads with the ModelMaker plan beside it');
+    name.appendChild(sub);
     row.appendChild(name);
+    if (on) row.appendChild(el('span', 'lm-on', LOCAL_ST.state === 'ready' ? 'Running' : 'Loading'));
     const btn = el('button', 'btn ghost', on ? 'Stop' : 'Load'); btn.type = 'button';
+    if (noEngine && !on) { btn.disabled = true; btn.title = 'Get the engine first'; }
     btn.onclick = async () => {
       btn.disabled = true;
       if (on) await window.voxai.local.stop();
@@ -7096,11 +7242,138 @@ async function renderLocal(){
       renderLocal();
     };
     row.appendChild(btn); box.appendChild(row);
+  });
+  if (sorted.length > SHOW) {
+    const more = el('button', 'lm-more', LOCAL_ALL ? 'Show fewer' : 'Show all ' + sorted.length + ' models'); more.type = 'button';
+    more.onclick = () => { LOCAL_ALL = !LOCAL_ALL; renderLocal(); };
+    box.appendChild(more);
+  }
+  paintHf();
+  if (!HF_SEARCHED) { HF_SEARCHED = true; hfSearch(''); }
+}
+// ---- Hugging Face ----
+async function hfSearch(q){
+  const list = $('hfList'); if (!list) return;
+  list.innerHTML = '<div class="ke">Searching Hugging Face…</div>';
+  let r; try { r = await window.voxai.local.hfSearch(q || 'coder'); } catch (e) { r = { ok: false, error: String((e && e.message) || e) }; }
+  list.innerHTML = '';
+  if (!r || !r.ok) { list.appendChild(el('div', 'ke', esc((r && r.error) || 'Could not search Hugging Face.'))); return; }
+  if (!r.models.length) { list.appendChild(el('div', 'ke', 'Nothing on Hugging Face matches that. Try fewer words.')); return; }
+  list.appendChild(el('div', 'mp-label', '<span>' + (q ? 'Most downloaded matches' : 'Most downloaded coding models') + '</span><span>downloads · likes</span>'));
+  for (const m of r.models) list.appendChild(hfRepo(m));
+}
+function hfRepo(m){
+  const wrap = el('div', 'hf-repo');
+  const head = el('button', 'hf-head'); head.type = 'button'; head.setAttribute('aria-expanded', 'false');
+  const [owner, name] = String(m.id).split('/');
+  const nm = el('span', 'nm');
+  const b = el('b'); b.textContent = name.replace(/[-_.]GGUF$/i, ''); nm.appendChild(b);
+  const o = el('span'); o.textContent = owner + (m.license ? ' · ' + m.license : ''); nm.appendChild(o);
+  head.appendChild(nm);
+  const st = el('span', 'st'); st.textContent = '↓ ' + fmtK(m.downloads) + '   ♥ ' + fmtK(m.likes);
+  st.title = Number(m.downloads).toLocaleString() + ' downloads · ' + Number(m.likes).toLocaleString() + ' likes'; head.appendChild(st);
+  head.insertAdjacentHTML('beforeend', '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>');
+  const files = el('div', 'hf-files'); files.hidden = true;
+  head.onclick = async () => {
+    const open = !wrap.classList.contains('open');
+    wrap.classList.toggle('open', open); files.hidden = !open; head.setAttribute('aria-expanded', String(open));
+    if (open && !files.dataset.loaded) { files.dataset.loaded = '1'; await hfFiles(m.id, files); }
+  };
+  wrap.appendChild(head); wrap.appendChild(files);
+  return wrap;
+}
+async function hfFiles(repo, box){
+  box.innerHTML = '<div class="ke">Listing its files…</div>';
+  let r; try { r = await window.voxai.local.hfFiles(repo); } catch (e) { r = { ok: false, error: String((e && e.message) || e) }; }
+  box.innerHTML = '';
+  if (!r || !r.ok) { box.appendChild(el('div', 'ke', esc((r && r.error) || 'Could not list its files.'))); delete box.dataset.loaded; return; }
+  if (!r.files.length) { box.appendChild(el('div', 'ke', 'No GGUF files in this one.')); return; }
+  const busy = HF_DL && ['downloading', 'verifying'].includes(HF_DL.state);
+  for (const f of r.files) {
+    const fit = localFit(f.size);
+    const row = el('div', 'hf-file' + (fit && fit.cls === 'bad' ? ' too' : ''));
+    // Q4_K_M is the usual pick: about the smallest that keeps a model sharp.
+    const q = el('span', 'q'); q.textContent = f.quant || 'GGUF';
+    if (/^Q4_K_M$/i.test(f.quant)) q.appendChild(el('small', '', 'Recommended'));
+    q.title = f.name + (f.parts.length > 1 ? ' · in ' + f.parts.length + ' parts' : '');
+    const sz = el('span', 'sz'); sz.textContent = gbs(f.size);
+    const ft = el('span', 'lm-fit' + (fit ? ' ' + fit.cls : '')); ft.textContent = fit ? fit.text : '';
+    row.appendChild(q); row.appendChild(sz); row.appendChild(ft);
+    if (LOCAL_FILES.has(String(f.name).toLowerCase())) row.appendChild(el('span', 'have', 'Downloaded'));
+    else {
+      const d = el('button', 'btn ghost hf-get', 'Download'); d.type = 'button'; d.disabled = !!busy;
+      d.onclick = () => hfDownload(repo, f, d, fit);
+      row.appendChild(d);
+    }
+    box.appendChild(row);
   }
 }
-if ($('btnLocalDir')) $('btnLocalDir').onclick = async () => { const d = await window.voxai.local.pickDir(); if (d) { S = await window.voxai.getSettings(); loadModels(); renderLocal(); } };
-if ($('btnLocalInstall')) $('btnLocalInstall').onclick = async () => { $('btnLocalInstall').disabled = true; await window.voxai.local.install(); $('btnLocalInstall').disabled = false; renderLocal(); };
-if (window.voxai.local) window.voxai.local.onState((st) => { LOCAL_ST = st; paintLocalEngine(); });
+async function hfDownload(repo, f, btn, fit){
+  // Too big for this PC: one more press, so it is a choice and not a slip.
+  if (fit && fit.cls === 'bad' && !btn.classList.contains('armed')) { btn.classList.add('armed'); btn.textContent = 'Download anyway'; return; }
+  if (!LOCAL_DIRS.length) {
+    toast('Choose the folder your models go in.');
+    const d = await window.voxai.local.pickDir(); if (!d) return;
+    S = await window.voxai.getSettings(); await renderLocal();
+  }
+  document.querySelectorAll('.hf-get').forEach((b) => { b.disabled = true; });
+  const r = await window.voxai.local.hfDownload(repo, f.key);
+  if (!r || !r.ok) {
+    HF_DL = { name: f.name, state: 'error', error: (r && r.error) || 'Could not start the download.', total: f.size, got: 0 };
+    document.querySelectorAll('.hf-get').forEach((b) => { b.disabled = false; });
+  } else HF_DL = r.state;
+  paintHf();
+}
+function paintHf(){
+  const box = $('hfDl'); if (!box) return;
+  const d = HF_DL;
+  if (!d) { box.hidden = true; box.innerHTML = ''; box.dataset.k = ''; return; }
+  box.hidden = false;
+  const running = d.state === 'downloading' || d.state === 'verifying';
+  const k = d.name + '|' + d.state;
+  // Built again only when the file or its state changes; progress just moves the bar.
+  if (box.dataset.k !== k) {
+    box.dataset.k = k;
+    box.className = 'hf-dl' + (d.state === 'done' ? ' ok' : d.state === 'error' ? ' bad' : '');
+    box.innerHTML = '';
+    const top = el('div', 'top');
+    const b = el('b'); b.textContent = d.name; top.appendChild(b);
+    if (running) { const c = el('button', 'btn ghost', 'Cancel'); c.type = 'button'; c.onclick = () => window.voxai.local.hfCancel(); top.appendChild(c); }
+    else { const x = el('button', 'lm-x', 'Dismiss'); x.type = 'button'; x.onclick = () => { HF_DL = null; paintHf(); }; top.appendChild(x); }
+    box.appendChild(top);
+    if (running) box.appendChild(el('div', 'lm-bar', '<i></i>'));
+    box.appendChild(el('div', 'meta'));
+  }
+  const pct = d.total ? Math.min(100, Math.floor((100 * d.got) / d.total)) : 0;
+  const bar = box.querySelector('.lm-bar i'); if (bar) bar.style.width = pct + '%';
+  const meta = box.querySelector('.meta');
+  meta.textContent = d.state === 'downloading' ? gbs(d.got) + ' of ' + gbs(d.total) + ' · ' + pct + '%'
+    : d.state === 'verifying' ? 'Checking it against Hugging Face’s checksum…'
+    : d.state === 'done' ? 'Downloaded and checked. It is in Your models, and under This PC in the model picker.'
+    : d.state === 'cancelled' ? 'Stopped. Download it again to pick up where it left off.'
+    : (d.error || 'The download failed.');
+}
+if (window.voxai.local) {
+  if ($('btnLocalDir')) $('btnLocalDir').onclick = async () => { const d = await window.voxai.local.pickDir(); if (d) { S = await window.voxai.getSettings(); loadModels(); renderLocal(); } };
+  if ($('btnLocalInstall')) $('btnLocalInstall').onclick = async () => { $('btnLocalInstall').disabled = true; await window.voxai.local.install(); $('btnLocalInstall').disabled = false; renderLocal(); };
+  if ($('btnLocalStop')) $('btnLocalStop').onclick = async () => { $('btnLocalStop').disabled = true; await window.voxai.local.stop(); $('btnLocalStop').disabled = false; renderLocal(); };
+  if ($('hfForm')) $('hfForm').onsubmit = (e) => { e.preventDefault(); hfSearch($('hfQ').value.trim()); };
+  window.voxai.local.onState((st) => {
+    const was = LOCAL_ST && LOCAL_ST.state;
+    LOCAL_ST = st; paintLocalEngine();
+    // Loaded, stopped or installed: the rows' buttons and the card change with it.
+    if (st && st.state !== was && ['ready', 'stopped', 'missing'].includes(st.state) && !$('modalBg').querySelector('.set-page[data-set="local"]').hidden) renderLocal();
+  });
+  if (window.voxai.local.onHf) window.voxai.local.onHf((st) => {
+    const was = HF_DL && HF_DL.state;
+    HF_DL = st; paintHf();
+    if (st && st.state !== was && !['downloading', 'verifying'].includes(st.state)) {
+      document.querySelectorAll('.hf-get').forEach((b) => { b.disabled = false; });
+      if (st.state === 'done') { renderLocal(); loadModels(); document.querySelectorAll('.hf-files').forEach((f) => { delete f.dataset.loaded; }); }
+    }
+  });
+  if (window.voxai.local.hfState) window.voxai.local.hfState().then((st) => { HF_DL = st; paintHf(); }).catch(() => {});
+}
 // The local model crawling because the PC is busy: said once every few minutes, not on every request.
 let LOCAL_SLOW_AT = 0;
 if (window.voxai.local && window.voxai.local.onSlow) window.voxai.local.onSlow((info) => {
