@@ -463,6 +463,18 @@ function normalizeReasoning(v) {
   return 'default';
 }
 
+/**
+ * The level a helper runs at -- a sub-agent, the screenshot describer -- given the session's.
+ * Thinking is billed as output, and above a model's default it often costs 2-4x as much per step
+ * (Gemini 4 at high thinks three tokens for every one it shows). A helper does a narrow job and
+ * has its own conversation, so it never shares the session's cache: it runs at the model's
+ * default at most. A lower choice carries over.
+ */
+function helperEffort(choice) {
+  const c = normalizeReasoning(choice);
+  return ['high', 'xhigh', 'max'].includes(c) ? 'default' : c;
+}
+
 /** The supported effort closest to `want`; ties go to the higher one. */
 function nearestEffort(list, want) {
   if (!list || !list.length) return null;
@@ -642,4 +654,4 @@ async function chatOnce({ apiKey, host = DEFAULT_HOST, model, messages, maxToken
   return JSON.parse(text);
 }
 
-module.exports = { chatCompletions, chatOnce, responseError, freeUse, localEndpoint, flexRoute, wireModel, isLocal, recoverToolCalls, watchLocalSpeed, DEFAULT_HOST, applyCacheBreakpoints, cacheMode, reasoningParam, normalizeReasoning, nearestEffort, EFFORTS };
+module.exports = { helperEffort, chatCompletions, chatOnce, responseError, freeUse, localEndpoint, flexRoute, wireModel, isLocal, recoverToolCalls, watchLocalSpeed, DEFAULT_HOST, applyCacheBreakpoints, cacheMode, reasoningParam, normalizeReasoning, nearestEffort, EFFORTS };

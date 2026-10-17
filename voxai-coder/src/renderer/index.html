@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-xMJy9vBg2/3j4TXvhZzubEP6G1UWVKY0Kw2NxTxOaEg='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-8MWJbDZsonciAOqs7wyBAlZuxH7EQcdGmkJByVG2FXs='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1406,6 +1406,8 @@ tests"). Scroll the row instead of breaking words:
 .mp-row.sel{color:var(--ink)}
 .mp-row .ck{width:12px;flex:none;color:var(--gold);font-size:11px;text-align:center}
 .mp-row .nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#chipReason.dear #chipReasonVal{color:var(--gold)}
+#chipReason.dear .gl{color:var(--gold)}
 .mp-row .pr{font:11.5px "Sometype Mono",monospace;color:var(--sub);white-space:nowrap;font-variant-numeric:tabular-nums}
 .mp-row .ct{font:12px "Sometype Mono",monospace;color:var(--sub)}
 .mp-row .go{color:var(--sub);font-size:15px;line-height:1;margin-left:2px}
@@ -1935,11 +1937,11 @@ const EFFORT_ORDER = ['none','minimal','low','medium','high','xhigh','max'];
 const EFFORT_TEXT = {
   none: ['Off', 'Answers right away. Fastest and cheapest.'],
   minimal: ['Minimal', 'A moment\u2019s thought before answering.'],
-  low: ['Low', 'Thinks briefly. Good for small edits and questions.'],
+  low: ['Low', 'Thinks briefly. Good for small edits and questions, and the cheapest that still thinks.'],
   medium: ['Medium', 'Thinks it through. A good everyday setting.'],
-  high: ['High', 'Works the problem out before acting. Slower.'],
-  xhigh: ['Extra high', 'Longer thinking for hard bugs and design work.'],
-  max: ['Max', 'Thinks as long as the model allows. Slowest.'],
+  high: ['High', 'Works the problem out before acting. Slower, and thinking is billed as output: often 2\u20134\u00d7 the cost of Medium per step.'],
+  xhigh: ['Extra high', 'Longer thinking for hard bugs and design work. Several times the cost of Medium.'],
+  max: ['Max', 'Thinks as long as the model allows. The slowest and most expensive: keep it for the hardest problems.'],
   on: ['On', 'Thinks before answering.'],
 };
 let S = null; // settings (redacted)
@@ -4955,7 +4957,12 @@ function paintReasonChip(){
   if (spec === undefined) { val.textContent = S.reasoningEffort && S.reasoningEffort !== 'default' ? (EFFORT_TEXT[S.reasoningEffort] || [S.reasoningEffort])[0] : 'Model default'; return; }
   if (!spec) return;
   if (!reasoningKeys(spec).length) { val.textContent = 'Always on'; return; }
-  val.textContent = EFFORT_TEXT[resolveReasoning(S.reasoningEffort, spec)][0];
+  const lvl = resolveReasoning(S.reasoningEffort, spec), def = reasoningDefault(spec);
+  val.textContent = EFFORT_TEXT[lvl][0];
+  const ord = ['none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'];
+  const dear = ord.indexOf(lvl) > ord.indexOf(def) && ord.indexOf(def) >= 0;
+  c.classList.toggle('dear', dear);
+  c.title = dear ? EFFORT_TEXT[lvl][0] + ' is above ' + modelLabel(activeModel()) + '\u2019s own level (' + EFFORT_TEXT[def][0] + '), so each step costs more. Model default is the cheaper everyday choice.' : 'How long the model thinks before acting';
 }
 function renderReasonMenu(){
   const menu = $('menuReason'); if (!menu) return;
@@ -4973,10 +4980,16 @@ function renderReasonMenu(){
   }
   const cur = resolveReasoning(S.reasoningEffort, spec);
   const def = reasoningDefault(spec);
-  renderOptionMenu(menu, 'Thinking', keys.map((k) => ({
-    key: k, name: EFFORT_TEXT[k][0], on: k === cur,
-    note: EFFORT_TEXT[k][1] + (k === def ? ' Default for this model.' : ''),
-  })), async (k) => {
+  const followsModel = !S.reasoningEffort || S.reasoningEffort === 'default';
+  // "Model default" follows each model's own level, so switching models never carries a dear
+  // level over (High picked for one model would otherwise go with you to the next).
+  const rows = [{ key: 'default', name: 'Model default \u00b7 ' + EFFORT_TEXT[def][0], on: followsModel,
+    note: 'Each model\u2019s own level, ' + EFFORT_TEXT[def][0] + ' for ' + name + '. The best value for most work, and it follows you when you switch models.' }]
+    .concat(keys.map((k) => ({
+      key: k, name: EFFORT_TEXT[k][0], on: !followsModel && k === cur,
+      note: EFFORT_TEXT[k][1] + (k === def ? ' This model\u2019s default.' : ''),
+    })));
+  renderOptionMenu(menu, 'Thinking', rows, async (k) => {
     S = await window.voxai.saveSettings({ reasoningEffort: k });
     $('chipReason').classList.remove('open');
     paintReasonChip();

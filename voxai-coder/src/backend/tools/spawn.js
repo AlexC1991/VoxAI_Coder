@@ -182,7 +182,8 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
         apiKey: agentOpts.apiKey,
         host: agentOpts.host,
         model: task.model || sub.model || agentOpts.defaultSubModel || agentOpts.model,
-        reasoningEffort: agentOpts.reasoningEffort,
+        // A worker does not inherit an expensive level: the model's default at most (helperEffort).
+        reasoningEffort: require('../providers/openrouter').helperEffort(agentOpts.reasoningEffort),
         // The catalogue entry describes the parent's model; a worker on another model
         // gets "unknown", which sends nothing rather than a level it may not take.
         reasoningSpec: (task.model || sub.model || agentOpts.defaultSubModel || agentOpts.model) === agentOpts.model

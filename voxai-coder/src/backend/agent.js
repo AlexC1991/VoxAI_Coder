@@ -1664,7 +1664,9 @@ async function describeScreenshot({ apiKey, host, model, url, about, request, si
   try {
     const r = await chatOnce({
       apiKey, host, model, signal, maxTokens: 900,
-      extra: { usage: { include: true } },
+      // Low thinking: a model thinking at length inside a 900-token answer can spend it all and
+      // say nothing (Gemini 4 at high did, in a published test). Ignored by models that do not think.
+      extra: { usage: { include: true }, reasoning: { effort: 'low' } },
       messages: [{ role: 'user', content: [
         { type: 'text', text: 'You are the eyes of a coding agent that cannot see images. It took this screenshot with '
           + `${about}.\nIts task: ${String(request || '').slice(0, 600)}\n\n`

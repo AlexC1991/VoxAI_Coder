@@ -124,6 +124,24 @@ const textOf = (m) => (typeof m.content === 'string' ? m.content : (m.content ||
     fs.rmSync(WD, { recursive: true, force: true }); fs.rmSync(UD, { recursive: true, force: true });
   }
 
+  // ------------------------------------------------------------------ [P2]
+  console.log('\n[P2] thinking: honest costs, Model default, helpers never at a dear level');
+  {
+    const OR = require(path.join(ROOT, 'src/backend/providers/openrouter.js'));
+    check('a helper runs at the model\'s default at most; a lower choice carries over',
+      OR.helperEffort('high') === 'default' && OR.helperEffort('max') === 'default' && OR.helperEffort('xhigh') === 'default' && OR.helperEffort('low') === 'low' && OR.helperEffort('default') === 'default' && OR.helperEffort('none') === 'none', [OR.helperEffort('high'), OR.helperEffort('low')]);
+    check('sub-agents get the helper level, not the session\'s', fs.readFileSync(path.join(ROOT, 'src/backend/tools/spawn.js'), 'utf8').includes("reasoningEffort: require('../providers/openrouter').helperEffort(agentOpts.reasoningEffort),"), 'inherits');
+    // The screenshot describer asks for low thinking, so a 900-token answer is not thought away.
+    let sent = null;
+    global.fetch = async (_u, opts) => { sent = JSON.parse(opts.body); return { ok: true, status: 200, json: async () => ({ choices: [{ message: { content: 'a page' } }], usage: {} }), text: async () => JSON.stringify({ choices: [{ message: { content: 'a page' } }], usage: {} }) }; };
+    const { describeScreenshot } = require(path.join(ROOT, 'src/backend/agent.js'));
+    await describeScreenshot({ apiKey: 'k', model: 'vision/m', url: 'data:image/png;base64,AAAA', about: 'a click', request: 'check it' });
+    check('the screenshot describer thinks briefly', sent && sent.reasoning && sent.reasoning.effort === 'low' && sent.max_tokens === 900, sent && { reasoning: sent.reasoning, max_tokens: sent.max_tokens });
+    const HM = fs.readFileSync(path.join(ROOT, 'src/renderer/index.html'), 'utf8');
+    check('the Thinking menu leads with Model default, which follows each model', HM.includes("const rows = [{ key: 'default', name: 'Model default \\u00b7 ' + EFFORT_TEXT[def][0], on: followsModel,") && HM.includes("often 2\\u20134\\u00d7 the cost of Medium per step"), 'no default row');
+    check('a level above the model\'s own shows in gold, and says why', HM.includes("c.classList.toggle('dear', dear);") && HM.includes('#chipReason.dear #chipReasonVal{color:var(--gold)}'), 'silent');
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });
