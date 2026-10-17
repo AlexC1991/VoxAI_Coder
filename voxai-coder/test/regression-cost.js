@@ -298,6 +298,54 @@ const textOf = (m) => (typeof m.content === 'string' ? m.content : (m.content ||
     fs.rmSync(WD, { recursive: true, force: true }); fs.rmSync(UD, { recursive: true, force: true });
   }
 
+  // ------------------------------------------------------------------ [P8]
+  console.log('\n[P8] only the memory that matters, the project\'s commands, a lean local prompt');
+  {
+    const PF = require(path.join(ROOT, 'src/backend/projectfacts.js'));
+    const facts = Array.from({ length: 20 }, (_, i) => ({ text: `fact ${i} about the widget renderer`, at: '2026-10-01T00:00:0' + (i % 10) + 'Z' }));
+    facts[3] = { text: 'payments go through Stripe checkout sessions, never raw card data', at: '2026-10-01T00:00:00Z' };
+    facts[11] = { text: 'the Stripe webhook secret lives in STRIPE_WEBHOOK_SECRET', at: '2026-10-01T00:00:00Z' };
+    const p1 = PF.pickFacts(facts, { query: 'add a Stripe refund button to checkout', keep: 4 });
+    check('the facts related to the opening request are picked, in their stored order', p1.shown.length === 4 && p1.shown[0] === facts[3] && p1.shown[1] === facts[11] && p1.more === 16, p1.shown.map((f) => f.text.slice(0, 24)));
+    check('the same request picks the same facts every time', JSON.stringify(PF.pickFacts(facts, { query: 'add a Stripe refund button to checkout', keep: 4 })) === JSON.stringify(p1), 'unstable');
+    check('a small memory is shown whole', PF.pickFacts(facts.slice(0, 5), { query: 'x', keep: 12 }).shown.length === 5, 'cut');
+    const withNew = facts.concat([{ text: 'refunds need a reason code', at: '2026-10-18T09:00:00Z' }]);
+    const p2 = PF.pickFacts(withNew, { query: 'add a Stripe refund button to checkout', keep: 4, since: '2026-10-18T00:00:00Z' });
+    check('a fact saved during the session is always shown, and none of the others is pushed out', p2.shown.length === 5 && p2.shown.includes(withNew[20]) && p1.shown.every((f) => p2.shown.includes(f)), p2.shown.map((f) => f.text.slice(0, 20)));
+
+    const D = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-cost8-'));
+    const proj = (name, files) => { const d = path.join(D, name); fs.mkdirSync(d); for (const [f, c] of Object.entries(files)) fs.writeFileSync(path.join(d, f), c); return d; };
+    const cmds = (d) => PF.detectCommands(d).map((x) => x.what + '=' + x.command).join(', ');
+    check('npm: tests, type check, build and lint from package.json', cmds(proj('a', { 'package.json': JSON.stringify({ scripts: { test: 'vitest', typecheck: 'tsc -b', build: 'vite build', lint: 'eslint .' } }) })) === 'Tests=npm test, Type check=npm run typecheck, Build=npm run build, Lint=npm run lint', cmds(path.join(D, 'a')));
+    check('npm init\'s placeholder test is not a test command', cmds(proj('b', { 'package.json': JSON.stringify({ scripts: { test: 'echo "Error: no test specified" && exit 1', start: 'node .' } }) })) === 'Start=npm run start', cmds(path.join(D, 'b')));
+    check('pnpm is used where the lock file says so', cmds(proj('c', { 'package.json': JSON.stringify({ scripts: { test: 'vitest' } }), 'pnpm-lock.yaml': '' })) === 'Tests=pnpm test', cmds(path.join(D, 'c')));
+    check('Rust, Go, Python and make are found too', cmds(proj('d', { 'Cargo.toml': '' })).startsWith('Tests=cargo test') && cmds(proj('e', { 'go.mod': '' })).startsWith('Tests=go test ./...')
+      && cmds(proj('f', { 'pyproject.toml': '[tool.pytest.ini_options]' })) === 'Tests=python -m pytest' && cmds(proj('g', { Makefile: 'test:\n\tgo test\n' })) === 'Tests=make test', [cmds(path.join(D, 'f'))]);
+
+    // The instructions: commands in, memory cut to what matters, no skills list on a local model.
+    fs.mkdirSync(path.join(D, 'a', '.voxai'));
+    fs.writeFileSync(path.join(D, 'a', '.voxai', 'memory.json'), JSON.stringify({ facts }));
+    const { _loadDurableContext } = require(path.join(ROOT, 'src/backend/agent.js'));
+    const cloud = await _loadDurableContext(path.join(D, 'a'), '', { query: 'Stripe refund' });
+    const local = await _loadDurableContext(path.join(D, 'a'), '', { query: 'Stripe refund', local: true });
+    check('the instructions name the project\'s commands', cloud.includes('[PROJECT COMMANDS]') && cloud.includes('- Tests: npm test'), cloud.slice(0, 200));
+    check('memory: 12 facts that matter and a pointer to the rest', /\[PROJECT MEMORY\] \(20 stored facts; the 12 that matter most to this session are below, and 8 more are one memory search away/.test(cloud) && (cloud.match(/^- /gm) || []).length >= 12, 'all facts');
+    check('a local model gets 6 facts and no skills list', /the 6 that matter most/.test(local) && !local.includes('[SKILLS]') && cloud.includes('[SKILLS]'), 'full');
+
+    // A real session: the opening request picks; a fact saved later comes as "new", nothing "removed".
+    fakeOpenRouter(() => say('ok'));
+    const sess = { id: 'p8', workdir: path.join(D, 'a'), messages: [] };
+    SENT.length = 0; await drain(runAgent({ session: sess, userText: 'add a Stripe refund button', apiKey: 'k', model: 'm', access: 'full', askPermission: async () => true, maxTurns: 2 }));
+    const sys1 = SENT[0].messages[0].content;
+    check('the session\'s prompt carries the Stripe facts', sys1.includes('payments go through Stripe') && sys1.includes('STRIPE_WEBHOOK_SECRET'), 'missing');
+    await new Promise((r) => setTimeout(r, 20));
+    fs.writeFileSync(path.join(D, 'a', '.voxai', 'memory.json'), JSON.stringify({ facts: facts.concat([{ text: 'refunds need a reason code', at: new Date().toISOString() }]) }));
+    SENT.length = 0; await drain(runAgent({ session: sess, userText: 'now the tests', apiKey: 'k', model: 'm', access: 'full', askPermission: async () => true, maxTurns: 2 }));
+    const note = SENT[0].messages.map(textOf).find((t) => /^\[VOX CONTEXT\]/.test(t)) || '';
+    check('a fact saved later: same prompt, a note saying it is new, nothing said to be removed', SENT[0].messages[0].content === sys1 && note.includes('- refunds need a reason code') && !note.includes('Removed'), note.slice(0, 160));
+    fs.rmSync(D, { recursive: true, force: true });
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

@@ -314,7 +314,10 @@ function accumulateUsage(session, usage) {
  * Anything volatile (retrieval, search) stays a TOOL, so its output lands at the end
  * of the transcript where changing content is free.
  */
-async function loadDurableContext(workdir, userData) {
+async function loadDurableContext(workdir, userData, opts = {}) {
+  // opts.query: the session's opening request, which picks the memory facts shown (projectfacts.js).
+  // opts.since: when the session's prompt was set; facts saved after it are always shown.
+  // opts.local: a model on this PC -- fewer facts, and no skills list (it has no skill tool).
   let memFacts = [];
   let buildState = '';
   try {
@@ -339,16 +342,20 @@ async function loadDurableContext(workdir, userData) {
       }
     } catch { /* no such file */ }
   }
+  // How to test, build and lint it, from its own files.
+  try { const cmds = require('./projectfacts').commandsSection(workdir); if (cmds) parts.push(cmds); } catch { /* unreadable */ }
   if (memFacts.length) {
-    // Bounded so a long-lived project cannot grow the prefix without limit.
-    const shown = memFacts.slice(-60).map((f) => `- ${String(f.text || f).slice(0, 300)}`);
-    parts.push(`[PROJECT MEMORY] (${memFacts.length} stored facts; newest last. `
-      + `Add durable conventions and decisions with the memory tool.)\n${shown.join('\n')}`);
+    // Only the facts that matter to this session go in every request; the rest are a search away.
+    const pick = require('./projectfacts').pickFacts(memFacts, { query: opts.query || '', since: opts.since || '', keep: opts.local ? 6 : 12 });
+    const shown = pick.shown.map((f) => `- ${String(f.text || f).slice(0, 300)}`);
+    parts.push(`[PROJECT MEMORY] (${memFacts.length} stored facts`
+      + (pick.more ? `; the ${shown.length} that matter most to this session are below, and ${pick.more} more are one memory search away (action "search")` : '; newest last')
+      + `. Add durable conventions and decisions with the memory tool.)\n${shown.join('\n')}`);
   }
   if (buildState) parts.push(buildState);
   // Which skills there are and what each is for, so the agent loads one when a task
   // touches it. Read once per run like the rest of this block, so the prompt cache holds.
-  try {
+  if (!opts.local) try {
     const idx = await require('./tools/skills').skillsIndex({ workdir, userData });
     if (idx) parts.push(idx);
   } catch { /* no skills */ }
@@ -845,7 +852,16 @@ async function* runAgent(opts) {
   //         self-check that shrinks the keep window until the result fits.
   // Read once per run and reuse for every turn. It MUST be identical across turns of
   // a run or it would move the cache boundary and defeat the whole point.
-  const durable = await loadDurableContext(session.workdir, userData);
+  // The session's opening request picks the memory facts shown, so the choice holds all session.
+  const openingAsk = (() => {
+    for (const m of session.messages || []) {
+      if (!m || m.role !== 'user') continue;
+      const t = typeof m.content === 'string' ? m.content : ((m.content || []).find((p) => p && p.type === 'text') || {}).text || '';
+      if (t && !/^\[VOX /.test(t)) return t;
+    }
+    return userText || '';
+  })();
+  const durable = await loadDurableContext(session.workdir, userData, { query: openingAsk, since: (session.promptFrozen && session.promptFrozen.at) || '', local: isLocal(model) });
   // Search off means the tool is not offered at all, and the prompt must not tell the
   // model to use it -- an instruction naming a missing tool invites made-up calls.
   const webSearchOn = !(webSearch && webSearch.enabled === false);
@@ -1785,4 +1801,5 @@ function answerPendingAsk(session, callId, res) {
 }
 
 module.exports = {
+  _loadDurableContext: loadDurableContext,
   _systemPrompt: (...a) => SYSTEM(...a), extractImages, TOOL_IMAGES_MARKER, runAgent, MAX_TURNS, AUTO_POLICY, autoCheckMessages, readAutoDecision, autoRule, describeScreenshot, goalPrompt, boundToolResult, accumulateUsage, uniqueToolIds, answerEveryCall, pendingAsk, answerPendingAsk, compactImage, browserTargetJs };

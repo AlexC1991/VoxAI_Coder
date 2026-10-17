@@ -19,14 +19,14 @@
 const crypto = require('crypto');
 
 const DATE_LINE = /Today's date: \d{4}-\d{2}-\d{2}\. /;
-const SECTIONS = ['PROJECT NOTES', 'PROJECT MEMORY', 'BUILD STATE', 'SKILLS'];
+const SECTIONS = ['PROJECT NOTES', 'PROJECT COMMANDS', 'PROJECT MEMORY', 'BUILD STATE', 'SKILLS'];
 
 /** The durable block split into its sections, by heading. */
 function sectionsOf(durable) {
   const out = {};
   const text = String(durable || '');
   const heads = [];
-  const re = /^\[(PROJECT NOTES|PROJECT MEMORY|BUILD STATE|SKILLS)\]/gm;
+  const re = /^\[(PROJECT NOTES|PROJECT COMMANDS|PROJECT MEMORY|BUILD STATE|SKILLS)\]/gm;
   let m;
   while ((m = re.exec(text))) heads.push({ name: m[1], at: m.index });
   heads.forEach((h, i) => { out[h.name] = text.slice(h.at, i + 1 < heads.length ? heads[i + 1].at : text.length).trim(); });
@@ -80,7 +80,8 @@ function stablePrompt(session, { fresh, head, durable, date }) {
     // Recorded as told only once the note is really in the conversation (not on a resume).
     return { systemPrompt: fz.text, note, kept: true, commit: () => { fz.told = durable; fz.date = date; } };
   }
-  session.promptFrozen = { key, text: fresh, told: durable, date, start };
+  // at: when it was set -- memory facts saved after it are always shown (projectfacts.js).
+  session.promptFrozen = { key, text: fresh, told: durable, date, start, at: new Date().toISOString() };
   return { systemPrompt: fresh, note: '', kept: false, commit: () => {} };
 }
 

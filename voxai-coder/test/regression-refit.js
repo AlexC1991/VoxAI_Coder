@@ -1500,7 +1500,7 @@ async function drain(gen) {
       check('the agent gets an index of what each skill is for', /^\[SKILLS\]/.test(idx) && idx.includes('- deploy: How this project deploys.') && idx.includes('- preview-browser: ') && idx.includes('- service-setup: '), idx.slice(0, 300));
       fs.rmSync(T0, { recursive: true, force: true });
     }
-    check('the index is part of every run\'s context', AG.includes("const idx = await require('./tools/skills').skillsIndex({ workdir, userData });") && AG.includes('await loadDurableContext(session.workdir, userData)'), 'not told');
+    check('the index is part of every run\'s context (a local model, with no skill tool, aside)', AG.includes("const idx = await require('./tools/skills').skillsIndex({ workdir, userData });") && AG.includes('await loadDurableContext(session.workdir, userData, { query: openingAsk,') && AG.includes('  if (!opts.local) try {'), 'not told');
     check('the agent is told to load a matching skill, even to plan or advise', AG.includes('load the matching skill with the skill tool first, and prefer what it says to your own memory') && AG.includes('(/\\[SKILLS\\]/.test(durable)'), 'answers from memory');
     check('a skill is not cut to the usual result limit', AG.includes("tc.name === 'skill' ? Math.max(Number(toolResultMaxChars) || 0, 32000) : toolResultMaxChars"), 'middle lost');
     for (const b of ['preview-browser', 'service-setup']) {
