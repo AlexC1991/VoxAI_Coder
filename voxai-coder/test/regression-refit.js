@@ -867,6 +867,12 @@ async function drain(gen) {
       const HM = read('src/renderer/index.html');
       check('[MCP] the Apps (MCP) page is in Settings', HM.includes('<button type="button" data-set="mcp">') && HM.includes('<section class="set-page" data-set="mcp" hidden>') && HM.includes("if (key === 'mcp') { mcpClose(); loadMcp(); }"), 'no page');
       check('[MCP] an app card only opens the editor', HM.includes("card.onclick = () => (added ? mcpOpen(added, all[added]) : mcpOpen('', null, p ? k : null));") && !/function mcpOpen\([\s\S]{0,1600}mcpSave/.test(HM.slice(HM.indexOf('function mcpOpen('), HM.indexOf('function mcpClose('))), 'saves');
+      // The changes line above the box, and the Settings clean-up.
+      check('the changes line reads from the left when it is alone, and opens from the keyboard', HM.includes(".shelf.only-chg .sh-sp{display:none}") && HM.includes("$('shelf').classList.toggle('only-chg', shown.length === 1 && shown[0].id === 'ctxBar');") && HM.includes("e.target.id === 'ctxBar' && e.target.classList.contains('can-open')) { e.preventDefault(); toggleDiff(); }"), 'right-aligned');
+      check('Settings: the saved note floats instead of owning a strip', HM.includes('.set-status{position:absolute;') && !HM.includes('.set-status{display:flex;justify-content:flex-end;align-items:center;padding:0 26px;border-top'), 'strip');
+      check('Settings: the key state is said in words', HM.includes("'. Leave it empty to keep it.'") && !HM.includes('leave blank to keep'), 'log text');
+      check('Settings: no "--" dashes in the copy', !/<p>[^<]* -- [^<]*<\/p>/.test(HM.slice(HM.indexOf('<div class="modal-bg" id="modalBg">'), HM.indexOf('<script src="vendor/vte.browser.js">'))), 'dashes');
+      check('Settings: skills show two lines until opened, no capsule', HM.includes('-webkit-line-clamp:2') && HM.includes("row.onclick = () => row.classList.toggle('open');") && !/\.sk-src\{[^}]*border-radius:999px/.test(HM), 'long');
       // The fold under a finished turn is a plain line, not a capsule.
       check('the steps fold is a plain line', /\.turn-toggle\{[^}]*border:0;background:none/.test(HM) && !/\.turn-toggle\{[^}]*border-radius:999px/.test(HM), 'capsule');
       check('[MCP] a row being tested says Starting, not Did not start', HM.indexOf("else if (t && t.busy) { tone = 'busy'; say = 'Starting'; }") > -1 && HM.indexOf("else if (t && t.busy) { tone = 'busy'; say = 'Starting'; }") < HM.indexOf("else if (t && !t.ok) { tone = 'bad'; say = 'Did not start'; }"), 'order');
@@ -1996,7 +2002,7 @@ async function drain(gen) {
       && HTML.includes("if (cur < steps.length - 1) { cur += 1; otherOpen = false; paint(); }\n    else finish(false);") && HTML.includes("h.appendChild(el('span', '', (cur + 1) + ' of ' + steps.length));"), 'stepper');
     check('choose-any questions have Next, and Back goes to the one before', HTML.includes("const go = el('button', 'b pri', cur < steps.length - 1 ? 'Next' : 'Send');") && HTML.includes("const back = el('button', 'b lnk', '← Back');"), 'next/back');
     check('typing in the box answers the question on screen, then moves on', HTML.includes("typed[cur] = String(text || ''); picks[cur] = steps[cur].multi ? picks[cur] : new Set();\n      next();"), 'typed');
-    check('each session keeps its own, and the dock follows the session on screen', HTML.includes('const v = actView(), box = v && v.askEl;') && HTML.includes("  paintQDock();\n  const any = [...$('shelf').children]"), 'switch');
+    check('each session keeps its own, and the dock follows the session on screen', HTML.includes('const v = actView(), box = v && v.askEl;') && HTML.includes("  paintQDock();\n  const shown = [...$('shelf').children]"), 'switch');
   }
 
   // ------------------------------------------------------------------ [RW]

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-X3jaOXzoXP9JNeHBvNPXPUaVCXKLK1pdoUtTcAkrvB4='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-P/sx0zdowf6AIAxQly7n0sQgdHQ6lqao0KrKFD0m3j0='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -244,7 +244,7 @@ tests"). Scroll the row instead of breaking words:
 /* Usage opens from Settings, so it goes on top of it: at the same level it opened
    underneath, half-hidden. Found in a live test. */
 #usageModalBg{z-index:60}
-.local-models,.local-dirs{padding:6px 14px 12px}.local-dirs:empty{display:none}.lm-row{display:flex;align-items:center;gap:12px;padding:8px 0;border-top:1px solid var(--edge)}.lm-row:first-child{border-top:0}.lm-name{flex:1;min-width:0}.lm-name b{font-weight:500;color:var(--ink)}.lm-sub{color:var(--mut);font-size:11px;font-family:"Sometype Mono",monospace}.lm-on{color:var(--gold);font-size:11px;margin-left:6px}
+.local-models,.local-dirs{padding:2px 16px 10px}.local-dirs:empty{display:none}.lm-row{display:flex;align-items:center;gap:12px;padding:9px 0;border-top:1px solid var(--edge)}.lm-row:first-child{border-top:0}.lm-name{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}.lm-name b{font:500 12.5px "Sometype Mono",monospace;color:var(--ink);overflow-wrap:anywhere}.lm-sub{color:var(--faint);font-size:11.5px;font-family:"Sometype Mono",monospace;overflow-wrap:anywhere}.lm-on{color:var(--gold);font:12px Chivo,sans-serif;margin-left:8px}.lm-row .btn{font-size:12.5px;padding:4px 11px}.lm-x{flex:none;border:0;background:none;color:var(--dim);font:12.5px Chivo,sans-serif;cursor:pointer;padding:3px 6px;border-radius:6px}.lm-x:hover{color:var(--del);background:var(--sel)}.local-models .ke{padding:12px 0;font-size:13px;color:var(--dim)}.local-models .lm-name b{font:600 13.5px Chivo,sans-serif}
 .acct-keys{padding:4px 14px 12px;overflow-x:auto}.acct-keys table{width:100%;border-collapse:collapse;font-size:12px}.acct-keys th{color:var(--mut);font-weight:500;text-align:right;padding:4px 6px}.acct-keys th:first-child,.acct-keys td:first-child{text-align:left}.acct-keys td{padding:5px 6px;text-align:right;border-top:1px solid var(--edge);font-variant-numeric:tabular-nums}.acct-keys .kt{font-size:10px;color:var(--gold);margin-left:6px}.acct-keys .ks{color:var(--mut);font-family:"Sometype Mono",monospace;font-size:11px}.acct-keys .ke{color:var(--mut);padding:6px 0}
 .modal-bg.show{display:flex}
 /* ---- Settings: a sheet with sections ----
@@ -279,12 +279,15 @@ tests"). Scroll the row instead of breaking words:
 .set-lbl .opt{font-weight:400;font-size:11.5px;color:var(--faint);margin-left:6px}
 .set-desc{font-size:12.5px;color:var(--dim);margin-top:2px;max-width:48ch;line-height:1.5}
 .set-ctl{display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:0}
-.set-state{font-family:"Sometype Mono",monospace;font-size:11.5px;color:var(--faint);align-self:flex-start}
+.set-state{font-size:12px;color:var(--faint);align-self:flex-start;line-height:1.45}
 .set-actions{display:flex;align-items:center;gap:12px;padding:10px 16px 12px;border-top:1px solid var(--edge)}
 .set-hint{font-size:12px;color:var(--faint);margin-right:auto}
+.set-sub{margin:4px 0 -6px;font-size:11.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--faint)}
 .set-note{margin:0;font-size:12px;color:var(--faint);line-height:1.6}
 .set-note code{font-family:"Sometype Mono",monospace;font-size:11.5px;color:var(--dim)}
-.set-status{display:flex;justify-content:flex-end;align-items:center;padding:0 26px;border-top:1px solid var(--edge);font-size:12.5px;height:38px;flex:none}
+.set-status{position:absolute;right:24px;bottom:16px;z-index:3;pointer-events:none;font-size:12.5px}
+#setSaved{display:inline-block;padding:6px 11px;border-radius:7px;background:var(--panel2);border:1px solid var(--edge2)}
+#setSaved:empty{display:none}
 #setSaved{color:var(--add);opacity:0;transition:opacity .25s}
 #setSaved.show{opacity:1} #setSaved.err{color:var(--del)}
 .keyrow{display:flex;gap:8px;width:100%}
@@ -308,8 +311,8 @@ tests"). Scroll the row instead of breaking words:
 .seg button[aria-pressed="true"]{background:var(--sel);color:var(--ink)}
 .seg button[aria-pressed="true"] small{color:var(--gold)}
 .presets{display:flex;gap:6px}
-.presets button{font-family:"Sometype Mono",monospace;font-size:12px;color:var(--dim);background:var(--panel2);border:0;padding:6px 10px;border-radius:6px;cursor:pointer}
-.presets button:hover{color:var(--ink)}
+.presets button{font-family:"Sometype Mono",monospace;font-size:12px;color:var(--mut);background:none;border:1px solid var(--edge2);padding:5px 11px;border-radius:7px;cursor:pointer}
+.presets button:hover{color:var(--ink);border-color:var(--sub)}
 .presets button.on{color:var(--gold);box-shadow:inset 0 0 0 1px var(--goldedge)}
 .rng{display:flex;align-items:center;gap:12px}
 .rng input{width:170px;accent-color:var(--gold)}
@@ -530,8 +533,12 @@ tests"). Scroll the row instead of breaking words:
 .sk-main{flex:1;min-width:0;display:flex;flex-direction:column;gap:4px}
 .sk-top{display:flex;align-items:center;gap:8px}
 .sk-name{font-family:"Sometype Mono",monospace;font-size:13px;color:var(--ink)}
-.sk-src{font-size:11px;color:var(--faint);border:1px solid var(--edge2);border-radius:999px;padding:1px 8px;letter-spacing:.02em}
-.sk-desc{font-size:13px;line-height:1.5;color:var(--dim)}
+.sk-src{font-size:12px;color:var(--faint)}
+.sk-src::before{content:"\00b7";margin-right:8px}
+.sk-desc{font-size:13px;line-height:1.5;color:var(--dim);display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.sk-row.open .sk-desc{display:block}
+.sk-row{cursor:pointer}
+.sk-row:hover .sk-name{color:var(--gold)}
 .sk-desc.none{color:var(--faint);font-style:italic}
 .sk-open{margin-left:auto;flex:none}
 .sk-help{margin:14px 2px 4px;font-size:12.5px;line-height:1.6;color:var(--faint)}
@@ -1021,18 +1028,36 @@ tests"). Scroll the row instead of breaking words:
 .attach-thumb .an{font-size:12.5px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .attach-thumb .rm{border:0;background:none;color:var(--sub);cursor:pointer;font-size:12px;padding:0 3px;border-radius:4px}
 .attach-thumb .rm:hover{color:var(--del)}
-.ctxbar{display:flex;align-items:center;gap:8px;font:12px "Sometype Mono",monospace;color:var(--dim);cursor:default;min-width:0;flex:0 1 auto;margin-left:auto}
+.ctxbar{display:flex;align-items:center;gap:8px;font:12.5px Chivo,sans-serif;color:var(--dim);cursor:default;min-width:0;flex:0 1 auto;margin-left:auto;padding:3px 4px 3px 8px;margin-block:-3px;border-radius:7px;outline:0;transition:background .12s}
 .ctxbar[hidden]{display:none}
+/* Alone on the shelf it reads from the left, like everything else in the box. */
+.shelf.only-chg .sh-sp{display:none}
+.shelf.only-chg .ctxbar{margin-left:-8px;flex:1 1 auto}
+.shelf.only-chg .ctxbar #cbRefresh{margin-left:auto}
 .ctxbar.can-open{cursor:pointer}
-.ctxbar.can-open:hover .cb-diff b{color:var(--ink)}
-.ctxbar .cb-chev{color:var(--sub);display:inline-flex;align-items:center;width:11px}
-.ctxbar:not(.can-open) .cb-chev{visibility:hidden}
-.ctxbar .cb-diff{display:flex;align-items:baseline;gap:8px;white-space:nowrap}
-.ctxbar .cb-diff b{font-weight:500;color:var(--mut)}
+.ctxbar.can-open:hover,.ctxbar.can-open:focus-visible{background:var(--sel)}
+.ctxbar:focus-visible{box-shadow:0 0 0 2px var(--goldedge)}
+.ctxbar.can-open:hover .cb-diff b,.ctxbar.open .cb-diff b{color:var(--ink)}
+.ctxbar .cb-ic{flex:none;display:inline-flex;color:var(--sub)}
+.ctxbar .cb-ic svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.ctxbar .cb-diff{display:flex;align-items:center;gap:8px;white-space:nowrap}
+.ctxbar .cb-diff b{font-weight:600;color:var(--mut)}
+.ctxbar .cb-diff .add,.ctxbar .cb-diff .del{font:12px "Sometype Mono",monospace;font-variant-numeric:tabular-nums}
 .ctxbar .cb-diff .add{color:var(--add)}
-.ctxbar .cb-diff .del{color:var(--del)}
+.ctxbar .cb-diff .del{color:var(--del);margin-left:-2px}
+/* How the change splits between added and removed lines, at a glance. */
+.ctxbar .cb-split{display:inline-flex;width:34px;height:4px;border-radius:2px;overflow:hidden;background:var(--edge2);flex:none}
+.ctxbar .cb-split i{display:block;height:100%}
+.ctxbar .cb-split .a{background:var(--add)} .ctxbar .cb-split .d{background:var(--del)}
 .ctxbar .cb-touched{color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-.ctxbar .mini{flex:none;color:var(--sub)}
+.ctxbar .cb-touched:not(:empty)::before{content:"\00b7";margin-right:8px}
+.ctxbar .cb-chev{flex:none;display:inline-flex;align-items:center;color:var(--sub)}
+.ctxbar .cb-chev svg{transition:transform .15s;transform:rotate(180deg)}
+.ctxbar.open .cb-chev svg{transform:none}
+.ctxbar:not(.can-open) .cb-chev{display:none}
+.ctxbar .mini{flex:none;color:var(--sub);opacity:0;transition:opacity .12s}
+.shelf:hover .ctxbar .mini,.ctxbar .mini:focus-visible,.ctxbar:focus-within .mini{opacity:1}
+@media (prefers-reduced-motion:reduce){.ctxbar .cb-chev svg{transition:none}}
 
 /* queued messages, opened on top of the box */
 .qrows{display:flex;flex-direction:column;border-bottom:1px solid var(--edge)}
@@ -1329,10 +1354,11 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
             <div id="attachTray" class="attach-tray" hidden></div>
             <span class="sh-sp"></span>
             <div class="ctxbar" id="ctxBar" hidden title="Show the changed files">
-              <span class="cb-chev" id="cbChev"></span>
+              <span class="cb-ic" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5M9.5 13.5h5M12 11v5"/></svg></span>
               <span class="cb-diff" id="cbDiff"></span>
               <span class="cb-touched" id="cbTouched"></span>
-              <button class="mini ic" id="cbRefresh" type="button" title="Refresh changes"></button>
+              <span class="cb-chev" id="cbChev" aria-hidden="true"></span>
+              <button class="mini ic" id="cbRefresh" type="button" title="Refresh changes" aria-label="Refresh changes"></button>
             </div>
           </div>
           <!-- an approval takes the place of the text box, where your eyes already are -->
@@ -1483,7 +1509,7 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
     <button type="button" data-set="skills"><svg viewBox="0 0 24 24"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5zM5 19.5A1.5 1.5 0 0 0 6.5 21H19M9 7h6M9 10.5h4"/></svg>Skills</button>
     <button type="button" data-set="mcp"><svg viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></svg>Apps (MCP)</button>
     <button type="button" data-set="keys"><svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>Keyboard</button>
-    <div class="set-foot">Changes save as you make them.<br><span id="setVersion">VoxAI Coder</span></div>
+    <div class="set-foot">Changes save as you go.<br><span id="setVersion">VoxAI Coder</span></div>
   </nav>
   <div class="set-main">
     <button type="button" class="set-x" id="btnClose" aria-label="Close settings">✕</button>
@@ -1499,7 +1525,7 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
     <section class="set-page" data-set="spend" hidden>
       <header class="set-top"><h3>Spending</h3><p>A hard stop for each run, so a loop or a big fan-out can’t drain the account.</p></header>
       <div class="set-scroll">
-        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Limit per run</div><div class="set-desc">The run stops when it reaches this. Sub-agents and web searches draw from the same allowance.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease limit per run">−</button><input id="fRunBudget" type="number" min="0.25" max="100" step="0.25" placeholder="1.00" aria-label="limit per run"><span class="num-u">USD</span><button type="button" class="num-b" data-num="1" aria-label="Increase limit per run">+</button></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Limit per goal</div><div class="set-desc">A goal (/goal) keeps starting new runs until it is met. It pauses when all its runs together reach this.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease limit per goal">−</button><input id="fGoalBudget" type="number" min="0.5" max="500" step="0.5" placeholder="5.00" aria-label="limit per goal"><span class="num-u">USD</span><button type="button" class="num-b" data-num="1" aria-label="Increase limit per goal">+</button></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Quick picks</div><div class="set-desc">Typical runs on a DeepSeek Flash model cost under a cent.</div></div><div class="set-ctl"><div class="presets" id="budgetPresets"><button type="button" data-v="0.25">$0.25</button><button type="button" data-v="1.00">$1</button><button type="button" data-v="5.00">$5</button></div></div></div></div>
+        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Limit per run</div><div class="set-desc">The run stops when it reaches this. Sub-agents and web searches draw from the same allowance.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease limit per run">−</button><input id="fRunBudget" type="number" min="0.25" max="100" step="0.25" placeholder="1.00" aria-label="limit per run"><span class="num-u">USD</span><button type="button" class="num-b" data-num="1" aria-label="Increase limit per run">+</button></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Limit per goal</div><div class="set-desc">A goal (/goal) keeps starting new runs until it is met. It pauses when all its runs together reach this.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease limit per goal">−</button><input id="fGoalBudget" type="number" min="0.5" max="500" step="0.5" placeholder="5.00" aria-label="limit per goal"><span class="num-u">USD</span><button type="button" class="num-b" data-num="1" aria-label="Increase limit per goal">+</button></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Quick limits per run</div><div class="set-desc">Typical runs on a DeepSeek Flash model cost under a cent.</div></div><div class="set-ctl"><div class="presets" id="budgetPresets"><button type="button" data-v="0.25">$0.25</button><button type="button" data-v="1.00">$1</button><button type="button" data-v="5.00">$5</button></div></div></div></div>
       </div>
     </section>
 
@@ -1511,9 +1537,11 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
     </section>
 
     <section class="set-page" data-set="notify" hidden>
-      <header class="set-top"><h3>Notifications</h3><p>When a session needs you -- an approval or a question -- and VoxAI isn’t the window in front.</p></header>
+      <header class="set-top"><h3>Notifications</h3><p>When a session needs you for an approval or a question, and VoxAI isn’t the window in front.</p></header>
       <div class="set-scroll">
-        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Card in the corner</div><div class="set-desc">A card above the taskbar saying which project needs you and what for. Allow or Deny an approval right from it, or open the session. It tucks away after 12 seconds (not while you point at it).</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntToast" role="switch" aria-checked="false" aria-label="Card in the corner"></button></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Use Windows’ own notification</div><div class="set-desc">The same, as a Windows notification instead of the VoxAI card: it also stays in the Windows notification centre.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntNative" role="switch" aria-checked="false" aria-label="Use Windows’ own notification"></button></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Taskbar badge</div><div class="set-desc">The taskbar button shows how many are waiting, and flashes when a new one comes in.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntTaskbar" role="switch" aria-checked="false" aria-label="Taskbar badge"></button></div></div></div>
+        <h4 class="set-sub">Alerts</h4>
+        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Card in the corner</div><div class="set-desc">A card above the taskbar says which project needs you and why. Allow, Deny or open the session from it. It hides after 12 seconds unless you point at it.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntToast" role="switch" aria-checked="false" aria-label="Card in the corner"></button></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Use Windows’ own notification</div><div class="set-desc">Shows it as a Windows notification instead of the VoxAI card, so it also stays in the notification centre.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntNative" role="switch" aria-checked="false" aria-label="Use Windows’ own notification"></button></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Taskbar badge</div><div class="set-desc">The taskbar button shows how many are waiting, and flashes when a new one comes in.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntTaskbar" role="switch" aria-checked="false" aria-label="Taskbar badge"></button></div></div></div>
+        <h4 class="set-sub">System tray</h4>
         <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Minimize to the system tray</div><div class="set-desc">Minimizing hides the window to the tray icon instead of the taskbar. Click the icon to bring it back.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntTrayMin" role="switch" aria-checked="false" aria-label="Minimize to the system tray"></button></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Close to the system tray</div><div class="set-desc">Closing the window keeps VoxAI running in the tray, so runs carry on. Quit from the tray icon.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="ntTrayClose" role="switch" aria-checked="false" aria-label="Close to the system tray"></button></div></div></div>
       </div>
     </section>
@@ -1521,17 +1549,19 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
       <header class="set-top"><h3>Local models</h3><p>Models that run on this PC: free, and nothing leaves your machine. They show in the model picker under “This PC”, and make a good free coder in Team.</p></header>
       <div class="set-scroll">
         <div class="set-group">
-          <div class="set-row"><div class="set-txt"><div class="set-lbl">Models folders</div><div class="set-desc" id="localDirTxt">Where your .gguf files are. Keep them on your fastest drive: reading a model from an NVMe was about half as fast again as from a hard drive. Offload plans from VoxAI ModelMaker (.offload.json) beside them are used. The engine lives in the first folder.</div></div><div class="set-ctl"><button class="btn ghost" id="btnLocalDir" type="button">Add folder…</button></div></div><div class="local-dirs" id="localDirs"></div>
+          <div class="set-row"><div class="set-txt"><div class="set-lbl">Models folders</div><div class="set-desc" id="localDirTxt">Where your .gguf files are. Keep them on your fastest drive: an NVMe loads a model about half as fast again as a hard drive. ModelMaker offload plans (.offload.json) beside them are used, and the engine lives in the first folder.</div></div><div class="set-ctl"><button class="btn ghost" id="btnLocalDir" type="button">Add folder…</button></div></div><div class="local-dirs" id="localDirs"></div>
           <div class="set-row"><div class="set-txt"><div class="set-lbl">Engine</div><div class="set-desc" id="localEngineTxt">llama.cpp (Vulkan), downloaded once and checked against its published checksum.</div></div><div class="set-ctl"><button class="btn ghost" id="btnLocalInstall" type="button">Get engine</button></div></div>
-          <div class="set-row"><div class="set-txt"><div class="set-lbl">Graphics card</div><div class="set-desc" id="localGpuTxt">—</div></div></div>
+          <div class="set-row"><div class="set-txt"><div class="set-lbl">Graphics card</div><div class="set-desc" id="localGpuTxt">Checking…</div></div></div>
         </div>
-        <div class="set-group"><div class="local-models" id="localModels"><div class="ke">No models yet.</div></div></div>
+        <div class="set-group"><div class="local-models" id="localModels"><div class="ke">Looking for models…</div></div></div>
       </div>
     </section>
     <section class="set-page" data-set="subs" hidden>
       <header class="set-top"><h3>Sub-agents</h3><p>Workers the agent can hand self-contained jobs to. They report back and share the run’s spending limit.</p></header>
       <div class="set-scroll">
-        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Model</div><div class="set-desc">A cheaper model makes fan-outs cheaper. Leave empty to use the session’s model.</div></div><div class="set-ctl"><input id="fSubModel" class="txt" placeholder="Same as the session" autocomplete="off" aria-label="Sub-agent model"></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Eyes for models that cannot see</div><div class="set-desc">When the session’s model cannot read images, this model looks at each screenshot and describes it, problems included. Empty turns it off.</div></div><div class="set-ctl"><input id="fVisionHelper" class="txt" placeholder="Off" autocomplete="off" aria-label="Model that describes screenshots"></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Keep Claude’s cache for an hour</div><div class="set-desc">Claude models keep the conversation cached for 5 minutes, so stepping away means the next message pays to cache it all again. An hour costs more to write (2× input instead of 1.25×) but survives a break. Worth it if you often pause mid-session.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="fCacheHour" role="switch" aria-checked="false" aria-label="Keep Claude’s cache for an hour"></button></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Turns before answering</div><div class="set-desc">How many tool steps a worker may take before it must report.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease turns before answering">−</button><input id="fSubMaxTurns" type="number" min="1" max="100" step="5" placeholder="25" aria-label="turns before answering"><span class="num-u">turns</span><button type="button" class="num-b" data-num="1" aria-label="Increase turns before answering">+</button></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Time limit</div><div class="set-desc">A worker still running after this is stopped and returns what it has.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease time limit">−</button><input id="fSubTimeout" type="number" min="10" max="3600" step="30" placeholder="300" aria-label="time limit"><span class="num-u">sec</span><button type="button" class="num-b" data-num="1" aria-label="Increase time limit">+</button></div></div></div></div>
+        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Model</div><div class="set-desc">A cheaper model makes fan-outs cheaper. Leave empty to use the session’s model.</div></div><div class="set-ctl"><input id="fSubModel" class="txt" placeholder="Same as the session" autocomplete="off" aria-label="Sub-agent model"></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Turns before answering</div><div class="set-desc">How many tool steps a worker may take before it must report.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease turns before answering">−</button><input id="fSubMaxTurns" type="number" min="1" max="100" step="5" placeholder="25" aria-label="turns before answering"><span class="num-u">turns</span><button type="button" class="num-b" data-num="1" aria-label="Increase turns before answering">+</button></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Time limit</div><div class="set-desc">A worker still running after this is stopped and returns what it has.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease time limit">−</button><input id="fSubTimeout" type="number" min="10" max="3600" step="30" placeholder="300" aria-label="time limit"><span class="num-u">sec</span><button type="button" class="num-b" data-num="1" aria-label="Increase time limit">+</button></div></div></div></div>
+        <h4 class="set-sub">Every run</h4>
+        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Eyes for models that cannot see</div><div class="set-desc">When the session’s model cannot read images, this model looks at each screenshot and describes it, problems included. Empty turns it off.</div></div><div class="set-ctl"><input id="fVisionHelper" class="txt" placeholder="Off" autocomplete="off" aria-label="Model that describes screenshots"></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Keep Claude’s cache for an hour</div><div class="set-desc">Claude keeps the conversation cached for 5 minutes, so after a break the next message pays to cache it again. An hour costs more to write (2× input instead of 1.25×) but outlasts a break.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="fCacheHour" role="switch" aria-checked="false" aria-label="Keep Claude’s cache for an hour"></button></div></div></div>
       </div>
     </section>
 
@@ -2179,8 +2209,9 @@ function paintShelf(){
   const w = v ? contextWarning(v.ctxFill) : '';
   if (warn) { warn.hidden = steering || busy || !w || !!img || !!cn; $('shWarnTxt').textContent = w; }
   paintQDock();
-  const any = [...$('shelf').children].some((c) => !c.hidden && !c.classList.contains('sh-sp'));
-  $('shelf').hidden = !any;
+  const shown = [...$('shelf').children].filter((c) => !c.hidden && !c.classList.contains('sh-sp'));
+  $('shelf').hidden = !shown.length;
+  $('shelf').classList.toggle('only-chg', shown.length === 1 && shown[0].id === 'ctxBar');
   paintPlanTray();
   keepFollowing();
 }
@@ -6895,9 +6926,9 @@ async function renderLocal(){
     (r.dirs || []).forEach((d, i) => {
       const row = el('div', 'lm-row'), name = el('div', 'lm-name');
       const b = document.createElement('b'); b.textContent = d; name.appendChild(b);
-      if (i === 0) { const sub = el('div', 'lm-sub'); sub.textContent = 'engine: ' + (r.engineDir || ''); name.appendChild(sub); }
+      if (i === 0 && r.engineDir) { const sub = el('div', 'lm-sub'); sub.textContent = 'Engine: ' + r.engineDir; name.appendChild(sub); }
       row.appendChild(name);
-      const x = el('button', 'btn ghost', 'Remove'); x.type = 'button';
+      const x = el('button', 'lm-x', 'Remove'); x.type = 'button'; x.setAttribute('aria-label', 'Remove ' + d);
       x.onclick = async () => { await window.voxai.local.removeDir(d); S = await window.voxai.getSettings(); loadModels(); renderLocal(); };
       row.appendChild(x); dl.appendChild(row);
     });
@@ -7050,25 +7081,30 @@ function paintCtxBar(){
   if (c.repo && (c.added || c.removed || files)) {
     // Line counts only when there are some. New, untracked files have none, and a repo
     // with no commits yet read "10 files changed +0 −0", which looks like a fault.
+    const ad = Number(c.added || 0), rm = Number(c.removed || 0);
+    const pa = ad + rm ? Math.round(100 * ad / (ad + rm)) : 0;
     d.innerHTML = '<b>' + files.toLocaleString() + (files === 1 ? ' file changed' : ' files changed') + '</b>'
-      + (c.added ? '<span class="add">+' + Number(c.added).toLocaleString() + '</span>' : '')
-      + (c.removed ? '<span class="del">−' + Number(c.removed).toLocaleString() + '</span>' : '');
+      + (ad ? '<span class="add">+' + ad.toLocaleString() + '</span>' : '')
+      + (rm ? '<span class="del">−' + rm.toLocaleString() + '</span>' : '')
+      + (ad + rm ? '<span class="cb-split" aria-hidden="true"><i class="a" style="width:' + pa + '%"></i><i class="d" style="width:' + (100 - pa) + '%"></i></span>' : '');
     bar.classList.add('can-open');
-    bar.title = 'Show the changed files';
+    bar.tabIndex = 0; bar.setAttribute('role', 'button'); bar.setAttribute('aria-expanded', String(!!DIFF_OPEN));
+    bar.title = DIFF_OPEN ? 'Hide the changed files' : 'Show the changed files';
   } else if (!c.repo && touched) {
     // Without git there are no line counts, but the files this session changed are known.
     d.innerHTML = '<b>' + touched + (touched === 1 ? ' file changed' : ' files changed') + '</b>';
-    bar.classList.remove('can-open');
+    bar.classList.remove('can-open'); bar.removeAttribute('tabindex'); bar.removeAttribute('role'); bar.removeAttribute('aria-expanded');
     bar.title = [...(TOUCHED.get(sid) || [])].join(String.fromCharCode(10));
   } else {
     d.textContent = c.repo ? 'No uncommitted changes' : '';
-    bar.classList.remove('can-open');
+    bar.classList.remove('can-open'); bar.removeAttribute('tabindex'); bar.removeAttribute('role'); bar.removeAttribute('aria-expanded');
     bar.title = '';
   }
-  const chev = $('cbChev'); if (chev && !chev.innerHTML) chev.innerHTML = icon(DIFF_OPEN ? 'down' : 'right', 11);
+  const chev = $('cbChev'); if (chev && !chev.dataset.ok) { chev.innerHTML = icon('down', 12); chev.dataset.ok = '1'; }
+  bar.classList.toggle('open', !!DIFF_OPEN);
 
   const t = $('cbTouched');
-  t.textContent = touched && c.repo ? (touched + ' touched this session') : '';
+  t.textContent = touched && c.repo ? (touched + ' this session') : '';
   t.title = touched ? [...(TOUCHED.get(sid) || [])].join(String.fromCharCode(10)) : '';
   paintShelf();
 }
@@ -7077,6 +7113,9 @@ document.addEventListener('click', function(e){
   if (!e.target || !e.target.closest) return;
   if (e.target.closest('#cbRefresh')) { e.preventDefault(); e.stopPropagation(); refreshCtx(); refreshDiff(); return; }
   const cb = e.target.closest('#ctxBar'); if (cb && cb.classList.contains('can-open')) { toggleDiff(); }
+});
+document.addEventListener('keydown', function(e){
+  if ((e.key === 'Enter' || e.key === ' ') && e.target && e.target.id === 'ctxBar' && e.target.classList.contains('can-open')) { e.preventDefault(); toggleDiff(); }
 });
 
 
@@ -7123,7 +7162,7 @@ async function refreshDiff(){
 
 function toggleDiff(){
   DIFF_OPEN = !DIFF_OPEN;
-  const c = $('cbChev'); if (c) c.innerHTML = icon(DIFF_OPEN ? 'down' : 'right', 11);
+  const bar = $('ctxBar'); if (bar) { bar.classList.toggle('open', DIFF_OPEN); if (bar.classList.contains('can-open')) { bar.setAttribute('aria-expanded', String(DIFF_OPEN)); bar.title = DIFF_OPEN ? 'Hide the changed files' : 'Show the changed files'; } }
   const v = actView();
   if (DIFF_OPEN) { refreshDiff(); } else { paintDiffList(null); }
 }
@@ -8327,6 +8366,8 @@ async function loadSkills(){
     main.appendChild(top); main.appendChild(d);
     main.title = s.root || '';
     row.appendChild(main);
+    // Long descriptions show two lines; a click opens the rest.
+    row.onclick = () => row.classList.toggle('open');
     box.appendChild(row);
   }
 }
@@ -8636,7 +8677,7 @@ async function loadMemory(){
     if (r && r.ok) facts = r.facts || [];
   } catch {}
   MEM_FACTS = facts;
-  const where = $('memWhere'); if (where) where.textContent = wd ? folderName(wd) + ' · ' + wd : 'No project open';
+  const where = $('memWhere'); if (where) { where.textContent = wd ? 'For ' + folderName(wd) : 'No project open'; where.title = wd || ''; }
   renderMemory();
 }
 function renderMemory(){
@@ -9093,8 +9134,8 @@ function addCodeCopy(root){
   seedStarters();
   S=await window.voxai.getSettings();
   SESS_PRICE = modelPriceFor(S.openrouterModel);
-  $('keyState').textContent = S.hasOpenRouterKey?('key stored ('+S.keyStore+') - leave blank to keep'):'not set';
-  $('mgmtKeyState').textContent = S.hasManagementKey?('mgmt key stored ('+S.mkeyStore+') - leave blank to keep'):'not set — account balance hidden';
+  $('keyState').textContent = S.hasOpenRouterKey ? 'Saved' + (S.keyStore === 'keychain' ? ' in the system keychain' : '') + '. Leave it empty to keep it.' : 'Not set yet.';
+  $('mgmtKeyState').textContent = S.hasManagementKey ? 'Saved' + (S.mkeyStore === 'keychain' ? ' in the system keychain' : '') + '. Leave it empty to keep it.' : 'Not set, so the account balance is hidden.';
   $('sessSub').textContent=S.workingDir;
   // The folder in the header opens in File Explorer: this session's, or the one a new session starts in.
   $('whDir').onclick = () => { window.voxai.sessionsReveal(activeId || null).catch(() => {}); };

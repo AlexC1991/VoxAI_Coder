@@ -600,7 +600,7 @@ function loadWith(file, stubs) {
 
     // context strip + message box
     check('the strip is about changes only', !HTML.includes('id="cbRepo"') && /<div class="ctxbar" id="ctxBar"[\s\S]{0,400}id="cbDiff"/.test(HTML), 'repeats folder/branch');
-    check('+0 −0 is never shown', code.includes("(c.added ? '<span class=\"add\">+'") && code.includes("(c.removed ? '<span class=\"del\">"), 'zero counts shown');
+    check('+0 −0 is never shown', code.includes("(ad ? '<span class=\"add\">+'") && code.includes("(rm ? '<span class=\"del\">"), 'zero counts shown');
     check('only a strip with changes opens', code.includes("cb.classList.contains('can-open')"), 'opens an empty list');
     check('Send lives at the end of the control row', /<div class="composer-row">[\s\S]*id="btnSend"[\s\S]*?<\/div>/.test(HTML) && !HTML.includes('composer-main'), 'beside the textarea');
     check('the message box grows with its text', /\.box #prompt\{[^}]*field-sizing:content[^}]*max-height:40vh/.test(HTML), 'fixed height');
