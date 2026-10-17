@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-QsibdzGCytwJaArXk7ewEl6d0oRHyYp7Y1z1+2DWgCQ='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-sG004sP81uFNB3MgF4Eyt2p0ye9vuRYZ/PEZvUmHYPs='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -3362,18 +3362,26 @@ function shortStep(step, max = 64){
 function plainStep(step){
   const said = (verb, now, target) => ({ verb, now, target });
   const tail = (t) => (t.length > 56 ? '\u2026' + t.slice(-55) : t);
-  const isFlag = (w) => /^-/.test(w) || /^\/[A-Za-z?]{1,3}(:\S*)?$/.test(w);
-  const words = (shortStep(step, Infinity).match(/"[^"]*"|'[^']*'|\S+/g) || [])
+  // Windows commands take "/" switches (dir /a-d, taskkill /pid 5); elsewhere /tmp is a path.
+  const SLASH = /^(dir|tree|findstr|tasklist|taskkill|copy|xcopy|robocopy|del|erase|move|ren|type|rd|rmdir|md|forfiles|where|if)$/;
+  const isFlag = (w, windows) => w.startsWith('-') || (windows && /^\/[A-Za-z?][^\s/]*$/.test(w.replace(/"[^"]*"/g, '')));
+  // A word may hold a quoted part with spaces: /c:"label start" is one word.
+  const words = (shortStep(step, Infinity).match(/(?:[^\s"']+|"[^"]*"|'[^']*')+/g) || [])
     .map((w) => w.replace(/^(["'])(.*)\1$/, '$2')).filter((w) => !/^[A-Za-z_]\w*=/.test(w));
   const head = ((words[0] || '').toLowerCase().replace(/\.exe$/, '').split(/[\\/]/).pop()) || '';
-  const args = words.slice(1), plain = args.filter((w) => !isFlag(w));
+  const args = words.slice(1), plain = args.filter((w) => !isFlag(w, SLASH.test(head)));
   const first = plain[0] || '', last = plain[plain.length - 1] || '', sub = first.toLowerCase();
   switch (head) {
     case 'ls': case 'dir': case 'tree': case 'get-childitem': return said('Listed', 'Listing', tail(first || 'the folder'));
     case 'cat': case 'type': case 'get-content': return first ? said('Read', 'Reading', tail(last)) : null;
     case 'head': return first ? said('Read the start of', 'Reading the start of', tail(last)) : null;
     case 'tail': return first ? said('Read the end of', 'Reading the end of', tail(last)) : null;
-    case 'grep': case 'rg': case 'findstr': case 'select-string': return first ? said('Searched for', 'Searching for', '"' + first + '"' + (plain[1] ? ' in ' + tail(plain[1]) : '')) : null;
+    case 'grep': case 'rg': case 'findstr': case 'select-string': {
+      // findstr /c:"two words" gives its search text as a switch.
+      const c = args.find((w) => /^\/c:/i.test(w));
+      const what = c ? c.slice(3).replace(/^"|"$/g, '') : first, where = c ? first : plain[1];
+      return what ? said('Searched for', 'Searching for', '"' + what + '"' + (where ? ' in ' + tail(where) : '')) : null;
+    }
     case 'mkdir': case 'md': return first ? said('Made the folder', 'Making the folder', tail(last)) : null;
     case 'rm': case 'del': case 'erase': case 'rmdir': case 'rd': case 'remove-item': return first ? said('Deleted', 'Deleting', tail(first)) : null;
     case 'cp': case 'copy': case 'xcopy': case 'robocopy': case 'copy-item': return first ? said('Copied', 'Copying', tail(first)) : null;
@@ -3404,6 +3412,15 @@ function plainStep(step){
       if (args.includes('--test')) return said('Ran', 'Running', 'the tests');
       if (args.some((w) => ['-e', '-c', '--eval', '-Command'].includes(w))) return said('Ran', 'Running', 'a one-line script');
       return first ? said('Ran', 'Running', tail(first)) : null;
+    case 'for': {
+      // for %d in (A C D) do …  /  for id in a b; do …
+      const m = /\bin\s+\(([^)]*)\)/i.exec(step) || /\bin\s+(.*?)\s*;?\s*do\b/i.exec(step);
+      return m ? said('Went through', 'Going through', tail(m[1].replace(/\s+/g, ' ').trim())) : null;
+    }
+    case 'forfiles': {
+      const m = /\/p\s+("[^"]*"|\S+)/i.exec(step);
+      return said('Went through the files in', 'Going through the files in', tail(m ? m[1].replace(/"/g, '') : 'the folder'));
+    }
     case 'if': {
       const p = sub === 'exist' ? plain[1] : (sub === 'not' && (plain[1] || '').toLowerCase() === 'exist' ? plain[2] : '');
       return p ? said('Checked for', 'Checking for', tail(p)) : null;
