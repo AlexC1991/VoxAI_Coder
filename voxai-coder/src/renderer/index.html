@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-n0TNPuGCEi2pGjpjkjWhwhFc1EvIODDX/pF89ZwXDN4='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-B+J9IWalQUR2QC6jWbdN1f1AfTQjnRQKNUgmnGiqQQw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -293,6 +293,16 @@ tests"). Scroll the row instead of breaking words:
 .keyrow{display:flex;gap:8px;width:100%}
 .keyrow input,.set-ctl .txt{flex:1;min-width:0;background:var(--panel2);border:1px solid var(--edge2);border-radius:7px;color:var(--ink);padding:7px 10px;font-family:"Sometype Mono",monospace;font-size:12.5px;outline:0}
 .set-ctl .txt{flex:none;width:260px}
+.set-pick{display:flex;align-items:center;gap:8px;width:280px;max-width:100%;min-width:0;background:var(--panel2);border:1px solid var(--edge2);border-radius:7px;color:var(--ink);padding:6px 9px 6px 11px;font:13px Chivo,sans-serif;cursor:pointer;text-align:left}
+.set-pick:hover{border-color:var(--sub)}
+.set-pick[aria-expanded="true"],.set-pick:focus-visible{border-color:var(--goldedge);outline:0}
+.set-pick .sp-nm{flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.set-pick.none .sp-nm{color:var(--dim)}
+.set-pick .sp-pr{flex:none;font:11px "Sometype Mono",monospace;color:var(--sub);font-variant-numeric:tabular-nums}
+.set-pick svg{flex:none;width:12px;height:12px;fill:none;stroke:var(--sub);stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.menu.set-pop{position:fixed;z-index:60;display:flex;flex-direction:column;width:360px;max-width:calc(100vw - 24px);background:var(--panel);border:1px solid var(--edge2);border-radius:10px;box-shadow:0 18px 50px rgba(0,0,0,.6);overflow:hidden}
+.set-pop .pk-body{flex:1;min-height:0;overflow:auto;padding:4px}
+.set-pop .pk-search input,.set-pop .pk-search input:focus-visible{border:0;background:transparent;padding:0;box-shadow:none;outline:0}
 .keyrow input:focus,.set-ctl .txt:focus,.num:focus-within{border-color:var(--goldedge)}
 .num{display:inline-flex;align-items:center;background:var(--panel2);border:1px solid var(--edge2);border-radius:8px}
 .num input{field-sizing:content;width:auto;min-width:3ch;max-width:12ch;background:transparent;border:0;outline:0;color:var(--ink);text-align:center;font-family:"Sometype Mono",monospace;font-weight:600;font-size:13px;padding:6px 2px;-moz-appearance:textfield;font-variant-numeric:tabular-nums}
@@ -1622,9 +1632,9 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
     <section class="set-page" data-set="subs" hidden>
       <header class="set-top"><h3>Sub-agents</h3><p>Workers the agent can hand self-contained jobs to. They report back and share the run’s spending limit.</p></header>
       <div class="set-scroll">
-        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Model</div><div class="set-desc">A cheaper model makes fan-outs cheaper. Leave empty to use the session’s model.</div></div><div class="set-ctl"><input id="fSubModel" class="txt" placeholder="Same as the session" autocomplete="off" aria-label="Sub-agent model"></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Turns before answering</div><div class="set-desc">How many tool steps a worker may take before it must report.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease turns before answering">−</button><input id="fSubMaxTurns" type="number" min="1" max="100" step="5" placeholder="25" aria-label="turns before answering"><span class="num-u">turns</span><button type="button" class="num-b" data-num="1" aria-label="Increase turns before answering">+</button></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Time limit</div><div class="set-desc">A worker still running after this is stopped and returns what it has.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease time limit">−</button><input id="fSubTimeout" type="number" min="10" max="3600" step="30" placeholder="300" aria-label="time limit"><span class="num-u">sec</span><button type="button" class="num-b" data-num="1" aria-label="Increase time limit">+</button></div></div></div></div>
+        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Model</div><div class="set-desc">A cheaper model makes fan-outs cheaper. Leave empty to use the session’s model.</div></div><div class="set-ctl"><input id="fSubModel" type="hidden"><button type="button" class="set-pick" id="pick_sub" aria-haspopup="dialog" aria-expanded="false" aria-label="Sub-agent model"><span class="sp-nm"></span><span class="sp-pr"></span><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Turns before answering</div><div class="set-desc">How many tool steps a worker may take before it must report.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease turns before answering">−</button><input id="fSubMaxTurns" type="number" min="1" max="100" step="5" placeholder="25" aria-label="turns before answering"><span class="num-u">turns</span><button type="button" class="num-b" data-num="1" aria-label="Increase turns before answering">+</button></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Time limit</div><div class="set-desc">A worker still running after this is stopped and returns what it has.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease time limit">−</button><input id="fSubTimeout" type="number" min="10" max="3600" step="30" placeholder="300" aria-label="time limit"><span class="num-u">sec</span><button type="button" class="num-b" data-num="1" aria-label="Increase time limit">+</button></div></div></div></div>
         <h4 class="set-sub">Every run</h4>
-        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Eyes for models that cannot see</div><div class="set-desc">When the session’s model cannot read images, this model looks at each screenshot and describes it, problems included. Empty turns it off.</div></div><div class="set-ctl"><input id="fVisionHelper" class="txt" placeholder="Off" autocomplete="off" aria-label="Model that describes screenshots"></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Keep the cache for an hour</div><div class="set-desc">The model keeps the earlier part of the conversation cached for 5 minutes, so after a break the next message pays full price to send it again. This keeps it for an hour on models that allow it. Caching costs a little more, but it outlasts a break.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="fCacheHour" role="switch" aria-checked="false" aria-label="Keep the cache for an hour"></button></div></div></div>
+        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Eyes for models that cannot see</div><div class="set-desc">When the session’s model cannot read images, this model looks at each screenshot and describes it, problems included.</div></div><div class="set-ctl"><input id="fVisionHelper" type="hidden"><button type="button" class="set-pick" id="pick_eyes" aria-haspopup="dialog" aria-expanded="false" aria-label="Model that describes screenshots"><span class="sp-nm"></span><span class="sp-pr"></span><svg viewBox="0 0 24 24" aria-hidden="true"><polyline points="6 9 12 15 18 9"></polyline></svg></button></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Keep the cache for an hour</div><div class="set-desc">The model keeps the earlier part of the conversation cached for 5 minutes, so after a break the next message pays full price to send it again. This keeps it for an hour on models that allow it. Caching costs a little more, but it outlasts a break.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="fCacheHour" role="switch" aria-checked="false" aria-label="Keep the cache for an hour"></button></div></div></div>
       </div>
     </section>
 
@@ -4960,6 +4970,7 @@ async function loadModels(){
       SESS_PRICE = modelPriceFor(S.openrouterModel);
       refreshChips();
       if ($('chipModel').classList.contains('open')) renderModelMenu();
+      paintSetPicks(); renderSetPick();
       fixBatchModels();
       const av = actView(); if (av) updateSessStats(av);
     } else if (facts) { facts.textContent = 'Could not load models: ' + ((r && r.error) || 'unknown error'); }
@@ -6746,6 +6757,7 @@ function prefillAdvanced(){
   const stoRaw = Number(s.subagentTimeoutMs) || 300000;
   const sto = String(Math.round(stoRaw < 1000 ? stoRaw : stoRaw / 1000));
   if ($('fSubModel')) $('fSubModel').value = sm;
+  if (typeof paintSetPicks === 'function') paintSetPicks();
   if ($('fSubMaxTurns')) $('fSubMaxTurns').value = smt;
   if ($('fSubTimeout')) $('fSubTimeout').value = sto;
   // (the switch, picker and percentages are painted from these values below)
@@ -8554,6 +8566,110 @@ function keysDirty(){
       if (KEY_EDIT[which]) $(u.input).focus();
     };
   }
+})();
+
+// ---- Settings: model pickers (Sub-agents) ----
+// The sub-agent model and the "eyes" model were free-text boxes: you had to know an id like
+// deepseek/deepseek-v4.1-flash. They are now picked from OpenRouter's catalogue, the same one
+// the model picker by Send uses, with the price beside each. The hidden inputs keep the value,
+// so saving is unchanged.
+const SET_PICKS = {
+  sub: { input: 'fSubModel', none: 'Same as the session', title: 'Sub-agent model',
+    note: 'Can use tools · cheapest first',
+    fits: (m) => m.tools !== false },
+  eyes: { input: 'fVisionHelper', none: 'Off', title: 'Model that describes screenshots',
+    note: 'Can read images · cheapest first',
+    fits: (m) => m.vision === true },
+};
+let SET_POP = null;   // { which, box, list, search, hot }
+// The price the row shows: a model switched to the flex tier sorts by its flex price.
+function modelCost(m){ const p = flexOn(m.id) || m; return (Number(p.promptCents) || 0) + (Number(p.completionCents) || 0); }
+function paintSetPicks(){
+  for (const which of Object.keys(SET_PICKS)) {
+    const p = SET_PICKS[which], b = $('pick_' + which); if (!b) continue;
+    const id = ($(p.input).value || '').trim(), m = id ? modelEntry(id) : null;
+    b.querySelector('.sp-nm').textContent = id ? (m ? describeModel(m).name : modelLabel(id)) : p.none;
+    b.querySelector('.sp-pr').textContent = m ? modelPrice(m) : '';
+    b.classList.toggle('none', !id);
+    b.title = id || p.none;
+  }
+}
+function closeSetPick(){ if (SET_POP) { SET_POP.box.remove(); const b = $('pick_' + SET_POP.which); if (b) { b.setAttribute('aria-expanded', 'false'); } SET_POP = null; } }
+function renderSetPick(){
+  if (!SET_POP) return;
+  const p = SET_PICKS[SET_POP.which], cur = ($(p.input).value || '').trim();
+  const q = SET_POP.search.value.trim().toLowerCase();
+  const list = SET_POP.list; list.innerHTML = '';
+  const add = (id, name, right, title) => {
+    const r = menuRow(name, id === cur, right);
+    r.dataset.id = id; if (title) r.title = title;
+    r.onmouseenter = () => { list.querySelectorAll('.hot').forEach((x) => x.classList.remove('hot')); r.classList.add('hot'); };
+    r.onclick = (e) => { e.stopPropagation(); chooseSetPick(id); };
+    list.appendChild(r);
+  };
+  if (!q) add('', p.none, '', '');
+  if (!ALL_MODELS.length) {
+    list.appendChild(el('div', 'mp-empty', S && S.hasOpenRouterKey ? 'Loading models from OpenRouter…' : 'Add your OpenRouter key in Account to choose a model.'));
+    return;
+  }
+  if (!PK_BROWSE) PK_BROWSE = browseModelIds(ALL_MODELS);
+  // Routers price at -1 ("it depends"): no price to show or sort by, so they are left out.
+  let ms = ALL_MODELS.filter((m) => p.fits(m) && !refusedWhy(m.id) && Number(m.promptCents) >= 0 && Number(m.completionCents) >= 0);
+  if (q) ms = ms.filter((m) => { const d = describeModel(m); return (d.name + ' ' + d.provider + ' ' + m.id).toLowerCase().includes(q); });
+  else ms = ms.filter((m) => PK_BROWSE.has(m.id) || m.id === cur);
+  ms.sort((a, b) => modelCost(a) - modelCost(b) || describeModel(a).name.localeCompare(describeModel(b).name));
+  // Paid first, cheapest first; free ones last, as their rate limits are tight for real work.
+  const paid = ms.filter((m) => modelCost(m) > 0), free = ms.filter((m) => modelCost(m) === 0);
+  const row = (m) => { const d = describeModel(m); add(m.id, d.name + (d.provider ? ' · ' + d.provider : ''), modelPrice(m), m.id); };
+  if (paid.length) { list.appendChild(el('div', 'mp-label', '<span>' + esc(p.note) + '</span><span>per 1M in · out</span>')); paid.slice(0, 250).forEach(row); }
+  if (free.length) { list.appendChild(el('div', 'mp-label', '<span>Free, with tight rate limits</span>')); free.slice(0, 80).forEach(row); }
+  if (!ms.length) list.appendChild(el('div', 'mp-empty', 'No model matches.'));
+  const sel = list.querySelector('.mp-row.sel'); if (sel && !q) sel.scrollIntoView({ block: 'nearest' });
+}
+function chooseSetPick(id){
+  if (!SET_POP) return;
+  const p = SET_PICKS[SET_POP.which];
+  $(p.input).value = id;
+  const b = $('pick_' + SET_POP.which);
+  closeSetPick(); paintSetPicks(); queueSettingsSave();
+  if (b) b.focus();
+}
+function openSetPick(which){
+  if (SET_POP && SET_POP.which === which) { closeSetPick(); return; }
+  closeSetPick();
+  const b = $('pick_' + which); if (!b) return;
+  const box = el('div', 'menu pk set-pop'); box.setAttribute('role', 'dialog'); box.setAttribute('aria-label', SET_PICKS[which].title);
+  const lab = el('label', 'pk-search', '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><line x1="20" y1="20" x2="16" y2="16"></line></svg>');
+  const search = el('input'); search.placeholder = 'Search models'; search.autocomplete = 'off'; search.setAttribute('aria-label', 'Search models');
+  lab.appendChild(search); box.appendChild(lab);
+  const list = el('div', 'pk-body'); box.appendChild(list);
+  document.querySelector('#modalBg .sheet').appendChild(box);
+  // Under the button, or above it when the window has no room below.
+  const r = b.getBoundingClientRect(), h = Math.min(380, window.innerHeight - 40);
+  box.style.right = Math.max(12, window.innerWidth - r.right) + 'px';
+  if (window.innerHeight - r.bottom > h + 12) box.style.top = (r.bottom + 6) + 'px'; else box.style.bottom = (window.innerHeight - r.top + 6) + 'px';
+  box.style.maxHeight = h + 'px';
+  SET_POP = { which, box, list, search };
+  b.setAttribute('aria-expanded', 'true');
+  search.oninput = renderSetPick;
+  search.onkeydown = (e) => {
+    const rows = [...list.querySelectorAll('.mp-row')];
+    let i = rows.findIndex((x) => x.classList.contains('hot'));
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+      e.preventDefault();
+      i = e.key === 'ArrowDown' ? Math.min(rows.length - 1, i + 1) : Math.max(0, i - 1);
+      rows.forEach((x) => x.classList.remove('hot')); if (rows[i]) { rows[i].classList.add('hot'); rows[i].scrollIntoView({ block: 'nearest' }); }
+    } else if (e.key === 'Enter') { e.preventDefault(); if (rows[i]) rows[i].click(); }
+  };
+  renderSetPick();
+  search.focus();
+}
+(function wireSetPicks(){
+  for (const which of Object.keys(SET_PICKS)) { const b = $('pick_' + which); if (b) b.onclick = (e) => { e.stopPropagation(); openSetPick(which); }; }
+  // Outside the list, Esc, or scrolling the page closes it. Esc closes only the list, not Settings.
+  document.addEventListener('mousedown', (e) => { if (SET_POP && !SET_POP.box.contains(e.target) && !e.target.closest('.set-pick')) closeSetPick(); }, true);
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && SET_POP) { e.stopImmediatePropagation(); const b = $('pick_' + SET_POP.which); closeSetPick(); if (b) b.focus(); } }, true);
+  document.querySelectorAll('#modalBg .set-scroll').forEach((sc) => sc.addEventListener('scroll', () => { if (SET_POP) closeSetPick(); }));
 })();
 
 // ---- Settings > Apps (MCP) ----
