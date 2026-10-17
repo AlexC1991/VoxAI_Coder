@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-j/GIyM/3wLDb3Cav35aQlChHiovnB9Ggi9Szvj0obcs='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-QsibdzGCytwJaArXk7ewEl6d0oRHyYp7Y1z1+2DWgCQ='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -3339,7 +3339,7 @@ const shQuiet = (step) => SH_QUIET.has(shProgram(step)) || /^(ping\s+-n\s+\d+\s+
  * "if". `dir /b /s "A:\tmp\x" 2>NUL | findstr y` reads "dir /b /s A:\tmp\x"; the whole command
  * is on hover and in the detail. Redirections and pipes are only looked for outside quotes.
  */
-function shortStep(step){
+function shortStep(step, max = 64){
   const parts = String(step || '').replace(/\s+/g, ' ').trim().split(/("[^"]*"|'[^']*')/);
   let out = '', dropNext = false;
   for (let i = 0; i < parts.length; i++) {
@@ -3351,8 +3351,66 @@ function shortStep(step){
     out += part;
     if (pipe >= 0) break;
   }
-  const text = out.replace(/^(if\s+(?:not\s+)?exist\s+\S+).*$/i, '$1').replace(/\s+/g, ' ').trim();
-  return text.length > 64 ? text.slice(0, 63).trimEnd() + '\u2026' : text;
+  const text = out.replace(/^(if\s+(?:not\s+)?exist\s+(?:"[^"]*"|\S+)).*$/i, '$1').replace(/\s+/g, ' ').trim();
+  return text.length > max ? text.slice(0, max - 1).trimEnd() + '\u2026' : text;
+}
+/**
+ * What a common command does, in words: a row reads "Listed A:\tmp\x" or "Installed prettier"
+ * rather than "Ran dir /b /s A:\tmp\x". Null for anything else, which keeps the short step.
+ * Mirrors Vox IDE's plainStep.
+ */
+function plainStep(step){
+  const said = (verb, now, target) => ({ verb, now, target });
+  const tail = (t) => (t.length > 56 ? '\u2026' + t.slice(-55) : t);
+  const isFlag = (w) => /^-/.test(w) || /^\/[A-Za-z?]{1,3}(:\S*)?$/.test(w);
+  const words = (shortStep(step, Infinity).match(/"[^"]*"|'[^']*'|\S+/g) || [])
+    .map((w) => w.replace(/^(["'])(.*)\1$/, '$2')).filter((w) => !/^[A-Za-z_]\w*=/.test(w));
+  const head = ((words[0] || '').toLowerCase().replace(/\.exe$/, '').split(/[\\/]/).pop()) || '';
+  const args = words.slice(1), plain = args.filter((w) => !isFlag(w));
+  const first = plain[0] || '', last = plain[plain.length - 1] || '', sub = first.toLowerCase();
+  switch (head) {
+    case 'ls': case 'dir': case 'tree': case 'get-childitem': return said('Listed', 'Listing', tail(first || 'the folder'));
+    case 'cat': case 'type': case 'get-content': return first ? said('Read', 'Reading', tail(last)) : null;
+    case 'head': return first ? said('Read the start of', 'Reading the start of', tail(last)) : null;
+    case 'tail': return first ? said('Read the end of', 'Reading the end of', tail(last)) : null;
+    case 'grep': case 'rg': case 'findstr': case 'select-string': return first ? said('Searched for', 'Searching for', '"' + first + '"' + (plain[1] ? ' in ' + tail(plain[1]) : '')) : null;
+    case 'mkdir': case 'md': return first ? said('Made the folder', 'Making the folder', tail(last)) : null;
+    case 'rm': case 'del': case 'erase': case 'rmdir': case 'rd': case 'remove-item': return first ? said('Deleted', 'Deleting', tail(first)) : null;
+    case 'cp': case 'copy': case 'xcopy': case 'robocopy': case 'copy-item': return first ? said('Copied', 'Copying', tail(first)) : null;
+    case 'mv': case 'move': case 'ren': case 'move-item': return first ? said('Moved', 'Moving', tail(first)) : null;
+    case 'tasklist': case 'ps': case 'get-process': return said('Listed', 'Listing', 'the running programs');
+    case 'kill': case 'pkill': case 'taskkill': case 'stop-process': return said('Stopped', 'Stopping', plain.length ? tail(plain.join(' ')) : 'a program');
+    case 'curl': case 'wget': case 'invoke-webrequest': case 'iwr': return said('Called', 'Calling', tail(plain.find((w) => /^https?:|localhost|127\.0\.0\.1/.test(w)) || first));
+    case 'git':
+      if (['status', 'diff', 'log', 'show', 'branch'].includes(sub)) return said('Checked', 'Checking', 'git ' + sub);
+      return sub === 'commit' ? said('Committed', 'Committing', 'the changes') : null;
+    case 'cbx':
+      if (sub === 'clone') return said('Fetched', 'Fetching', (plain[1] || 'a project') + ' from CodeRook');
+      if (sub === 'status') return said('Checked', 'Checking', 'the CodeRook status');
+      return sub === 'submit' ? said('Saved', 'Saving', 'a version to CodeRook') : null;
+    case 'npm': case 'pnpm': case 'yarn': case 'bun':
+      if (['install', 'i', 'add', 'ci'].includes(sub)) return said('Installed', 'Installing', plain.slice(1).join(' ') || 'the packages');
+      if (sub === 'test' || (sub === 'run' && /test/.test(plain[1] || ''))) return said('Ran', 'Running', 'the tests');
+      if (sub === 'start') return said('Started', 'Starting', 'the app');
+      return sub === 'run' && plain[1] ? said('Ran', 'Running', 'the ' + plain[1] + ' script') : null;
+    case 'pip': case 'pip3': return sub === 'install' ? said('Installed', 'Installing', plain.slice(1).join(' ') || 'the packages') : null;
+    case 'npx': case 'pnpx': case 'bunx':
+      if (/^(vitest|jest|mocha|ava|playwright)$/.test(sub)) return said('Ran', 'Running', 'the tests');
+      return /^(tsc|eslint|oxlint|prettier|biome)$/.test(sub) ? said('Checked', 'Checking', 'the code with ' + sub) : null;
+    case 'pytest': case 'vitest': case 'jest': return said('Ran', 'Running', 'the tests');
+    case 'tsc': return said('Checked', 'Checking', 'the types');
+    case 'node': case 'python': case 'python3': case 'py': case 'deno': case 'ruby': case 'bash': case 'sh': case 'powershell': case 'pwsh':
+      if (args.includes('--check')) return said('Checked the syntax of', 'Checking the syntax of', tail(first));
+      if (args.includes('--test')) return said('Ran', 'Running', 'the tests');
+      if (args.some((w) => ['-e', '-c', '--eval', '-Command'].includes(w))) return said('Ran', 'Running', 'a one-line script');
+      return first ? said('Ran', 'Running', tail(first)) : null;
+    case 'if': {
+      const p = sub === 'exist' ? plain[1] : (sub === 'not' && (plain[1] || '').toLowerCase() === 'exist' ? plain[2] : '');
+      return p ? said('Checked for', 'Checking for', tail(p)) : null;
+    }
+    case 'test': case '[': return args.some((w) => /^-[edfs]$/.test(w)) && first ? said('Checked for', 'Checking for', tail(first)) : null;
+  }
+  return null;
 }
 /** A command's row: its past verb, its main step or script, and "+N steps". */
 function shellLook(command){
@@ -3361,10 +3419,12 @@ function shellLook(command){
   const main = steps.find((st) => !shQuiet(st.text)) || steps[0];
   const script = scripts.find((sc) => rest.includes(sc.path) || rest.includes(sc.path.split('/').pop()));
   const others = steps.length - (main ? 1 : 0);
-  let verb = 'Ran', target = shortStep(main ? main.text : String(command || ''));
-  if (script) { verb = /test|spec|check/i.test(script.path) ? 'Ran a test script' : 'Ran a script'; target = script.path; }
-  else if (scripts.length && !main) { verb = 'Wrote a script'; target = scripts[0].path; }
-  return { verb, target, more: others > 0 ? '+' + others + (others === 1 ? ' step' : ' steps') : '', scripts, rest };
+  const words = main ? plainStep(main.text) : null;
+  let verb = words ? words.verb : 'Ran', now = words ? words.now : 'Running';
+  let target = words ? words.target : shortStep(main ? main.text : String(command || ''));
+  if (script) { verb = /test|spec|check/i.test(script.path) ? 'Ran a test script' : 'Ran a script'; now = 'Running'; target = script.path; }
+  else if (scripts.length && !main) { verb = 'Wrote a script'; now = 'Writing a script'; target = scripts[0].path; }
+  return { verb, now, target, more: others > 0 ? '+' + others + (others === 1 ? ' step' : ' steps') : '', scripts, rest };
 }
 /** A command laid out one step per line, each later step under the one before with what joins it. */
 function layoutCommand(command){
@@ -3850,7 +3910,9 @@ function paintRow(g){
   else { const ib = el('span', 'tr-icb' + (tone ? ' is-' + tone : '')); ib.appendChild(trIcon(look.icon)); top.appendChild(ib); }
   const sh = items.length === 1 && g.name === 'shell' ? shellLook((first.args || {}).command) : null;
   const verb = el('span', 'tr-verb');
-  verb.textContent = sh && first.ok !== false ? (running ? 'Running' : sh.verb) : (items.length === 1 ? verbFor(look, first) : look.verb);
+  // A command left running in the background was started, whatever it runs.
+  const bg = sh && first.ok && shellParts(first.result).background;
+  verb.textContent = sh && first.ok !== false ? (running ? sh.now : bg ? 'Started' : sh.verb) : (items.length === 1 ? verbFor(look, first) : look.verb);
   top.appendChild(verb);
   if (items.length > 1) {
     const chips = el('span', 'tr-chips');

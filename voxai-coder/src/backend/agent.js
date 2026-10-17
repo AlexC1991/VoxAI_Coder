@@ -487,7 +487,14 @@ const SYSTEM = (workdir, access, planMode = false, durable = '', webSearchOn = t
   `confirming each with a tool (git status, cbx status, the test output, the app started from fresh) -- not from memory, ` +
   `notes, build_state or earlier sessions, which can be out of date. If a part could not be done, say plainly which and why. ` +
   `To stop a program you started, end it by the pid you were given, as a command on its own -- never by name. ` +
-  `When done, summarise files changed and test results.` +
+  // Some models closed in clipped fragments ("Fixed nav. Tests pass."), others in a long report
+  // with headings: one shape for all of them.
+  `When you finish, close with one short message in plain, complete sentences, the way you would tell a colleague ` +
+  `what happened: what you built or changed and where (name the main files), how you checked it works (what you ran ` +
+  `or tried, and what happened), then anything not done or worth knowing, and how to see or use it. Usually three to ` +
+  `six sentences; for a big change, one opening sentence and then a few short bullet points is fine. No headings, no ` +
+  `clipped fragments, no raw command lines or logs: say what a command showed ("the tests pass", "the server answers ` +
+  `on port 4173"). A command the user should run themselves goes in a code block.` +
   (durable ? `\n\n${durable}` : ``);
 
 /**
