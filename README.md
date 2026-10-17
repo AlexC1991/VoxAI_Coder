@@ -96,7 +96,7 @@ OpenRouter.
 
 ### ── Any model, priced before you send
 
-<img src="docs/screenshots/model-picker.png" alt="The model picker, browsed by company, with prices per million tokens" width="560">
+<img src="docs/screenshots/model-picker.png" alt="The model picker, browsed by company, with prices per million tokens" width="340">
 
 - Every model on OpenRouter, browsed by company, with prices shown before you pick one.
 - **Team mode:** a stronger model plans and reviews, and a cheaper one writes the code.
