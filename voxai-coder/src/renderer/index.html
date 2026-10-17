@@ -694,6 +694,12 @@ tests"). Scroll the row instead of breaking words:
    (a diff, the terminal output, the file) one click away. They never open by themselves. */
 .toolrow{animation:rowIn .24s ease;min-width:0}
 .runbody > .toolrow + .toolrow{margin-top:-4px}
+/* actions one after another read as one step: a faint line joins their icons */
+.runbody > .toolrow + .toolrow > .top{position:relative}
+.runbody > .toolrow + .toolrow > .top::before{content:'';position:absolute;left:18px;top:-5px;height:8px;border-left:1px solid var(--edge2)}
+/* a little air between a group of actions and the writing around it */
+.runbody > .say + .toolrow{margin-top:2px}
+.runbody > .toolrow + .say{margin-top:4px}
 .toolrow .top{display:flex;align-items:center;gap:9px;min-height:28px;padding:2px 8px;margin:0 -8px;border-radius:7px;color:var(--dim);font-size:13.5px;min-width:0}
 .toolrow.can-open .top{cursor:pointer}
 .toolrow.can-open .top:hover{background:var(--panel2);color:var(--mut)}
@@ -705,7 +711,8 @@ tests"). Scroll the row instead of breaking words:
 .tr-chips{display:flex;align-items:center;gap:5px;min-width:0;flex:0 1 auto;overflow:hidden}
 /* The file or command on an action line, toned like inline code in answers: the code
    font on a faint tint, no box edge. */
-.tr-chip{font:12.5px "Sometype Mono",monospace;color:var(--mut);background:rgba(127,127,127,.12);border:0;border-radius:4px;padding:.05em .4em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:100%;flex:0 1 auto}
+/* a row's subject: quiet type on a faint wash, no box */
+.tr-chip{font:12.5px "Sometype Mono",monospace;color:#cbc7c1;background:rgba(255,255,255,.045);border:0;border-radius:6px;padding:.08em .55em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:100%;flex:0 1 auto}
 .tr-more{font:12px "Sometype Mono",monospace;color:var(--sub);flex:none}
 .tr-sp{flex:1;min-width:8px}
 .tr-meta{flex:none;font:12px "Sometype Mono",monospace;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%}
@@ -743,7 +750,7 @@ tests"). Scroll the row instead of breaking words:
 .tr-body{max-height:360px;overflow:auto}
 .tr-term{padding:9px 12px;font:12.5px/1.6 "Sometype Mono",monospace;color:var(--mut);white-space:pre;min-width:max-content}
 /* the icon in a small square tinted by how it went; the note a pill in the same colour */
-.tr-icb{display:grid;place-items:center;width:22px;height:22px;flex:none;border-radius:6px;background:var(--panel2)}
+.tr-icb{display:grid;place-items:center;width:22px;height:22px;flex:none;border-radius:6px;background:var(--panel2);box-shadow:inset 0 0 0 1px rgba(255,255,255,.04)}
 .tr-icb .tr-ic{width:13px;height:13px}
 .tr-icb.is-good{background:rgba(147,184,132,.15)} .tr-icb.is-good .tr-ic{stroke:var(--add)}
 .tr-icb.is-bad{background:rgba(207,122,102,.16)} .tr-icb.is-bad .tr-ic{stroke:var(--del)}
