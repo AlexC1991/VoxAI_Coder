@@ -168,6 +168,9 @@ It downloads the AppImage for this version, checks it, installs it for you alone
 AppImage itself is attached to the release too (VoxAI-Coder-${version}.AppImage) if you
 would rather run it directly.
 
+The Linux build is made on Linux after the Windows one, so for a while after a release
+these links may not work yet.
+
 ## Updates
 
 After the first install the app keeps itself up to date: it checks here, downloads new
@@ -175,7 +178,7 @@ versions in the background and offers to restart when one is ready. Every releas
 \`update.json\` (Windows) and \`update-linux.json\` (Linux), signed with the project's
 release key; the app installs only updates whose signature and checksum match.
 
-The source code is not published here.
+The source code is on GitHub: https://github.com/AlexC1991/VoxAI_Coder
 `;
 fs.writeFileSync(path.join(RELEASES_DIR, 'README.md'), readme);
 const logPath = path.join(RELEASES_DIR, 'CHANGELOG.md');
