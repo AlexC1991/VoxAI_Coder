@@ -52,3 +52,6 @@ app-src/
 
 # ---- built from native/VoxUia.cs by scripts/build-uia.js ----
 voxai-coder/resources/uia/
+
+# ---- local AI tool settings ----
+.claude/
