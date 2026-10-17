@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-oOFhkhGu0giRw2cniWne0vaAgQXaHkTEBxhlYYv7mTo='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-zgLA9uD4p/OFin1ZM0lCbEixgklLMx9PGZeylLpfIow='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -580,7 +580,14 @@ tests"). Scroll the row instead of breaking words:
 .usage-modal .us-box:first-child .us-v{color:var(--gold)}
 .um-cols,.usage-modal .ug-row{display:grid;grid-template-columns:minmax(0,1fr) 92px 78px 74px;gap:10px;align-items:baseline}
 .um-cols{font-size:10.5px;letter-spacing:.08em;font-weight:700;color:var(--faint);text-transform:uppercase;padding:0 2px 6px;border-bottom:1px solid var(--edge)}
-.um-cols span:not(:first-child){text-align:right}
+.um-sort{display:inline-flex;align-items:center;gap:4px;border:0;background:none;padding:2px 0;font:inherit;letter-spacing:inherit;text-transform:inherit;color:var(--faint);cursor:pointer;min-width:0}
+.um-sort:not(:first-child){justify-content:flex-end}
+.um-sort:hover{color:var(--mut)}
+.um-sort:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:3px}
+.um-sort svg{flex:none;width:11px;height:11px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;opacity:.45}
+/* The sorted column is lit, and its arrow points the way it is sorted. */
+.um-sort[data-dir="asc"],.um-sort[data-dir="desc"]{color:var(--ink)}
+.um-sort[data-dir="asc"] svg,.um-sort[data-dir="desc"] svg{opacity:1;color:var(--gold)}
 .usage-modal .ug-row{border:0;border-bottom:1px solid var(--edge);border-radius:0;margin:0;padding:8px 2px;background:none}
 .usage-modal .ug-row .m{font-weight:600;font-size:13px}
 .usage-modal .ug-row .tk,.usage-modal .ug-row .t,.usage-modal .ug-row .cost{text-align:right;margin:0;font-variant-numeric:tabular-nums}
@@ -1529,7 +1536,7 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
       <div class="us-box"><div class="us-k">KEY LIMIT</div><div class="us-v" id="usKeyLimit">—</div></div>
       <div class="us-box"><div class="us-k">KEY USED</div><div class="us-v" id="usKeyUsed">—</div></div>
     </div>
-    <div><div class="um-cols"><span>Model</span><span>Tokens</span><span>Requests</span><span>Cost</span></div><div id="usageRows"></div></div>
+    <div><div class="um-cols" id="usageCols"><button type="button" class="um-sort" data-k="model" data-dir=""><span>Model</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 10l4-4 4 4M8 14l4 4 4-4"/></svg></button><button type="button" class="um-sort" data-k="tokens" data-dir=""><span>Tokens</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 10l4-4 4 4M8 14l4 4 4-4"/></svg></button><button type="button" class="um-sort" data-k="requests" data-dir=""><span>Requests</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 10l4-4 4 4M8 14l4 4 4-4"/></svg></button><button type="button" class="um-sort" data-k="cost" data-dir=""><span>Cost</span><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 10l4-4 4 4M8 14l4 4 4-4"/></svg></button></div><div id="usageRows"></div></div>
   </div>
   <div class="um-foot"><button class="btn ghost" id="btnUsageMore" style="display:none">Load more</button><button class="btn" id="btnUsageClose">Close</button></div>
 </div></div>
@@ -6914,6 +6921,56 @@ $('btnFolder') && ($('btnFolder').onclick = () => openNewSess());
 
 // ---- usage view ----
 let usageCursor = null; let usageHasMore = false;
+// Every row loaded so far (Load more adds to it), drawn in the order the column heads ask for.
+let USAGE_ROWS = [];
+let USAGE_SORT = { k: 'cost', dir: 'desc' };
+const USAGE_VAL = {
+  model: (r) => String(r.model || '').toLowerCase(),
+  tokens: (r) => Number(r.nativeTotal) || 0,
+  requests: (r) => Number(r.requestCount) || 0,
+  cost: (r) => Number(r.cost) || 0,
+};
+const USAGE_ARROW = { '': 'M8 10l4-4 4 4M8 14l4 4 4-4', asc: 'M8 14l4-4 4 4', desc: 'M8 10l4 4 4-4' };
+function paintUsageRows(){
+  const box = $('usageRows'); if (!box) return;
+  const { k, dir } = USAGE_SORT, val = USAGE_VAL[k], sign = dir === 'asc' ? 1 : -1;
+  const rows = USAGE_ROWS.slice().sort((a, b) => {
+    const x = val(a), y = val(b);
+    const c = typeof x === 'string' ? x.localeCompare(y) : x - y;
+    return c * sign || (Number(b.cost) || 0) - (Number(a.cost) || 0);
+  });
+  box.innerHTML = '';
+  if (!rows.length) box.appendChild(el('div', 'usage-hint', 'No usage in the last 30 days.'));
+  for (const r of rows) {
+    const row = el('div', 'ug-row');
+    const m = el('span', 'm'); m.textContent = r.model || ''; m.title = r.model || '';
+    // Short counts: the column heads say what they are, and 1,655,591,944 ran into the next one.
+    const tk = el('span', 'tk', fmtCount(r.nativeTotal)); tk.title = fmtNum(r.nativeTotal) + ' tokens';
+    const t = el('span', 't', r.requestCount ? fmtCount(r.requestCount) : ''); if (r.requestCount) t.title = fmtNum(r.requestCount) + ' requests';
+    const cost = el('span', 'cost', r.cost != null ? fmtUsdD(r.cost) : '');
+    row.appendChild(m); row.appendChild(tk); row.appendChild(t); row.appendChild(cost);
+    box.appendChild(row);
+  }
+  document.querySelectorAll('#usageCols .um-sort').forEach((b) => {
+    const on = b.dataset.k === k, d = on ? dir : '';
+    const name = b.textContent.trim();
+    b.dataset.dir = d;
+    b.querySelector('path').setAttribute('d', USAGE_ARROW[d]);
+    const words = b.dataset.k === 'model' ? { asc: 'A to Z', desc: 'Z to A' } : { asc: 'lowest first', desc: 'highest first' };
+    b.title = on ? name + ', ' + words[d] + '. Click to flip.' : 'Sort by ' + name.toLowerCase();
+    b.setAttribute('aria-label', on ? name + ', sorted ' + words[d] : 'Sort by ' + name.toLowerCase());
+  });
+}
+(function wireUsageSort(){
+  const h = $('usageCols'); if (!h) return;
+  h.addEventListener('click', (e) => {
+    const b = e.target.closest('.um-sort'); if (!b) return;
+    const k = b.dataset.k;
+    // The same column flips; a new one starts where people look first: A to Z for names, biggest first for numbers.
+    USAGE_SORT = USAGE_SORT.k === k ? { k, dir: USAGE_SORT.dir === 'asc' ? 'desc' : 'asc' } : { k, dir: k === 'model' ? 'asc' : 'desc' };
+    paintUsageRows();
+  });
+})();
 // Which projects are open survives a restart.
 let expandedFolders = new Set((() => { try { return JSON.parse(localStorage.getItem('voxai.openProjects') || '[]'); } catch { return []; } })());
 let foldersSeeded = expandedFolders.size > 0; // only auto-open the newest folder when nothing was remembered
@@ -7043,7 +7100,10 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('usage
 $('btnUsageMore').onclick = () => loadUsage(false);
 $('usageModalBg').addEventListener('click', (e)=>{ if(e.target.id === 'usageModalBg') closeUsage(); });
 
+let USAGE_LOAD = 0;
 async function loadUsage(reset){
+  // A newer load wins: opening the window twice quickly appended the rows twice.
+  const seq = reset ? ++USAGE_LOAD : USAGE_LOAD;
   if (!S.hasOpenRouterKey){ $('usageModalSub').textContent = 'Add your OpenRouter key in Settings first.'; return; }
   $('usageModalSub').textContent = 'Loading…';
     // balance — account-level + key-level
@@ -7069,24 +7129,14 @@ async function loadUsage(reset){
   let g = null;
   try { g = await window.voxai.openrouterGenerations({ limit: 50, cursor: reset ? undefined : usageCursor }); }
   catch(e){ g = {ok:false,error:String(e&&e.message||e)}; }
+  if (seq !== USAGE_LOAD) return;
   if (g && g.ok) {
     usageCursor = g.nextCursor; usageHasMore = !!g.hasMore;
     $('btnUsageMore').style.display = usageHasMore ? 'inline-block' : 'none';
     $('usageModalSub').textContent = 'Spend by model · last 30 days' + (g.total ? (' · ' + g.total + ' models') : '');
-    const box = $('usageRows');
-    if (reset) box.innerHTML = '';
-    if (!g.rows.length) { const d = el('div','usage-hint','No usage in the last 30 days.'); box.appendChild(d); }
-    g.rows.forEach((r) => {
-      const row = el('div','ug-row');
-      const m = el('span','m', esc(r.model || ''));
-      // Short counts: the column heads say what they are, and 1,655,591,944 ran into the next one.
-      const tk = el('span','tk', fmtCount(r.nativeTotal));
-      tk.title = fmtNum(r.nativeTotal) + ' tokens';
-      const t = el('span','t', r.requestCount ? fmtCount(r.requestCount) : '');
-      const cost = el('span','cost', r.cost != null ? fmtUsdD(r.cost) : '');
-      row.appendChild(m); row.appendChild(tk); row.appendChild(t); row.appendChild(cost);
-      box.appendChild(row);
-    });
+    if (reset) USAGE_ROWS = [];
+    USAGE_ROWS = USAGE_ROWS.concat(g.rows || []);
+    paintUsageRows();
   } else {
     $('usageModalSub').textContent = (g && g.error) ? ('Could not load usage: ' + g.error) : 'Could not load usage';
   }

@@ -875,6 +875,7 @@ async function drain(gen) {
       check('Account: a saved key shows its last four, with Replace', HM.includes("$(u.mask).textContent = 'sk-or-v1-' + '•'.repeat(8) + (u.tail() || '');") && read('src/main/main.js').includes('keyTail: keyTail(raw.openrouterKey),') && /function keyTail\(blob\) \{[\s\S]{0,200}k\.slice\(-4\)/.test(read('src/main/main.js')), 'empty box');
       check('Account: Save keys is off until a key is typed', HM.includes('<button class="btn" id="btnSave" type="button" disabled>Save keys</button>') && HM.includes("const b = $('btnSave'); if (b) b.disabled = !dirty;"), 'always lit');
       check('Account: usage closes from its header and with Esc', HM.includes('id="btnUsageX"') && HM.includes("if (e.key === 'Escape' && $('usageModalBg').classList.contains('show')) { e.stopImmediatePropagation(); closeUsage(); }") && HM.includes('.um-body{flex:1;min-height:0;overflow:auto;'), 'scroll to close');
+      check('Usage: every column sorts, and a second click flips it', ['model', 'tokens', 'requests', 'cost'].every((k) => HM.includes('<button type="button" class="um-sort" data-k="' + k + '"')) && HM.includes("USAGE_SORT = USAGE_SORT.k === k ? { k, dir: USAGE_SORT.dir === 'asc' ? 'desc' : 'asc' }") && HM.includes('USAGE_ROWS = USAGE_ROWS.concat(g.rows || []);'), 'fixed order');
       check('Account: Show keys also hides them', HM.includes("if (!box.hidden) { box.hidden = true; box.innerHTML = ''; if (btn) { btn.textContent = 'Show keys';"), 'stuck open');
       check('Account: opening Settings looks for an update, and a ready one is news', HM.includes("if (key === 'account') { paintKeys(); checkUpdatesSoon(); }") && HM.includes("lbl.textContent = st.state === 'ready' ? 'New update ready'"), 'no check');
       check('the sidebar update note can be put away until the next version', HM.includes('id="updX"') && HM.includes("localStorage.setItem('voxUpdAway', UPD.state + ':' + (UPD.next || ''))") && HM.includes("if (st.next && away === st.state + ':' + st.next) { pill.hidden = true; return; }"), 'sticky');
@@ -1153,7 +1154,7 @@ async function drain(gen) {
     {
       const H = read('src/renderer/index.html');
       check('a queued message is drawn as text', H.includes("const t = el('span', 'q-text', esc(raw.slice(0, 64)") && H.includes("el('span', 'q-steer', '\\u21b3 ' + esc(String(item.steer)"), 'as HTML');
-      check('model names from outside are drawn as text', H.includes("el('span','m', esc(r.model || ''))"), 'as HTML');
+      check('model names from outside are drawn as text', H.includes("const m = el('span', 'm'); m.textContent = r.model || '';") && !H.includes("el('span','m', r.model"), 'as HTML');
       const inl = new vm.Script('(' + /function inlineMd\(t\)\{[\s\S]*?\n\}/.exec(H)[0] + ')').runInNewContext({});
       check('a markdown link is only ever a web link', inl('[x](javascript:alert(1))').indexOf('<a') < 0 && inl('[x](https://a.test/p)') === '<a href="https://a.test/p" target="_blank" rel="noopener">x</a>', inl('[x](javascript:alert(1))'));
     }
