@@ -2006,7 +2006,7 @@ async function drain(gen) {
       && bodies.length === 3 && ev.some((e) => e.code === 'plan-close'), { bodies: bodies.length, note: note && note.content, last: ev[ev.length - 1] });
     const HTMLr = read('src/renderer/index.html');
     check('the reminder is quiet in the thread and on reopening', HTMLr.includes("} else if (event.type === 'warning' && event.code === 'plan-close') {") && HTMLr.includes("if (/^\\[VOX PLAN\\]/.test(first)) { finalizeRunCard(); continue; }"), 'noisy');
-    check('the file or command on an action line is toned like inline code', HTMLr.includes('.tr-chip{font:12.5px "Sometype Mono",monospace;color:var(--mut);background:rgba(127,127,127,.12);border:0;'), 'chip');
+    check('the file or command on an action line is toned like inline code', HTMLr.includes('.tr-chip{font:12.5px "Sometype Mono",monospace;color:#cbc7c1;background:rgba(255,255,255,.045);border:0;'), 'chip');
   }
 
   // ------------------------------------------------------------------ [AB]
