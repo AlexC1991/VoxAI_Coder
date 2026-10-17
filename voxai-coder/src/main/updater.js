@@ -204,7 +204,8 @@ function initUpdater({ app, send, log = () => {} }) {
       failed(e, { next: info && info.version });
     }
   });
-  autoUpdater.on('download-progress', (p) => set({ state: 'downloading', percent: Math.round(Number(p.percent) || 0) }));
+  // Bytes and speed too, so the window can say "52 of 115 MB · 4.1 MB/s · about 15 s left".
+  autoUpdater.on('download-progress', (p) => set({ state: 'downloading', percent: Math.round(Number(p.percent) || 0), got: Number(p.transferred) || 0, total: Number(p.total) || 0, bps: Number(p.bytesPerSecond) || 0 }));
   autoUpdater.on('update-downloaded', (info) => set({ state: 'ready', next: info.version, percent: 100, checkedAt: Date.now(), notes: (pending && pending.notes) || '' }));
   autoUpdater.on('error', (e) => { if (st.state !== 'error') failed(e); });
 

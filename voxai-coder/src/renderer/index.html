@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-FyoyWpvCrOW0HShQGbl5leyeaTl02m6t67oaS57/7Gc='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-vKKv9QavryDojLqbR1gbr0EcSmlNTPcaeOBnFSrdyzo='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -768,6 +768,42 @@ tests"). Scroll the row instead of breaking words:
 .sk-detail code{flex:1;min-width:0;font:11.5px "Sometype Mono",monospace;color:var(--faint);overflow-wrap:anywhere}
 .sk-link{flex:none;border:0;background:none;padding:0;color:var(--dim);font:12.5px Chivo,sans-serif;cursor:pointer;text-decoration:underline;text-decoration-color:var(--edge2);text-underline-offset:3px}
 .sk-link:hover{color:var(--ink)}
+/* ---- updates: one progress track, used in Settings, its sidebar and the main window ---- */
+.upd-track{position:relative;display:block;height:4px;border-radius:2px;background:var(--edge2);overflow:hidden}
+.upd-track[hidden]{display:none}
+.upd-track i{position:relative;display:block;height:100%;width:0;border-radius:2px;background:var(--gold);transition:width .45s ease;overflow:hidden}
+/* A sheen runs along the filled part while it downloads. */
+.upd-track i::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,transparent,rgba(255,255,255,.45),transparent);transform:translateX(-100%);animation:updSheen 1.3s linear infinite}
+/* Looking, before there is a size: a short bar travels the track. */
+.upd-track.indet i{width:32%;animation:updIndet 1.15s ease-in-out infinite}
+.upd-track.indet i::after,.upd-track.done i::after{display:none}
+.upd-track.done i{width:100%;background:var(--add)}
+@keyframes updSheen{to{transform:translateX(100%)}}
+@keyframes updIndet{0%{transform:translateX(-110%)}100%{transform:translateX(320%)}}
+.upd-row .set-txt{min-width:0}
+.upd-row .upd-track{margin-top:10px;max-width:420px}
+.upd-row .upd-meta{display:block;margin-top:6px;font:11.5px "Sometype Mono",monospace;color:var(--dim);font-variant-numeric:tabular-nums}
+.upd-row .upd-meta[hidden]{display:none}
+.upd-row.dl .set-lbl{color:var(--ink)}
+.upd-row.dl .set-lbl::before{content:"";width:8px;height:8px;border-radius:50%;border:1.5px solid var(--edge2);border-top-color:var(--gold);animation:spin .8s linear infinite}
+/* Settings sidebar */
+.set-upd{display:flex;flex-direction:column;gap:7px;margin:0 6px 12px;padding:10px 10px 11px;border:1px solid var(--edge2);border-radius:9px;background:var(--panel2)}
+.set-upd[hidden]{display:none}
+.set-upd.ready{border-color:var(--goldedge)}
+.set-upd .su-top{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mut);line-height:1.35}
+.set-upd .su-top .upd-dot{flex:none}
+.set-upd #setUpdTxt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.set-upd .su-pct{flex:none;font:11.5px 'Sometype Mono',monospace;color:var(--dim);font-variant-numeric:tabular-nums}
+.set-upd.ready .su-top{color:var(--ink);font-weight:600}
+.set-upd.ready .upd-dot{background:var(--gold);box-shadow:0 0 5px var(--goldedge)}
+.set-upd:not(.ready) .upd-dot{animation:pulse 1.6s infinite}
+.set-upd .su-act{align-self:flex-start;border:1px solid var(--gold);background:none;color:var(--gold);border-radius:6px;padding:3px 10px;font:600 12px Chivo,sans-serif;cursor:pointer}
+.set-upd .su-act:hover{background:rgba(200,169,97,.1)}
+.set-upd .su-act[hidden]{display:none}
+/* the note in the main window */
+.upd-pill{position:relative;overflow:hidden}
+.upd-pill .upd-track{position:absolute;left:0;right:0;bottom:0;height:2px;border-radius:0}
+@media (prefers-reduced-motion:reduce){.upd-track i::after,.upd-track.indet i,.upd-row.dl .set-lbl::before,.set-upd .upd-dot{animation:none}.upd-track i{transition:none}}
 /* ---- Settings: Apps (MCP) ---- */
 /* One list for what you have, a set of starting points to add from, and an editor that takes the page. */
 #mcpHome[hidden],.mcp-edit[hidden]{display:none}
@@ -1535,7 +1571,7 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
       <div class="search">⌕ <input id="q" placeholder="Search sessions"><button class="sel-btn" id="btnSelect" type="button" title="Select sessions to delete several at once (Ctrl+click and Shift+click work too)">Select</button></div>
       <div class="sesslist" id="sessions"></div>
       <div class="sel-bar" id="selBar" hidden><span class="sel-count" id="selCount"></span><button type="button" id="selAll" title="Select every session in the list">All</button><button type="button" class="danger" id="selDelete" title="Move the selected sessions to the Recycle Bin (Delete)">Delete</button><button type="button" id="selCancel" title="Clear the selection (Esc)">Cancel</button></div>
-      <div class="upd-pill" id="updPill" hidden><span class="upd-dot"></span><button type="button" class="upd-txt" id="updTxt"></button><button type="button" class="upd-x" id="updX" aria-label="Hide this until later" title="Hide this until later">✕</button></div>
+      <div class="upd-pill" id="updPill" hidden><span class="upd-dot"></span><button type="button" class="upd-txt" id="updTxt"></button><button type="button" class="upd-x" id="updX" aria-label="Hide this until later" title="Hide this until later">✕</button><span class="upd-track" hidden><i></i></span></div>
       <button class="side-foot" id="sideStatus" type="button" title="Account and balance">
         <span class="sf-dot" id="backendState"></span>
         <span class="sf-label" id="backendDetail">Starting…</span>
@@ -1731,6 +1767,7 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
     <button type="button" data-set="skills"><svg viewBox="0 0 24 24"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5zM5 19.5A1.5 1.5 0 0 0 6.5 21H19M9 7h6M9 10.5h4"/></svg>Skills</button>
     <button type="button" data-set="mcp"><svg viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></svg>Apps (MCP)</button>
     <button type="button" data-set="keys"><svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>Keyboard</button>
+    <div class="set-upd" id="setUpd" hidden aria-live="polite"><div class="su-top"><span class="upd-dot"></span><span id="setUpdTxt"></span><span class="su-pct" id="setUpdPct"></span></div><span class="upd-track"><i></i></span><button type="button" class="su-act" id="setUpdAct" hidden>Restart now</button></div>
     <div class="set-foot">Changes save as you go.<br><span id="setVersion">VoxAI Coder</span></div>
   </nav>
   <div class="set-main">
@@ -1749,7 +1786,7 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
           <div class="set-row"><div class="set-txt"><div class="set-lbl">Keys on this account</div><div class="set-desc">What each key has spent, to spot spending that is not VoxAI’s. Needs the management key.</div></div><div class="set-ctl"><button class="btn ghost" id="btnKeys" type="button" aria-expanded="false" aria-controls="acctKeys">Show keys</button></div></div>
           <div class="acct-keys" id="acctKeys" hidden></div>
         </div>
-        <div class="set-group"><div class="set-row upd-row" id="updRow"><div class="set-txt"><div class="set-lbl" id="updLbl">Updates</div><div class="set-desc" id="updDesc">Checks when the app opens, when you open Settings, and every 30 minutes.</div></div><div class="set-ctl"><button class="btn ghost" id="btnUpdCheck" type="button">Check now</button></div></div></div>
+        <div class="set-group"><div class="set-row upd-row" id="updRow"><div class="set-txt"><div class="set-lbl" id="updLbl">Updates</div><div class="set-desc" id="updDesc">Checks when the app opens, when you open Settings, and every 30 minutes.</div><span class="upd-track" hidden><i></i></span><span class="upd-meta" id="updMeta" hidden></span></div><div class="set-ctl"><button class="btn ghost" id="btnUpdCheck" type="button">Check now</button></div></div></div>
       </div>
     </section>
 
@@ -6876,6 +6913,7 @@ $('btnMic').onclick = startMic;
 // ---- settings modal wiring ----
 function openModal(page){
   $('modalBg').classList.add('show');
+  if (typeof paintUpdate === 'function') paintUpdate();
   prefillAdvanced();
   showSetPage(typeof page === 'string' ? page : 'account');
 }
@@ -6961,7 +6999,7 @@ function prefillAdvanced(){
   if ($('fWebResults')) $('fWebResults').value = String(s.webSearchMaxResults || 5);
   syncSetControls();
 }
-function closeModal(){ $('modalBg').classList.remove('show'); }
+function closeModal(){ $('modalBg').classList.remove('show'); if (typeof paintUpdate === 'function') paintUpdate(); }
 $('btnSettings').onclick = () => openModal('account');
 $('btnClose').onclick = closeModal;
 $('modalBg').addEventListener('click', (e) => { if (e.target.id === 'modalBg') closeModal(); });
@@ -10030,62 +10068,111 @@ let UPD = { state: 'off' };
 function anyRunBusy(){ for (const v of viewStore.values()) if (v.busy) return true; return false; }
 function paintUpdate(){
   const st = UPD || {}, pill = $('updPill'), txt = $('updTxt'), desc = $('updDesc');
-  const ver = st.version ? 'Version ' + st.version : 'Version unknown';
-  // When it last looked, so "up to date" can be trusted (or not).
+  const inSettings = $('modalBg') && $('modalBg').classList.contains('show');
+  const pct = Math.max(0, Math.min(100, Number(st.percent) || 0));
+  const mb = (n) => (Number(n) / 1048576).toFixed(Number(n) >= 104857600 ? 0 : 1);
+  // "52 of 115 MB · 4.1 MB/s · about 15 s left", as much of it as the download has said.
+  const dlMeta = () => {
+    const bits = [pct + '%'];
+    if (st.total > 0) bits.push(mb(st.got) + ' of ' + mb(st.total) + ' MB');
+    if (st.bps > 0) {
+      bits.push((st.bps / 1048576).toFixed(1) + ' MB/s');
+      const left = st.total > 0 ? (st.total - st.got) / st.bps : 0;
+      if (left > 1) bits.push('about ' + (left < 90 ? Math.round(left) + ' s' : Math.round(left / 60) + ' min') + ' left');
+    }
+    return bits.join(' · ');
+  };
+  // The three tracks (Account, the Settings sidebar, the note in the main window) move together.
+  const track = (box, mode) => {
+    if (!box) return;
+    const t = box.querySelector('.upd-track'), i = t && t.querySelector('i'); if (!t) return;
+    t.hidden = !mode;
+    t.classList.toggle('indet', mode === 'indet');
+    t.classList.toggle('done', mode === 'done');
+    if (i) i.style.width = mode === 'bar' ? pct + '%' : mode === 'done' ? '100%' : '';
+  };
+  const mode = st.state === 'downloading' ? 'bar' : st.state === 'checking' ? 'indet' : st.state === 'ready' ? 'done' : '';
+
+  // ---- Settings > Account > Updates ----
+  const ver = st.version ? 'You have ' + st.version : 'Version unknown';
   const at = st.checkedAt ? new Date(st.checkedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '';
   const lines = {
     off: st.reason || '',
     idle: 'checks when the app opens, when you open Settings, and every 30 minutes',
-    checking: 'checking for updates\u2026',
-    current: 'up to date' + (at ? ' \u00b7 checked ' + at : ''),
-    downloading: 'downloading ' + st.next + ' (' + (st.percent || 0) + '%)',
-    ready: st.next + ' is downloaded. Restart now, or later when it suits you',
+    checking: 'looking for a new version…',
+    current: 'up to date' + (at ? ' · checked ' + at : ''),
+    downloading: 'getting ' + st.next + ' in the background. You can keep working.',
+    ready: '',
     refused: st.error || 'an update was refused',
-    error: 'could not check: ' + (st.error || 'unknown error') + ' \u00b7 trying again in a few minutes',
+    error: 'could not check: ' + (st.error || 'unknown error') + ' · trying again in a few minutes',
   };
-  if (desc) desc.textContent = ver + (lines[st.state] ? ' \u00b7 ' + lines[st.state] : '');
+  if (desc) desc.textContent = UPD_SAY || (st.state === 'ready'
+    ? ver + '. Version ' + st.next + ' is downloaded: restart now, or later when it suits you.'
+    : ver + (lines[st.state] ? ' · ' + lines[st.state] : ''));
   const row = $('updRow'), lbl = $('updLbl');
-  if (row) row.classList.toggle('ready', st.state === 'ready');
-  if (lbl) lbl.textContent = st.state === 'ready' ? 'New update ready' : st.state === 'downloading' ? 'Downloading an update' : 'Updates';
-  if (desc && st.state === 'ready') desc.textContent = 'You have ' + (st.version || 'this version') + '. Version ' + st.next + ' is downloaded: restart now, or later when it suits you.';
+  if (row) { row.classList.toggle('ready', st.state === 'ready'); row.classList.toggle('dl', st.state === 'downloading' || st.state === 'checking'); }
+  if (lbl) lbl.textContent = st.state === 'ready' ? 'New update ready' : st.state === 'downloading' ? 'Downloading ' + st.next : st.state === 'checking' ? 'Checking for updates' : 'Updates';
+  track(row, mode);
+  const meta = $('updMeta'); if (meta) { meta.textContent = st.state === 'downloading' ? dlMeta() : ''; meta.hidden = st.state !== 'downloading'; }
   if ($('setVersion') && st.version) $('setVersion').textContent = 'VoxAI Coder ' + st.version;
   const btn = $('btnUpdCheck');
   if (btn) {
-    btn.disabled = ['off', 'checking', 'downloading'].includes(st.state);
-    btn.textContent = st.state === 'ready' ? 'Restart now' : 'Check now';
+    btn.disabled = ['off', 'checking', 'downloading'].includes(st.state) || UPD_SAY === 'Restarting…';
+    btn.textContent = st.state === 'ready' ? 'Restart now' : st.state === 'downloading' ? 'Downloading…' : st.state === 'checking' ? 'Checking…' : 'Check now';
     btn.className = st.state === 'ready' ? 'btn' : 'btn ghost';
   }
+
+  // ---- Settings sidebar: on every page of Settings, under the version ----
+  const su = $('setUpd');
+  if (su) {
+    const show = st.state === 'downloading' || st.state === 'ready';
+    su.hidden = !show;
+    if (show) {
+      su.classList.toggle('ready', st.state === 'ready');
+      $('setUpdTxt').textContent = UPD_SAY || (st.state === 'ready' ? 'Update ' + st.next + ' ready' : 'Downloading ' + st.next);
+      $('setUpdPct').textContent = st.state === 'downloading' && !UPD_SAY ? pct + '%' : '';
+      $('setUpdAct').hidden = st.state !== 'ready';
+      track(su, mode === 'done' ? '' : mode);
+    }
+  }
+
+  // ---- the note in the main window: not while Settings is open, which has its own ----
   if (!pill) return;
   pill.classList.remove('ready', 'dl', 'bad');
-  // Put away with its ✕: it stays away for that version, and Settings > Account still has it.
   let away = ''; try { away = localStorage.getItem('voxUpdAway') || ''; } catch {}
-  if (st.next && away === st.state + ':' + st.next) { pill.hidden = true; return; }
+  if (inSettings || (st.next && away === st.state + ':' + st.next)) { pill.hidden = true; return; }
   if (st.state === 'ready') {
     pill.hidden = false; pill.classList.add('ready');
-    txt.innerHTML = '<b>New update ready</b> \u00b7 Restart';
-    txt.title = 'Version ' + st.next + (st.notes ? '. What\u2019s new: ' + st.notes : '');
-    pill.title = st.notes ? 'What\u2019s new: ' + st.notes : 'Restart to finish updating';
+    txt.innerHTML = UPD_SAY ? esc(UPD_SAY) : '<b>New update ready</b> · Restart';
+    txt.title = 'Version ' + st.next + (st.notes ? '. What’s new: ' + st.notes : '');
+    track(pill, '');
   } else if (st.state === 'downloading') {
     pill.hidden = false; pill.classList.add('dl');
-    txt.textContent = 'Downloading update ' + st.next + ' \u00b7 ' + (st.percent || 0) + '%';
-    pill.title = '';
+    txt.textContent = 'Downloading ' + st.next + ' · ' + pct + '%';
+    txt.title = dlMeta();
+    track(pill, 'bar');
   } else if (st.state === 'refused') {
     pill.hidden = false; pill.classList.add('bad');
     txt.textContent = 'Update ' + st.next + ' refused: not signed';
-    pill.title = st.error || '';
+    txt.title = st.error || '';
+    track(pill, '');
   } else pill.hidden = true;
 }
+// A word on the restart, said wherever the update is shown.
+let UPD_SAY = '';
 async function restartIntoUpdate(){
   // Restarting stops a run mid-step; finish or stop it first.
-  if (anyRunBusy()) { $('updTxt').textContent = 'Stop or finish the run first'; setTimeout(paintUpdate, 2500); return; }
-  $('updTxt').textContent = 'Restarting\u2026';
+  const say = (t, ms) => { UPD_SAY = t; paintUpdate(); if (ms) setTimeout(() => { if (UPD_SAY === t) { UPD_SAY = ''; paintUpdate(); } }, ms); };
+  if (anyRunBusy()) { say('Stop or finish the run first', 3000); return; }
+  say('Restarting…');
   const ok = await window.voxai.updates.install();
   // It said "ready" and then quietly went back to "ready": say it did not go ahead (update.log says why).
-  if (!ok) { $('updTxt').textContent = 'Could not restart into the update'; setTimeout(paintUpdate, 3000); }
+  if (!ok) say('Could not restart into the update', 4000);
 }
 if (window.voxai && window.voxai.updates) {
   $('updTxt').onclick = () => { if (UPD.state === 'ready') restartIntoUpdate(); else openModal('account'); };
   $('updX').onclick = () => { try { localStorage.setItem('voxUpdAway', UPD.state + ':' + (UPD.next || '')); } catch {} $('updPill').hidden = true; };
+  if ($('setUpdAct')) $('setUpdAct').onclick = () => restartIntoUpdate();
   $('btnUpdCheck').onclick = async () => {
     if (UPD.state === 'ready') { restartIntoUpdate(); return; }
     const st = await window.voxai.updates.check(); if (st) { UPD = st; paintUpdate(); }
