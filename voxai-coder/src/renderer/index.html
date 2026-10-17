@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-wTvD64YPw/6FKfONTObp8epv6nXgGF1/BvoQGCQA5Mc='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-Cna53IhvgbKRb9dw1nJuzAaqu2Nq+gGfkFLiQahd0Lw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -6334,6 +6334,9 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
     setActivity(v, 'Waiting for your answer');
     if (v === actView()) updateSendState();
     mountAsk(v, box);
+  } else if (event.type === 'pruned') {
+    // Older reads, screenshots and logs left out of what the model is sent (backend/prune.js).
+    const r = RR(); if (r) { r.appendChild(el('div', 'fold', 'left out ' + event.items + ' old file reads, logs and screenshots the model no longer needs, to save tokens')); followThread(); }
   } else if (event.type === 'warning' && event.code === 'cache-miss') {
     if (!v._cacheNoted) {
       v._cacheNoted = true;
