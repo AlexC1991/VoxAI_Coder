@@ -83,6 +83,8 @@ async function saveSession(userData, session) {
     JSON.stringify({ kind: 'todos', todos: session.todos }),
     // The session's goal (/goal): set, met, failed or paused -- it outlives the app.
     ...(session.goal ? [JSON.stringify({ kind: 'goal', goal: session.goal })] : []),
+    // The prompt the session's requests start with (prefix.js), so the cache holds after a restart.
+    ...(session.promptFrozen ? [JSON.stringify({ kind: 'prompt', prompt: session.promptFrozen })] : []),
   ];
   await writeWhole(path.join(dir, `${session.id}.jsonl`), lines.join('\n'));
   return session;
@@ -155,6 +157,7 @@ async function loadSession(userData, id) {
     else if (o.kind === 'usage') session.usage.push(o.usage);
     else if (o.kind === 'todos') session.todos = o.todos;
     else if (o.kind === 'goal') session.goal = o.goal;
+    else if (o.kind === 'prompt') session.promptFrozen = o.prompt;
     else if (o.kind === 'stop') (session.stops || (session.stops = [])).push(o.stop);
     else if (o.kind === 'run') (session.runLog || (session.runLog = [])).push(o.run);
   }

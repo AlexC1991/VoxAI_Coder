@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-3fAfEyyOCqr7/3RqGmHdftd3JeXKsj2p7iXcwFscbnQ='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-xMJy9vBg2/3j4TXvhZzubEP6G1UWVKY0Kw2NxTxOaEg='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -5648,6 +5648,8 @@ async function openSession(id){
           continue;
         }
         if (/^\[VOX PLAN\]/.test(first)) { finalizeRunCard(); continue; }
+        // What changed in the project, told to the model (backend/prefix.js): not a message of yours.
+        if (/^\[VOX CONTEXT\]/.test(first)) continue;
         if (/^\[VOX CUTOFF\]/.test(first)) {
           finalizeRunCard();
           v.root.appendChild(el('div', 'fold', 'reply cut off at the output limit — carried on in smaller steps'));

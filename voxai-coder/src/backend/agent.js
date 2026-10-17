@@ -46,6 +46,7 @@ const { checkToolAllowed, checkShellCommand, isReadOnlyCommand, isProjectCommand
 const { processKills, onlyKills, harmlessBesidesKills, judgeKills, killKeys } = require('./tools/kills');
 const checkpoints = require('./tools/checkpoints');
 const { chatOnce, reasoningParam } = require('./providers/openrouter');
+const prefix = require('./prefix');
 const { teamPrompt, teamGuard, sharesData, explainProviderError } = require('./team');
 
 // Auto mode's safety check: one short question per action that would otherwise ask.
@@ -840,8 +841,22 @@ async function* runAgent(opts) {
   // model to use it -- an instruction naming a missing tool invites made-up calls.
   const webSearchOn = !(webSearch && webSearch.enabled === false);
   const localModel = isLocal(model);
-  const systemPrompt = SYSTEM(session.workdir, access, planMode, durable, webSearchOn) + goalPrompt(session.goal) + (isSubAgent ? '' : teamPrompt(coderModel, coderVision))
-    + (localModel ? LOCAL_RULES : '');
+  const promptTail = goalPrompt(session.goal) + (isSubAgent ? '' : teamPrompt(coderModel, coderVision)) + (localModel ? LOCAL_RULES : '');
+  // The prompt as it would be built now, and what it says apart from the project's own
+  // block (memory, build state, notes, skills) -- the part whose change means a new prompt.
+  const freshPrompt = SYSTEM(session.workdir, access, planMode, durable, webSearchOn) + promptTail;
+  const promptArgs = { fresh: freshPrompt, head: SYSTEM(session.workdir, access, planMode, /\[SKILLS\]/.test(durable) ? '[SKILLS]' : '', webSearchOn) + promptTail, durable, date: localDate() };
+  // The session keeps one prompt, so the provider's cache of the conversation keeps hitting;
+  // what changed in the project since is said in a [VOX CONTEXT] note instead (prefix.js).
+  let { systemPrompt, note: contextNote, commit: commitNote } = prefix.stablePrompt(session, promptArgs);
+  // A summary rewrites the conversation's start (a full read either way) and drops the notes
+  // with it, so the prompt is built afresh, with everything the project now holds.
+  const refreezePrompt = () => {
+    session.promptFrozen = null;
+    ({ systemPrompt } = prefix.stablePrompt(session, promptArgs));
+    contextNote = '';
+    prefix.noteStart(session);
+  };
   const estimatedBefore = estimateSessionTokens(session, systemPrompt);
   // A model on this PC has a small context (16k for the 30B), and the conversation shares it with
   // the tool definitions and the answer -- a coder's is a whole file, ~5,000 tokens -- while the
@@ -870,6 +885,7 @@ async function* runAgent(opts) {
     systemPrompt,
   });
   if (comp.compacted) {
+    refreezePrompt();
     // codex/claude-style visible confirmation: "context was compacted, summary below"
     yield {
       type: 'compacted',
@@ -922,10 +938,14 @@ async function* runAgent(opts) {
     if (typeof url === 'string' && url) userParts.push({ type: 'image_url', image_url: { url } });
     else if (att) droppedImages++;
   }
+  // What changed in the project since the prompt was set, just before this message. Not on a
+  // resume: there the last message may be a call whose result must follow it directly.
+  if (!resume && contextNote) { session.messages.push({ role: 'user', content: contextNote }); commitNote(); }
   if (!resume) session.messages.push({
     role: 'user',
     content: userParts.length ? userParts : userText || '',
   });
+  prefix.noteStart(session);
   // An attachment we could not read must be SAID, not skipped. The model has no way
   // to know an image was meant to be there, so it carries on -- and in the session
   // that exposed this, it substituted a render from the repo for "my character".
@@ -1093,6 +1113,7 @@ async function* runAgent(opts) {
             squeezed = true;
             const c2 = compactSession(session, { contextLimit: room > 0 ? room : undefined, force: true, hardFraction: 0.6, keepRecent: 2, systemPrompt });
             if (c2.compacted) {
+              refreezePrompt();
               const h2 = modelVision === false ? withoutImages(session.messages) : session.messages;
               messages.splice(0, messages.length, { role: 'system', content: systemPrompt }, ...h2);
               if (onLiveEvent) { try { onLiveEvent({ type: 'warning', code: 'local-context-full', message: 'The conversation was too long for the model on this PC; older turns were summarised and it was asked again.' }); } catch {} }
