@@ -850,6 +850,26 @@ async function drain(gen) {
       const mcp2 = buildTools(mctx).ALL.find((t) => t.def.function.name === 'mcp');
       await mcp2.run({ action: 'call', server: 't', name: 'add', arguments: { a: 1, b: 1 } }, mctx);
       check('one server process across turns, not one per turn', require(path.join(ROOT, 'src/backend/tools/mcp.js'))._clients.size === 1, require(path.join(ROOT, 'src/backend/tools/mcp.js'))._clients.size);
+      // Settings > Apps (MCP): Test starts a private copy, lists its tools and ends it,
+      // without touching the copy a run is using.
+      const MC = require(path.join(ROOT, 'src/backend/tools/mcp.js'));
+      const pr = await MC.probe('t', { command: process.execPath, args: [SRV] }, WD, 20000);
+      check('[MCP] Test lists the tools of a server', pr.ok && pr.tools.map((t) => t.name).join() === 'add,env', pr);
+      check('[MCP] and never joins or ends the copy a run uses', MC._clients.size === 1 && [...MC._clients.values()][0].dead === false, MC._clients.size);
+      const bad = await MC.probe('nope', { command: path.join(WD, 'no-such-program.exe') }, WD, 20000);
+      check('[MCP] a server that cannot start says so', !bad.ok && /nope/.test(bad.error), bad);
+      check('[MCP] status shows a running server and its tools', JSON.stringify(MC.status({ t: { command: process.execPath, args: [SRV], env: { T_NAME: 'from-env' } }, u: { command: 'x' } })) === '{"t":{"running":true,"tools":2},"u":{"running":false}}', MC.status({}));
+      check('[MCP] a server switched off is left out', JSON.stringify(Object.keys(MC.activeServers({ a: { command: 'x' }, b: { command: 'y', disabled: true } }))) === '["a"]', 'kept');
+      const offCtx = { ...mctx, getSettings: () => ({ mcpServers: { t: { command: 'x', disabled: true } } }) };
+      check('[MCP] with every server off, the tool is not offered', !buildTools(offCtx).ALL.some((t) => t.def.function.name === 'mcp'), 'offered');
+      const PL = read('src/preload/preload.js');
+      check('[MCP] Settings can list, save, remove, switch, test and import', ['mcp:list', 'mcp:save', 'mcp:remove', 'mcp:switch', 'mcp:test', 'mcp:import'].every((c) => read('src/main/main.js').includes("ipcMain.handle('" + c + "'") && PL.includes("ipcRenderer.invoke('" + c + "'")), 'missing');
+      const HM = read('src/renderer/index.html');
+      check('[MCP] the Apps (MCP) page is in Settings', HM.includes('<button type="button" data-set="mcp">') && HM.includes('<section class="set-page" data-set="mcp" hidden>') && HM.includes("if (key === 'mcp') loadMcp();"), 'no page');
+      check('[MCP] presets only fill the form', /\$\('mcpPresets'\)\.onclick = [\s\S]{0,400}mcpFill\(/.test(HM) && !/\$\('mcpPresets'\)\.onclick = [\s\S]{0,400}mcpSave/.test(HM), 'saves');
+      check('[MCP] a row being tested says Starting, not Did not start', HM.indexOf("else if (t && t.busy) say = 'Starting") > -1 && HM.indexOf("else if (t && t.busy) say = 'Starting") < HM.indexOf("else if (t && !t.ok) { tone = 'bad'; say = 'Did not start'; }"), 'order');
+      check('[MCP] a missing program is said plainly', HM.includes("if (m) return 'Windows could not find ' + m[1]"), 'raw');
+      check('[MCP] imported servers come in switched off', read('src/main/main.js').includes('all[name] = { ...c.cfg, disabled: true };'), 'on');
       require(path.join(ROOT, 'src/backend/tools/procs.js')).stopAll();
       check('the app passes the configured servers to the agent', read('src/backend/agent.js').includes('getSettings: () => ({ access, mcpServers: mcpServers || {} }),') && (read('src/main/main.js').match(/mcpServers: readSettingsFile\(\)\.mcpServers \|\| \{\}/g) || []).length === 1, 'never passed');   // one run path: the Sub-agents panel's spawn IPC is gone
       const MM = read('src/main/main.js'), HH = read('src/renderer/index.html'), AG = read('src/backend/agent.js');

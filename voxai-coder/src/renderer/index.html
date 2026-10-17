@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-l1vcwp0seSQ72LlBagrFr7JLgBRtkA2choViWCyDKgE='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-01cGDonbjlFRU8z09N4TE3rEIzUcE1Z1kFmbuaA0QH0='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -537,6 +537,40 @@ tests"). Scroll the row instead of breaking words:
 .sk-help{margin:14px 2px 4px;font-size:12.5px;line-height:1.6;color:var(--faint)}
 .sk-help code{font-family:"Sometype Mono",monospace;font-size:12px;color:var(--dim)}
 .mem-empty{padding:18px 16px;font-size:13px;color:var(--dim);line-height:1.6}
+/* ---- Settings: Apps (MCP) ---- */
+.mcp-row{align-items:center}
+.mcp-row.off .sk-main{opacity:.5}
+.mcp-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--faint);align-self:flex-start;margin-top:6px}
+.mcp-dot.ok{background:var(--add)} .mcp-dot.bad{background:var(--del)} .mcp-dot.off{background:transparent;box-shadow:inset 0 0 0 1.5px var(--edge2)}
+.mcp-state{font-size:12px;color:var(--dim)}
+.mcp-state.ok{color:var(--add)} .mcp-state.bad{color:var(--del)}
+.mcp-cmd{font-family:"Sometype Mono",monospace;font-size:12px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mcp-err{font-size:12.5px;line-height:1.5;color:var(--del);overflow-wrap:anywhere}
+.mcp-tools{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
+.mcp-tools span{font-family:"Sometype Mono",monospace;font-size:11px;color:var(--mut);background:var(--panel2);border-radius:5px;padding:1px 7px}
+.mcp-tools span.more{background:none;color:var(--faint)}
+.mcp-acts{flex:none;display:flex;align-items:center;gap:4px}
+.mcp-acts .mf-del:hover{color:var(--ink)}
+.mcp-acts .tog{margin-left:6px}
+.mcp-ed{padding:0}
+.mcp-ed-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px 4px}
+.mcp-ed-top b{font-size:14px;color:var(--ink);margin-right:auto}
+.mcp-presets{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
+.mcp-presets span{font-size:12px;color:var(--faint);margin-right:4px}
+.mcp-presets button{border:1px solid var(--edge2);background:none;color:var(--dim);border-radius:999px;padding:2px 10px;font:12px Chivo,sans-serif;cursor:pointer}
+.mcp-presets button:hover{color:var(--ink);border-color:var(--goldedge)}
+.mcp-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 12px;padding:10px 16px 12px}
+.mcp-f{display:flex;flex-direction:column;gap:4px;min-width:0}
+.mcp-f.full{grid-column:1/-1}
+.mcp-f>span{font-size:12.5px;font-weight:600;color:var(--mut)}
+.mcp-f small{font-weight:400;color:var(--faint);margin-left:4px}
+.mcp-f input,.mcp-f textarea{background:var(--panel2);border:1px solid var(--edge2);border-radius:7px;color:var(--ink);padding:7px 10px;font-family:"Sometype Mono",monospace;font-size:12.5px;outline:0;resize:vertical;min-width:0}
+.mcp-f input:focus,.mcp-f textarea:focus{border-color:var(--goldedge)}
+.mcp-note{margin:0 16px 12px;font-size:12.5px;line-height:1.55;color:var(--dim);border-left:2px solid var(--goldedge);padding-left:10px}
+.mcp-out{margin:0 16px 12px;font-size:12.5px;line-height:1.55;color:var(--dim);display:flex;flex-direction:column;gap:4px}
+.mcp-out b{font-weight:600} .mcp-out .ok{color:var(--add)} .mcp-out .bad{color:var(--del)}
+.mcp-del{color:var(--dim)} .mcp-del.armed{color:var(--del);border-color:var(--del)}
+@media (max-width:720px){.mcp-grid{grid-template-columns:minmax(0,1fr)}}
 /* ---- Settings: Keyboard ---- */
 .key-row{display:flex;align-items:center;gap:16px;padding:10px 16px;border-top:1px solid var(--edge)}
 .key-row:first-child{border-top:0}
@@ -1388,6 +1422,7 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
     <button type="button" data-set="ctx"><svg viewBox="0 0 24 24"><path d="M4 6h16M4 12h10M4 18h6"/></svg>Context</button>
     <button type="button" data-set="memory"><svg viewBox="0 0 24 24"><path d="M9 4a3 3 0 0 0-3 3v1a3 3 0 0 0-2 5 3 3 0 0 0 2 5 3 3 0 0 0 6 1V4.5A2.5 2.5 0 0 0 9 4zM15 4a3 3 0 0 1 3 3v1a3 3 0 0 1 2 5 3 3 0 0 1-2 5 3 3 0 0 1-6 1"/></svg>Memory</button>
     <button type="button" data-set="skills"><svg viewBox="0 0 24 24"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5zM5 19.5A1.5 1.5 0 0 0 6.5 21H19M9 7h6M9 10.5h4"/></svg>Skills</button>
+    <button type="button" data-set="mcp"><svg viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></svg>Apps (MCP)</button>
     <button type="button" data-set="keys"><svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>Keyboard</button>
     <div class="set-foot">Changes save as you make them.<br><span id="setVersion">VoxAI Coder</span></div>
   </nav>
@@ -1461,6 +1496,27 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
         <div class="mem-bar"><span class="mem-where" id="skWhere"></span><span class="mem-count" id="skCount"></span><button type="button" class="btn ghost sk-open" id="skOpen">Open my skills folder</button></div>
         <div class="mem-list" id="skBody"></div>
         <p class="sk-help">To add a skill, make a folder with a <code>SKILL.md</code> in your skills folder (for all projects) or in a project's <code>.voxai/skills</code> folder (for that project). Start the file with a <code>name:</code> and a one-line <code>description:</code> between <code>---</code> lines; the description is what the agent reads to decide when to load it. Skills in Claude Code's and Codex's folders are read too.</p>
+      </div>
+    </section>
+    <section class="set-page" data-set="mcp" hidden>
+      <header class="set-top"><h3>Apps (MCP)</h3><p>Programs that lend Vox their tools, so it can drive a browser, Blender, Figma or Windows apps. A server starts on this PC the first time a run needs it, and Vox asks before each call unless it has full access.</p></header>
+      <div class="set-scroll">
+        <div class="mem-bar"><span class="mem-where" id="mcpWhere"></span><button type="button" class="btn ghost" id="mcpImport">Import from Claude Desktop</button><button type="button" class="btn" id="mcpAdd">Add server</button></div>
+        <div class="set-group mcp-ed" id="mcpEd" hidden>
+          <div class="mcp-ed-top"><b id="mcpEdTitle">New server</b><div class="mcp-presets" id="mcpPresets" role="group" aria-label="Start from a known server"><span>Start from</span><button type="button" data-p="browser">Browser</button><button type="button" data-p="windows">Windows apps</button><button type="button" data-p="blender">Blender</button><button type="button" data-p="figma">Figma</button><button type="button" data-p="files">Files</button></div></div>
+          <div class="mcp-grid">
+            <label class="mcp-f"><span>Name</span><input id="mcpName" autocomplete="off" spellcheck="false" placeholder="browser"></label>
+            <label class="mcp-f"><span>Command</span><input id="mcpCmd" autocomplete="off" spellcheck="false" placeholder="npx"></label>
+            <label class="mcp-f full"><span>Arguments <small>one per line</small></span><textarea id="mcpArgs" rows="3" spellcheck="false" placeholder="-y&#10;@playwright/mcp@latest"></textarea></label>
+            <label class="mcp-f full"><span>Environment <small>NAME=value, one per line: keys a server needs. Kept in your settings file on this PC.</small></span><textarea id="mcpEnv" rows="2" spellcheck="false" placeholder="API_KEY=…"></textarea></label>
+            <label class="mcp-f full"><span>Start in <small>optional: the session's project folder when empty</small></span><input id="mcpCwd" autocomplete="off" spellcheck="false"></label>
+          </div>
+          <div class="mcp-note" id="mcpEdHint" hidden></div>
+          <div class="mcp-out" id="mcpTestOut" aria-live="polite" hidden></div>
+          <div class="set-actions"><button type="button" class="btn ghost mcp-del" id="mcpDel" hidden>Remove</button><span class="set-hint"></span><button type="button" class="btn ghost" id="mcpTestBtn">Test</button><button type="button" class="btn ghost" id="mcpCancel">Cancel</button><button type="button" class="btn" id="mcpSave">Save</button></div>
+        </div>
+        <div class="mem-list" id="mcpBody"></div>
+        <p class="sk-help">Most servers start with <code>npx</code> (needs Node.js) or <code>uvx</code> (needs uv). A server on the web, with a URL instead of a command, can be reached through <code>npx -y mcp-remote &lt;url&gt;</code>. The first start of an <code>npx</code> or <code>uvx</code> server downloads it, so it can take a minute.</p>
       </div>
     </section>
     <section class="set-page" data-set="keys" hidden>
@@ -6470,6 +6526,7 @@ function showSetPage(key){
   if (key === 'keys') renderKeys();
   if (key === 'local') renderLocal();
   if (key === 'skills') loadSkills();
+  if (key === 'mcp') loadMcp();
 }
 /** Paint the switch, the engine picker, the percentages and the presets from the fields. */
 function syncSetControls(){
@@ -8213,6 +8270,207 @@ async function loadSkills(){
     let r = null;
     try { r = await window.voxai.skillsOpenFolder(); } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
     if (!r || !r.ok) toast('Could not open the folder' + (r && r.error ? ': ' + r.error : '.'));
+  };
+})();
+
+// ---- Settings > Apps (MCP) ----
+// Servers that lend the agent another program's tools. They could only be set by hand in
+// the settings file; here they are added, tried and switched on or off.
+const MCP_TESTS = new Map();   // name -> last Test result, for the row
+let MCP_EDIT = null;           // the name being edited, '' for a new one, null when closed
+let MCP_LOADS = 0;
+let MCP_FORM_TEST = null;      // { key, r }: the form's last Test, kept if that is what gets saved
+// Starting points only: each fills the form, and nothing is saved until Save.
+const MCP_PRESETS = {
+  browser: { name: 'browser', command: 'npx', args: ['-y', '@playwright/mcp@latest'], hint: 'Playwright’s browser: opens pages, clicks, fills forms and reads them. Needs Node.js.' },
+  windows: { name: 'windows', command: 'uvx', args: ['windows-mcp'], hint: 'Drives Windows apps: opens them, clicks, types and reads the screen. Needs uv (Python).' },
+  blender: { name: 'blender', command: 'uvx', args: ['blender-mcp'], hint: 'Needs uv, and the Blender MCP add-on running inside Blender (its sidebar: Connect to MCP server).' },
+  figma: { name: 'figma', command: 'npx', args: ['-y', 'mcp-remote', 'http://127.0.0.1:3845/mcp'], hint: 'Figma’s own server, from the Figma desktop app: switch it on there first (Preferences > Enable Dev Mode MCP Server).' },
+  files: { name: 'files', command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem'], hint: 'Reads and writes files in the folders listed under Arguments: add one per line.', folder: true },
+};
+/** "npx -y pkg" typed as the command: split it, unless it is a path with spaces. */
+function mcpSplitCommand(cmd, args){
+  if (args.length || !/\s/.test(cmd)) return { command: cmd, args };
+  const parts = cmd.match(/"[^"]*"|\S+/g) || [];
+  const first = parts[0] || '';
+  if (/[\\/]/.test(first) && !/^"/.test(first)) return { command: cmd, args };
+  return { command: first.replace(/^"|"$/g, ''), args: parts.slice(1).map((p) => p.replace(/^"|"$/g, '')) };
+}
+/** What went wrong, in words: Windows' "is not recognized" means the program is missing. */
+function mcpPlainError(err){
+  let t = String(err || '').replace(/\r/g, '').replace(/^MCP server "[^"]*" /, '');
+  const m = /'([^']+)' is not recognized as an internal or external command/.exec(t);
+  if (m) return 'Windows could not find ' + m[1] + '. ' + (/^(npx|npm|node)$/i.test(m[1]) ? 'It comes with Node.js (nodejs.org).' : /^uvx?$/i.test(m[1]) ? 'It comes with uv (docs.astral.sh/uv).' : 'Check the name, or give its full path.');
+  return t.charAt(0).toUpperCase() + t.slice(1);
+}
+/** The form as { name, cfg } or { error }. */
+function mcpForm(){
+  const name = $('mcpName').value.trim();
+  const lines = (id) => $(id).value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const env = {};
+  for (const l of lines('mcpEnv')) {
+    const i = l.indexOf('=');
+    if (i < 1) return { error: '“' + l.slice(0, 40) + '” needs to be NAME=value.' };
+    env[l.slice(0, i).trim()] = l.slice(i + 1).trim();
+  }
+  const sp = mcpSplitCommand($('mcpCmd').value.trim(), lines('mcpArgs'));
+  const cfg = { command: sp.command, args: sp.args };
+  if (Object.keys(env).length) cfg.env = env;
+  const cwd = $('mcpCwd').value.trim(); if (cwd) cfg.cwd = cwd;
+  return { name, cfg };
+}
+function mcpFill(name, cfg){
+  $('mcpName').value = name || '';
+  $('mcpCmd').value = (cfg && cfg.command) || '';
+  $('mcpArgs').value = ((cfg && cfg.args) || []).join('\n');
+  $('mcpEnv').value = Object.entries((cfg && cfg.env) || {}).map(([k, v]) => k + '=' + v).join('\n');
+  $('mcpCwd').value = (cfg && cfg.cwd) || '';
+}
+function mcpHint(text){ const h = $('mcpEdHint'); h.textContent = text || ''; h.hidden = !text; }
+function mcpTestOut(r){
+  const o = $('mcpTestOut');
+  o.innerHTML = '';
+  if (!r) { o.hidden = true; return; }
+  o.hidden = false;
+  if (r.busy) { o.appendChild(el('span', '', 'Starting it… the first start of an npx or uvx server downloads it.')); return; }
+  const head = el('b', r.ok ? 'ok' : 'bad');
+  head.textContent = r.ok ? 'It works: ' + r.tools.length + (r.tools.length === 1 ? ' tool' : ' tools') + ' in ' + (r.ms / 1000).toFixed(1) + ' s' : 'It did not start';
+  o.appendChild(head);
+  if (!r.ok) { const e = el('span', 'mcp-err'); e.textContent = mcpPlainError(r.error); o.appendChild(e); }
+  else if (r.tools.length) o.appendChild(mcpToolChips(r.tools, 24));
+}
+function mcpToolChips(tools, max){
+  const box = el('div', 'mcp-tools');
+  for (const t of tools.slice(0, max)) { const c = el('span'); c.textContent = t.name; c.title = t.description || ''; box.appendChild(c); }
+  if (tools.length > max) box.appendChild(el('span', 'more', '+' + (tools.length - max) + ' more'));
+  return box;
+}
+function mcpOpen(name, cfg){
+  MCP_EDIT = name || '';
+  $('mcpEdTitle').textContent = name ? 'Edit ' + name : 'New server';
+  mcpFill(name, cfg);
+  mcpHint(''); mcpTestOut(null);
+  const d = $('mcpDel'); d.hidden = !name; d.classList.remove('armed'); d.textContent = 'Remove';
+  $('mcpPresets').hidden = !!name;
+  $('mcpEd').hidden = false;
+  $('mcpAdd').hidden = true;
+  MCP_FORM_TEST = null;
+  loadMcp();
+  (name ? $('mcpCmd') : $('mcpName')).focus();
+}
+function mcpClose(){ MCP_EDIT = null; $('mcpEd').hidden = true; $('mcpAdd').hidden = false; }
+async function loadMcp(){
+  const box = $('mcpBody');
+  if (!box || !window.voxai || !window.voxai.mcpList) return;
+  const seq = ++MCP_LOADS;
+  let r = null;
+  try { r = await window.voxai.mcpList(); } catch {}
+  if (seq !== MCP_LOADS) return;   // a newer refresh is on its way
+  const all = (r && r.servers) || {};
+  const st = (r && r.status) || {};
+  const names = Object.keys(all);
+  const on = names.filter((n) => !all[n].disabled).length;
+  $('mcpWhere').textContent = names.length ? on + ' of ' + names.length + ' switched on' : '';
+  box.innerHTML = '';
+  box.hidden = !names.length && MCP_EDIT !== null;
+  if (!names.length) { box.appendChild(el('div', 'mem-empty', 'No servers yet. Add one, or bring in the ones you set up for Claude Desktop or Cursor.')); return; }
+  for (const n of names) {
+    const cfg = all[n]; const off = !!cfg.disabled; const t = MCP_TESTS.get(n); const live = st[n] || {};
+    const row = el('div', 'mem-fact mcp-row' + (off ? ' off' : ''));
+    let tone = '', say = 'Starts when a run needs it';
+    if (off) { tone = 'off'; say = 'Off'; }
+    else if (live.running) { tone = 'ok'; say = 'Running · ' + live.tools + (live.tools === 1 ? ' tool' : ' tools'); }
+    else if (t && t.busy) say = 'Starting…';
+    else if (t && t.ok) { tone = 'ok'; say = 'Works · ' + t.tools.length + (t.tools.length === 1 ? ' tool' : ' tools'); }
+    else if (t && !t.ok) { tone = 'bad'; say = 'Did not start'; }
+    row.appendChild(el('span', 'mcp-dot' + (tone ? ' ' + tone : '')));
+    const main = el('div', 'sk-main');
+    const top = el('div', 'sk-top');
+    const nm = el('span', 'sk-name'); nm.textContent = n;
+    const sv = el('span', 'mcp-state' + (tone === 'ok' || tone === 'bad' ? ' ' + tone : '')); sv.textContent = say;
+    top.appendChild(nm); top.appendChild(sv);
+    const cmd = el('div', 'mcp-cmd'); cmd.textContent = [cfg.command].concat(cfg.args || []).join(' '); cmd.title = cmd.textContent;
+    main.appendChild(top); main.appendChild(cmd);
+    if (t && !t.ok && t.error) { const e = el('div', 'mcp-err'); e.textContent = mcpPlainError(t.error); main.appendChild(e); }
+    if (t && t.ok && t.tools.length) main.appendChild(mcpToolChips(t.tools, 10));
+    row.appendChild(main);
+    const acts = el('div', 'mcp-acts');
+    const bt = el('button', 'mf-del', 'Test'); bt.type = 'button'; bt.disabled = !!(t && t.busy);
+    bt.onclick = () => mcpRunTest(n, cfg, true);
+    const be = el('button', 'mf-del', 'Edit'); be.type = 'button'; be.onclick = () => mcpOpen(n, cfg);
+    const tg = el('button', 'tog'); tg.type = 'button'; tg.setAttribute('role', 'switch'); tg.setAttribute('aria-checked', String(!off)); tg.setAttribute('aria-label', 'Let Vox use ' + n);
+    tg.onclick = async () => {
+      const r2 = await window.voxai.mcpSwitch(n, off);
+      if (r2 && r2.ok) flashSettingsSaved(off ? n + ' is on' : n + ' is off'); else flashSettingsSaved((r2 && r2.error) || 'Could not change it', true);
+      loadMcp();
+    };
+    acts.appendChild(bt); acts.appendChild(be); acts.appendChild(tg);
+    row.appendChild(acts);
+    box.appendChild(row);
+  }
+}
+/** Start a private copy of the server, list its tools and end it. `inRow`: from the list. */
+async function mcpRunTest(name, cfg, inRow){
+  if (inRow) { MCP_TESTS.set(name, { busy: true }); loadMcp(); } else mcpTestOut({ busy: true });
+  let r;
+  try { r = await window.voxai.mcpTest(name, cfg, memoryDir()); } catch (e) { r = { ok: false, error: String(e && e.message || e) }; }
+  if (!r.ok) r.tools = [];
+  if (inRow) { MCP_TESTS.set(name, r); loadMcp(); } else mcpTestOut(r);
+  return r;
+}
+(function wireMcp(){
+  if (!$('mcpAdd')) return;
+  $('mcpAdd').onclick = () => mcpOpen('', null);
+  // "npx -y some-server" typed as the command: show it the way it will be saved.
+  $('mcpCmd').onblur = () => {
+    const sp = mcpSplitCommand($('mcpCmd').value.trim(), $('mcpArgs').value.trim() ? ['x'] : []);
+    if (sp.args.length && !$('mcpArgs').value.trim()) { $('mcpCmd').value = sp.command; $('mcpArgs').value = sp.args.join('\n'); }
+  };
+  $('mcpCancel').onclick = () => { mcpClose(); loadMcp(); };
+  $('mcpPresets').onclick = (e) => {
+    const b = e.target.closest('button[data-p]'); if (!b) return;
+    const p = MCP_PRESETS[b.dataset.p]; if (!p) return;
+    const args = p.args.slice();
+    if (p.folder && memoryDir()) args.push(memoryDir());
+    mcpFill(p.name, { command: p.command, args });
+    mcpHint(p.hint); mcpTestOut(null);
+  };
+  $('mcpTestBtn').onclick = async () => {
+    const f = mcpForm();
+    if (f.error) { mcpTestOut({ ok: false, error: f.error, tools: [] }); return; }
+    if (!f.cfg.command) { mcpTestOut({ ok: false, error: 'Say which program starts it first, e.g. npx.', tools: [] }); return; }
+    const b = $('mcpTestBtn'); b.disabled = true;
+    try { const r = await mcpRunTest(f.name || 'test', f.cfg, false); MCP_FORM_TEST = { key: JSON.stringify(f.cfg), r }; } finally { b.disabled = false; }
+  };
+  $('mcpSave').onclick = async () => {
+    const f = mcpForm();
+    if (f.error) { mcpTestOut({ ok: false, error: f.error, tools: [] }); return; }
+    const was = MCP_EDIT || '';
+    const r = await window.voxai.mcpSave(f.name, f.cfg, was);
+    if (!r || !r.ok) { mcpTestOut({ ok: false, error: (r && r.error) || 'Could not save it.', tools: [] }); return; }
+    // The form's Test result stays with the row, if it tried what was just saved.
+    if (was && was !== f.name) MCP_TESTS.delete(was);
+    if (MCP_FORM_TEST && MCP_FORM_TEST.key === JSON.stringify(f.cfg)) MCP_TESTS.set(f.name, MCP_FORM_TEST.r); else MCP_TESTS.delete(f.name);
+    flashSettingsSaved(was ? 'Saved' : f.name + ' added');
+    mcpClose(); loadMcp();
+  };
+  $('mcpDel').onclick = async () => {
+    const d = $('mcpDel');
+    // Two presses, as the page cannot show a confirm box of its own here.
+    if (!d.classList.contains('armed')) { d.classList.add('armed'); d.textContent = 'Press again to remove'; return; }
+    const n = MCP_EDIT;
+    const r = await window.voxai.mcpRemove(n);
+    if (r && r.ok) { MCP_TESTS.delete(n); flashSettingsSaved(n + ' removed'); } else flashSettingsSaved((r && r.error) || 'Could not remove it', true);
+    mcpClose(); loadMcp();
+  };
+  $('mcpImport').onclick = async () => {
+    let r = null;
+    try { r = await window.voxai.mcpImport(); } catch {}
+    if (!r || !r.ok) { flashSettingsSaved('Could not read their settings', true); return; }
+    if (!r.looked) toast('No Claude Desktop or Cursor settings found on this PC.');
+    else if (!r.added.length) toast('Nothing new to bring in' + (r.web ? ': ' + r.web + ' web server' + (r.web === 1 ? '' : 's') + ' skipped (add with npx -y mcp-remote <url>).' : '.'));
+    else toast('Brought in ' + r.added.map((a) => a.name).join(', ') + ', switched off: turn on the ones you want.');
+    loadMcp();
   };
 })();
 

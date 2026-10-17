@@ -33,12 +33,14 @@ function startProcess(cfg, cwd) {
     : spawn(command, args, { cwd, env, windowsHide: true, stdio: ['pipe', 'pipe', 'pipe'] });
 }
 
-function connect(name, cfg, cwd) {
+// `own`: a private copy for Settings' Test button, never shared with a run (and never
+// ended under one).
+function connect(name, cfg, cwd, own) {
   const key = keyOf(name, cfg);
-  const have = clients.get(key);
+  const have = own ? null : clients.get(key);
   if (have && !have.dead) return have;
   const c = { name, cfg, buf: '', nextId: 1, pending: new Map(), tools: [], stderr: '', dead: false };
-  clients.set(key, c);
+  if (!own) clients.set(key, c);
   if (!cfg || !cfg.command) { c.dead = true; c.ready = Promise.reject(new Error(`MCP server "${name}" has no command in settings.`)); c.ready.catch(() => {}); return c; }
   let proc;
   try { proc = startProcess(cfg, cfg.cwd || cwd); } catch (e) { c.dead = true; c.ready = Promise.reject(new Error(`Could not start MCP server "${name}": ${e.message}`)); c.ready.catch(() => {}); return c; }
@@ -50,7 +52,7 @@ function connect(name, cfg, cwd) {
     const err = new Error(`MCP server "${name}" ${why}` + (c.stderr.trim() ? `. It said: ${tail(c.stderr.trim(), 600)}` : ''));
     for (const p of c.pending.values()) p.reject(err);
     c.pending.clear();
-    clients.delete(key);
+    if (clients.get(key) === c) clients.delete(key);
   };
   const handle = (msg) => {
     if (!msg || msg.id == null) return;          // notifications / requests from the server
@@ -112,12 +114,50 @@ function rpc(c, method, params, _unused, ms = 60000) {
   });
 }
 
+/** The servers the agent may use: the ones not switched off in Settings. */
+function activeServers(all) {
+  const out = {};
+  if (!all || typeof all !== 'object') return out;
+  for (const n of Object.keys(all)) if (all[n] && typeof all[n] === 'object' && !all[n].disabled) out[n] = all[n];
+  return out;
+}
+
+/**
+ * Settings' Test button: start the server on its own, list its tools, end it.
+ * { ok, tools: [{ name, description }], ms } or { ok: false, error }.
+ */
+async function probe(name, cfg, cwd, ms = 90000) {
+  const t0 = Date.now();
+  const c = connect(name, cfg, cwd, true);
+  let timer;
+  try {
+    await Promise.race([c.ready, new Promise((_, rej) => { timer = setTimeout(() => rej(new Error(`"${name}" did not finish starting within ${Math.round(ms / 1000)} s` + (c.stderr.trim() ? `. It said: ${tail(c.stderr.trim(), 600)}` : '.'))), ms); })]);
+    return { ok: true, ms: Date.now() - t0, tools: c.tools.map((t) => ({ name: String(t.name || ''), description: String(t.description || '').slice(0, 200) })) };
+  } catch (e) {
+    return { ok: false, ms: Date.now() - t0, error: String((e && e.message) || e) };
+  } finally {
+    clearTimeout(timer);
+    c.dead = true;
+    if (c.proc && c.proc.pid) { try { procs.stop(c.proc.pid); } catch { /* already gone */ } }
+  }
+}
+
+/** For Settings: which servers a run has started, and how many tools each gave. */
+function status(all) {
+  const out = {};
+  for (const n of Object.keys(all || {})) {
+    const c = clients.get(keyOf(n, all[n]));
+    out[n] = c && !c.dead ? { running: true, tools: c.tools.length } : { running: false };
+  }
+  return out;
+}
+
 function makeMcpTool({ getSettings }) {
   function serverConfigs() {
     const s = (getSettings && getSettings()) || {};
-    return (s.mcpServers && typeof s.mcpServers === 'object') ? s.mcpServers : {};
+    return activeServers(s.mcpServers);
   }
-  const NONE = 'No MCP servers are set up. They are added in the settings file as "mcpServers": { "name": { "command": "npx", "args": ["-y", "some-mcp-server"] } }.';
+  const NONE = 'No MCP servers are switched on. The user adds them in Settings > Apps (MCP).';
 
   async function listTools(cwd) {
     const configs = serverConfigs();
@@ -191,4 +231,4 @@ function makeMcpTool({ getSettings }) {
   };
 }
 
-module.exports = { makeMcpTool, _clients: clients };
+module.exports = { makeMcpTool, activeServers, probe, status, _clients: clients };

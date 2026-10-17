@@ -1215,6 +1215,88 @@ app.whenReady().then(() => {
     const err = await require('electron').shell.openPath(d);
     return { ok: !err, path: d, error: err || '' };
   });
+  // Settings > Apps (MCP): programs that lend the agent their tools (a browser, Blender,
+  // Windows apps). They were only ever set by hand in the settings file.
+  const mcp = require('../backend/tools/mcp');
+  const mcpAll = () => { const m = readSettingsFile().mcpServers; return m && typeof m === 'object' && !Array.isArray(m) ? m : {}; };
+  const mcpWrite = (all) => { const raw = readSettingsFile(); raw.mcpServers = all; writeSettingsFile(raw); };
+  const MCP_NAME = /^[A-Za-z0-9][A-Za-z0-9 _.-]{0,39}$/;
+  /** The same shape Claude Desktop uses; anything else is dropped. */
+  function mcpClean(cfg) {
+    if (!cfg || typeof cfg !== 'object') return { error: 'Nothing to save.' };
+    const command = String(cfg.command || '').trim();
+    if (!command) return { error: 'Say which program starts the server, e.g. npx or uvx.' };
+    if (command.length > 500) return { error: 'That command is too long.' };
+    const args = (Array.isArray(cfg.args) ? cfg.args : []).map((a) => String(a)).filter((a) => a.length).slice(0, 64);
+    const env = {};
+    for (const [k, v] of Object.entries(cfg.env && typeof cfg.env === 'object' ? cfg.env : {})) {
+      if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(k)) return { error: `"${k}" can't be a variable name: use letters, digits and _.` };
+      env[k] = String(v);
+    }
+    const out = { command, args };
+    if (Object.keys(env).length) out.env = env;
+    const cwd = String(cfg.cwd || '').trim();
+    if (cwd) out.cwd = cwd;
+    return { cfg: out };
+  }
+  ipcMain.handle('mcp:list', () => { const all = mcpAll(); return { servers: all, status: mcp.status(all) }; });
+  ipcMain.handle('mcp:save', (_e, arg) => {
+    const name = String((arg && arg.name) || '').trim();
+    const was = String((arg && arg.was) || '').trim();
+    if (!MCP_NAME.test(name)) return { ok: false, error: 'Give it a short name: letters, digits, spaces, - _ or . (up to 40).' };
+    const c = mcpClean(arg && arg.cfg);
+    if (c.error) return { ok: false, error: c.error };
+    const all = mcpAll();
+    if (name !== was && all[name]) return { ok: false, error: `There is already a server called "${name}".` };
+    const old = all[was] || all[name];
+    if (old && old.disabled) c.cfg.disabled = true;
+    // Keep the list in the order it was made: an edit stays where it was.
+    const next = {};
+    for (const n of Object.keys(all)) { if (n === was) next[name] = c.cfg; else if (n !== name) next[n] = all[n]; }
+    if (!next[name]) next[name] = c.cfg;
+    mcpWrite(next);
+    return { ok: true };
+  });
+  ipcMain.handle('mcp:remove', (_e, arg) => {
+    const all = mcpAll(); const name = String((arg && arg.name) || '');
+    if (!all[name]) return { ok: false, error: 'It is already gone.' };
+    delete all[name]; mcpWrite(all);
+    return { ok: true };
+  });
+  ipcMain.handle('mcp:switch', (_e, arg) => {
+    const all = mcpAll(); const name = String((arg && arg.name) || '');
+    if (!all[name]) return { ok: false, error: 'No such server.' };
+    if (arg.on) delete all[name].disabled; else all[name].disabled = true;
+    mcpWrite(all);
+    return { ok: true };
+  });
+  ipcMain.handle('mcp:test', async (_e, arg) => {
+    const c = mcpClean(arg && arg.cfg);
+    if (c.error) return { ok: false, error: c.error };
+    let dir = String((arg && arg.workdir) || '');
+    try { if (!dir || !fs.statSync(dir).isDirectory()) dir = os.homedir(); } catch { dir = os.homedir(); }
+    return mcp.probe(String((arg && arg.name) || 'test'), c.cfg, dir);
+  });
+  // Servers already set up for Claude Desktop or Cursor, brought in switched off.
+  ipcMain.handle('mcp:import', () => {
+    const sources = [
+      ['Claude Desktop', path.join(app.getPath('appData'), 'Claude', 'claude_desktop_config.json')],
+      ['Cursor', path.join(os.homedir(), '.cursor', 'mcp.json')],
+    ];
+    const all = mcpAll(); const added = []; let web = 0; let looked = 0;
+    for (const [from, file] of sources) {
+      let j; try { j = JSON.parse(fs.readFileSync(file, 'utf8')); looked++; } catch { continue; }
+      const found = (j && typeof j.mcpServers === 'object' && j.mcpServers) || {};
+      for (const [n, cfg] of Object.entries(found)) {
+        if (cfg && !cfg.command && (cfg.url || cfg.serverUrl)) { web++; continue; }
+        const c = mcpClean(cfg); const name = String(n).trim().slice(0, 40);
+        if (c.error || !MCP_NAME.test(name) || all[name]) continue;
+        all[name] = { ...c.cfg, disabled: true }; added.push({ name, from });
+      }
+    }
+    if (added.length) mcpWrite(all);
+    return { ok: true, added, web, looked };
+  });
   ipcMain.handle('sessions:search', (_e, query) => store.searchSessions(userData(), query));
   ipcMain.handle('sessions:create', async (_e, { title, workdir, model }) => {
     const s = getSettings(false);

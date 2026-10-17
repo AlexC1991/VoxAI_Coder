@@ -603,7 +603,7 @@ function buildTools(opts) {
   const snapT = makeSnapshotTool({ userData, live });
   const replT = makeReplTool();
   // ---- feature set 1-8 (gap-fill) ----
-  const { makeMcpTool } = require('./mcp');
+  const { makeMcpTool, activeServers } = require('./mcp');
   const { makeSkillsTool } = require('./skills');
   const { makeFsOpsTool } = require('./fsops');
   const { makeDocRagTool } = require('./docrag');
@@ -630,7 +630,7 @@ function buildTools(opts) {
   // out: the MCP tool when no MCP server is set up, and sandbox_status, which only repeated
   // the access level the system prompt already states. (Counted with Claude's tokenizer:
   // the tools were ~6,800 tokens of the ~8,900 every session starts with.)
-  const mcpOn = Object.keys(((opts.getSettings && opts.getSettings()) || {}).mcpServers || {}).length > 0;
+  const mcpOn = Object.keys(activeServers(((opts.getSettings && opts.getSettings()) || {}).mcpServers)).length > 0;
   void sandboxT;
   const featureDeps = [
     ...(mcpOn ? [[mcpT, 'mcp_']] : []), [skillsT, 'skill'], [fsT, 'fsops'], [docRagT, 'doc'],
