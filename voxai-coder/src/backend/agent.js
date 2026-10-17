@@ -1127,7 +1127,8 @@ async function* runAgent(opts) {
         try {
           r = await chatCompletions({
             apiKey, host, model, messages,
-            tools: toolList.map((t) => t.def),
+            // Hidden tools (tools/index.js) still run when called by name; they are not offered.
+            tools: toolList.filter((t) => !t.hidden).map((t) => t.def),
             reasoningEffort: effortNext || reasoningEffort, reasoningSpec, maxTokens, signal, cacheTtl,
             sessionId: session.id,   // sticky routing — keeps the cache on one upstream
             // A Team coder on a starved local engine ends its request with the reason, so the

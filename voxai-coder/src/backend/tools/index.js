@@ -735,9 +735,17 @@ function buildTools(opts) {
     return confirmResult(await c.userInput(askRequest('confirm', args)));
   });
 
+  // rag reads documents too (PDF, Word, Excel, CSV), through doc_rag's reader: two tools that both
+  // "find the relevant part of a file" was one choice too many.
+  const ragDocs = {
+    def: { ...ragT.def, function: { ...ragT.def.function, description: ragT.def.function.description + ' Also reads documents -- PDF, Word (.docx), Excel (.xlsx) and CSV -- by their text.' } },
+    run: (args, c) => (/\.(pdf|docx|xlsx|xls|csv)$/i.test(String((args && args.path) || ''))
+      ? docRagT.run('doc_rag', { path: args.path, query: args.query }, c)
+      : ragT.run(args, c)),
+  };
   const ALL = [
     read, write, edit, glob, grep, shell, todo, askUser, askConfirm,
-    patchT, memT, bsT, agT, wtT, ragT, wfT, wsT, lspT, snapT, replT,
+    patchT, memT, bsT, agT, wtT, ragDocs, wfT, wsT, lspT, snapT, replT,
   ];
   if (opts.includeFeatures !== false) {
     // Fold related tools behind a single `action` enum. Tool-choice accuracy falls
@@ -763,10 +771,18 @@ function buildTools(opts) {
       });
     }
   }
+  // Duplicates kept callable by name -- older sessions and models that learned them still work --
+  // but not sent to the model: search is grep and glob in one, doc_rag is now part of rag. Every
+  // definition rides on every request, and each near-duplicate is one more wrong choice to make.
+  for (const t of ALL) if (HIDDEN_FROM_MODEL.has(t.def.function.name)) t.hidden = true;
   return { ALL, ctx };
 }
 
+// Tools left out of what the model is sent, though a call to them by name still runs.
+const HIDDEN_FROM_MODEL = new Set(['search', 'doc_rag']);
+
 module.exports = {
+  HIDDEN_FROM_MODEL,
   buildTools, askRequest, askResult, confirmResult,
   definitions: (opts = {}) => {
     const stubCtx = {
@@ -778,6 +794,6 @@ module.exports = {
       userData: opts.userData,
       live: opts.live,
     };
-    return buildTools(stubCtx).ALL.map((t) => t.def);
+    return buildTools(stubCtx).ALL.filter((t) => !t.hidden).map((t) => t.def);
   },
 };

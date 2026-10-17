@@ -388,6 +388,32 @@ const textOf = (m) => (typeof m.content === 'string' ? m.content : (m.content ||
     fs.rmSync(D, { recursive: true, force: true });
   }
 
+  // ------------------------------------------------------------------ [P10]
+  console.log('\n[P10] duplicate tools leave what the model is offered, and still work by name');
+  {
+    const tools = require(path.join(ROOT, 'src/backend/tools'));
+    const D = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-cost10-'));
+    fs.writeFileSync(path.join(D, 'prices.csv'), 'item,price\nhat,12\nscarf,30\n');
+    fs.writeFileSync(path.join(D, 'shop.js'), 'export const hat = 12;\n');
+    const ctx = { workdir: D, session: { messages: [] }, emit: () => {}, checkPermission: async () => {}, resolveIn: (w, p) => path.resolve(w, p), getSettings: () => ({}), getAccess: () => 'full' };
+    const { ALL } = tools.buildTools(ctx);
+    const offered = ALL.filter((t) => !t.hidden).map((t) => t.def.function.name);
+    check('search and doc_rag are not offered; grep, glob, edit, patch and rag are', !offered.includes('search') && !offered.includes('doc_rag') && ['grep', 'glob', 'edit', 'patch', 'rag'].every((n) => offered.includes(n)), offered);
+    check('the tool definitions everyone else reads leave them out too', !tools.definitions({ workdir: D }).some((d) => ['search', 'doc_rag'].includes(d.function.name)), 'listed');
+    const rag = ALL.find((t) => t.def.function.name === 'rag');
+    const r = await rag.run({ path: 'prices.csv', query: 'scarf price' }, ctx);
+    check('rag reads a document through the document reader', JSON.stringify(r).includes('scarf') && /documents/.test(rag.def.function.description), JSON.stringify(r).slice(0, 120));
+    // A model that still calls search by name: it runs, it is not "no such tool".
+    fakeOpenRouter((n) => (n === 1 ? call('s1', 'search', { query: 'hat' }) : say('found it')));
+    const sess = { id: 'p10', workdir: D, messages: [] };
+    SENT.length = 0;
+    await drain(runAgent({ session: sess, userText: 'where is hat', apiKey: 'k', model: 'm', access: 'full', askPermission: async () => true, maxTurns: 3 }));
+    const res = sess.messages.find((m) => m.role === 'tool');
+    check('a call to search by name still runs', res && !/There is no tool called/.test(res.content) && /shop\.js/.test(res.content), res && res.content.slice(0, 120));
+    check('and the request offered neither', SENT[0] && !SENT[0].tools.some((t) => ['search', 'doc_rag'].includes(t.function.name)), SENT[0] && SENT[0].tools.length);
+    fs.rmSync(D, { recursive: true, force: true });
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });
