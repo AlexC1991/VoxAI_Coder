@@ -2320,6 +2320,8 @@ ipcMain.handle('openrouter:generations', async (_e, { limit = 40, cursor } = {})
           // calling were all in the picker; none of them can read or edit a file.
           // Shares what it is sent with its maker (contributor tiers, free models): backend/team.js.
           sharesData: team.sharesData(m.id, m.pricing),
+          // Where its price jumps for a long request (backend/profiles.js); 0 = it does not.
+          priceTier: require('../backend/profiles').profileOf(m.id).priceTier || 0,
           coding: params.has('tools') && !!(m.architecture && Array.isArray(m.architecture.output_modalities)
             && m.architecture.output_modalities.length === 1 && m.architecture.output_modalities[0] === 'text'),
         };

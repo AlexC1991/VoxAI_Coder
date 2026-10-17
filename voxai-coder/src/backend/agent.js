@@ -862,7 +862,9 @@ async function* runAgent(opts) {
   // the tool definitions and the answer -- a coder's is a whole file, ~5,000 tokens -- while the
   // estimate counts 4 characters a token, fewer than code has. So the room it is measured against
   // is what is left, less a fifth: a resumed 30B coder sent 16,543 tokens into 16,384 and was refused.
-  const room = localModel && Number(contextLimit) > 0 ? Math.max(4000, Math.floor((Number(contextLimit) - LOCAL_RESERVE) * 0.8)) : Number(contextLimit);
+  // A family whose price jumps past a request size (OpenAI past 272k, Grok past 200k, billed for
+  // the WHOLE request) is kept under it: a context set larger is capped for that model (profiles.js).
+  const room = localModel && Number(contextLimit) > 0 ? Math.max(4000, Math.floor((Number(contextLimit) - LOCAL_RESERVE) * 0.8)) : require('./profiles').capContext(Number(contextLimit), model);
   // User-visible compaction notices (like Codex/Claude Code): tell the UI before
   // and after we fold older turns, so compaction is never silent.
   // How full the conversation is, by the same estimate that decides when to summarise,

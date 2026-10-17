@@ -384,11 +384,9 @@ async function chatCompletions(opts) {
  * request, whereas sending one to a provider that rejects the array-form content
  * can. Mirrors goose's CacheSemantics::for_model().
  */
+// How a family caches is in backend/profiles.js, with the rest of what changes its costs.
 function cacheMode(model) {
-  const m = String(model || '').toLowerCase();
-  if (/(^|\/)anthropic\/|claude/.test(m)) return 'explicit';
-  if (/(^|\/)qwen\//.test(m)) return 'explicit';
-  return 'auto';
+  return require('../profiles').profileOf(model).cache === 'explicit' ? 'explicit' : 'auto';
 }
 
 // Anthropic allows at most 4 breakpoints per request. We use two:

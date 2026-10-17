@@ -142,6 +142,31 @@ const textOf = (m) => (typeof m.content === 'string' ? m.content : (m.content ||
     check('a level above the model\'s own shows in gold, and says why', HM.includes("c.classList.toggle('dear', dear);") && HM.includes('#chipReason.dear #chipReasonVal{color:var(--gold)}'), 'silent');
   }
 
+  // ------------------------------------------------------------------ [P3]
+  console.log('\n[P3] model profiles and the price-tier guard');
+  {
+    const P = require(path.join(ROOT, 'src/backend/profiles.js'));
+    const OR = require(path.join(ROOT, 'src/backend/providers/openrouter.js'));
+    const fam = (id) => P.profileOf(id).family;
+    check('each family is told apart, aliases and all', fam('anthropic/claude-opus-5.5') === 'claude' && fam('openai/gpt-6.1-sol') === 'openai' && fam('~openai/gpt-latest') === 'openai'
+      && fam('google/gemini-4-argon') === 'gemini' && fam('x-ai/grok-4.7') === 'grok' && fam('deepseek/deepseek-v4.1-flash') === 'deepseek' && fam('qwen/qwen3.8-flash') === 'qwen' && fam('meta/muse') === 'other' && fam('local/a.gguf') === 'local',
+    ['claude', 'openai', 'gemini', 'grok'].map((x) => x));
+    check('caching is as before: Claude and Qwen marked, the rest automatic', OR.cacheMode('anthropic/claude-fable-5.1') === 'explicit' && OR.cacheMode('qwen/qwen3.8-flash') === 'explicit' && OR.cacheMode('google/gemini-4-argon') === 'auto' && OR.cacheMode('openai/gpt-6-astra') === 'auto', 'changed');
+    check('a context set past a price tier is capped for that model only', P.capContext(400000, 'openai/gpt-6.1-sol') === 258400 && P.capContext(400000, 'x-ai/grok-4.7') === 190000 && P.capContext(400000, 'anthropic/claude-fable-5.1') === 400000 && P.capContext(200000, 'openai/gpt-6.1-sol') === 200000 && P.capContext(0, 'openai/gpt-6.1-sol') === 0, [P.capContext(400000, 'openai/gpt-6.1-sol'), P.capContext(400000, 'x-ai/grok-4.7')]);
+    // A real run: the limit the run works to (the context event) is the capped one.
+    fakeOpenRouter(() => say('ok'));
+    const WD = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-cost3-'));
+    const limitFor = async (model) => {
+      const ev = await drain(runAgent({ session: { id: 'p3-' + model, workdir: WD, messages: [] }, userText: 'hi', apiKey: 'k', model, contextLimit: 400000, access: 'full', askPermission: async () => true, maxTurns: 2 }));
+      const c = ev.find((e) => e.type === 'context'); return c && c.limit;
+    };
+    const lo = await limitFor('openai/gpt-6.1-sol'), lc = await limitFor('anthropic/claude-opus-5.5');
+    check('a run on GPT-6.1 Sol with a 400k context works to 258k; on Claude, to 400k', lo === 258400 && lc === 400000, { openai: lo, claude: lc });
+    fs.rmSync(WD, { recursive: true, force: true });
+    const MM = fs.readFileSync(path.join(ROOT, 'src/main/main.js'), 'utf8'), HM = fs.readFileSync(path.join(ROOT, 'src/renderer/index.html'), 'utf8');
+    check('the catalogue carries each model\'s tier, and the Context page says it', MM.includes("priceTier: require('../backend/profiles').profileOf(m.id).priceTier || 0,") && HM.includes("' bills a whole request at a higher rate past ' + kTok(Number(m.priceTier))"), 'not shown');
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-8MWJbDZsonciAOqs7wyBAlZuxH7EQcdGmkJByVG2FXs='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-wTvD64YPw/6FKfONTObp8epv6nXgGF1/BvoQGCQA5Mc='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -9198,24 +9198,30 @@ function paintCtx(){
   const used = f && f.tokens > 0 ? Math.max(0, f.tokens - CX_FIXED) : 0;
   $('cxConv').style.width = pct(Math.min(used, limit - CX_FIXED) / limit);
   $('cxConvKey').hidden = !used;
-  $('cxSoft').style.left = pct(soft); $('cxHard').style.left = pct(hard);
-  $('cxSoftAt').style.left = pct(soft); $('cxSoftAt').textContent = kTok(limit * soft);
-  $('cxMax').textContent = kTok(limit);
   // The model in use may take less than this: past its own maximum is drawn hatched.
   const id = typeof activeModel === 'function' ? activeModel() : '', m = id ? modelEntry(id) : null;
-  const cap = m && Number(m.context) > 0 && Number(m.context) < limit ? Number(m.context) : 0;
+  const tier = m && Number(m.priceTier) > 0 ? Math.floor(Number(m.priceTier) * 0.95) : 0;
+  const maxCap = m && Number(m.context) > 0 && Number(m.context) < limit ? Number(m.context) : 0;
+  const tierCap = tier && tier < limit && (!maxCap || tier < maxCap) ? tier : 0;
+  const cap = tierCap || maxCap;
+  // Past a price tier the run works to the tier instead (profiles.js), and summarises against it.
+  const eff = tierCap || limit;
   $('cxCap').hidden = !cap; if (cap) $('cxCap').style.left = pct(cap / limit);
-  $('fCompact').nextElementSibling.textContent = Math.round(soft * 100) + '% · ' + kTok(limit * soft);
-  $('fHardFraction').nextElementSibling.textContent = Math.round(hard * 100) + '% · ' + kTok(limit * hard);
+  $('cxSoft').style.left = pct(soft * eff / limit); $('cxHard').style.left = pct(hard * eff / limit);
+  $('cxSoftAt').style.left = pct(soft * eff / limit); $('cxSoftAt').textContent = kTok(eff * soft);
+  $('cxMax').textContent = kTok(limit);
+  $('fCompact').nextElementSibling.textContent = Math.round(soft * 100) + '% · ' + kTok(eff * soft);
+  $('fHardFraction').nextElementSibling.textContent = Math.round(hard * 100) + '% · ' + kTok(eff * hard);
   // In words: how much that is, when it summarises, and what a full one costs on this model.
   const say = $('cxSay'); say.innerHTML = '';
   const line = (html, cls) => { const s = el('span', cls || '', html); say.appendChild(s); say.appendChild(document.createTextNode(' ')); };
-  line('Each request carries up to <b>' + Number(limit).toLocaleString() + ' tokens</b>, about ' + kTok(limit * 0.75).replace('k', ',000') + ' words.');
-  line('Older turns are summarised at <b>' + kTok(limit * soft) + '</b>, and must be by <b>' + kTok(limit * hard) + '</b>.');
+  line('Each request carries up to <b>' + Number(eff).toLocaleString() + ' tokens</b>, about ' + kTok(eff * 0.75).replace('k', ',000') + ' words.');
+  line('Older turns are summarised at <b>' + kTok(eff * soft) + '</b>, and must be by <b>' + kTok(eff * hard) + '</b>.');
   if (used) line('This session is using <b>' + kTok(used + CX_FIXED) + '</b> now.');
   if (m) {
     const name = esc(describeModel(m).name);
-    if (cap) line(name + ' takes at most ' + kTok(cap) + ', so its requests stay under that.', 'warn');
+    if (tierCap) line(name + ' bills a whole request at a higher rate past ' + kTok(Number(m.priceTier)) + ', so its requests are kept under ' + kTok(tierCap) + '.', 'warn');
+    else if (cap) line(name + ' takes at most ' + kTok(cap) + ', so its requests stay under that.', 'warn');
     const p = flexOn(m.id) || m, per = Number(p.promptCents) / 100;
     if (m.local || !(per > 0)) line('On ' + name + ' that costs nothing.');
     else {
