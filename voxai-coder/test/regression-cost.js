@@ -245,6 +245,59 @@ const textOf = (m) => (typeof m.content === 'string' ? m.content : (m.content ||
     fs.rmSync(WD, { recursive: true, force: true });
   }
 
+  // ------------------------------------------------------------------ [P7]
+  console.log('\n[P7] stale reads, old screenshots and long old outputs left out, in batches');
+  {
+    const PR = require(path.join(ROOT, 'src/backend/prune.js'));
+    const tcall = (id, name, args) => ({ role: 'assistant', content: '', tool_calls: [{ id, type: 'function', function: { name, arguments: JSON.stringify(args) } }] });
+    const tres = (id, content) => ({ role: 'tool', tool_call_id: id, content });
+    const shots = (n) => ({ role: 'user', content: [{ type: 'text', text: '[VOX TOOL SCREENSHOTS] ' + n + ' screenshots from computer above.' }, ...Array.from({ length: n }, () => ({ type: 'image_url', image_url: { url: 'data:image/jpeg;base64,AAAA' } }))] });
+    const big = (c, n) => c.repeat(n);
+    const build = () => [
+      { role: 'user', content: 'turn 1' }, tcall('r1', 'read', { path: 'a.js' }), tres('r1', big('A', 9000)), tcall('r2', 'read', { path: 'b.js' }), tres('r2', big('B', 9000)),
+      { role: 'user', content: 'turn 2' }, tcall('e1', 'edit', { path: 'a.js', before: 'x', after: 'y' }), tres('e1', '{"ok":true}'), tcall('s1', 'shell', { command: 'npm run build' }), tres('s1', big('L', 12000)), tcall('c1', 'computer', { action: 'screenshot' }), tres('c1', '{}'), shots(2),
+      { role: 'user', content: 'turn 3' }, tcall('c2', 'computer', { action: 'screenshot' }), tres('c2', '{}'), shots(1),
+      { role: 'user', content: 'turn 4' }, tcall('r3', 'read', { path: 'b.js' }), tres('r3', big('b', 9000)),
+      { role: 'user', content: 'turn 5' }, tcall('c3', 'computer', { action: 'screenshot' }), tres('c3', '{}'), shots(1),
+      { role: 'user', content: 'turn 6' },
+    ];
+    const ms = build();
+    const acts = PR.plan(ms);
+    const kinds = acts.map((a) => a.key).sort();
+    check('it picks reads of files edited or read again since, the long old log, and screenshots past the newest two', JSON.stringify(kinds) === JSON.stringify(['r1', 'r2', 's1', 'shots:c1']), kinds);
+    check('the newer read of b.js, inside the last three turns, stays', !acts.some((a) => a.key === 'r3'), kinds);
+    const original = JSON.parse(JSON.stringify(ms));
+    const store = {};
+    PR.apply(ms, acts, store);
+    check('the model\'s copy says what was left out', ms[2].content.startsWith('[VOX PRUNED] An earlier read of a.js') && /characters of this older output were left out/.test(ms[9].content) && ms[12].content.filter((p) => p.type === 'image_url').length === 0, [ms[2].content.slice(0, 40)]);
+    check('the last three turns are never touched', JSON.stringify(ms.slice(13)) === JSON.stringify(original.slice(13)), 'touched');
+    check('the chat gets every original back', JSON.stringify(PR.restore(ms, store)) === JSON.stringify(original), 'lost');
+    check('nothing is planned twice', PR.plan(ms, { store }).length === 0, PR.plan(ms, { store }).map((a) => a.key));
+    check('a batch only when it pays: getting full and 24k saved, or 8k on a local model', PR.worthIt(30000, { tokens: 50000, limit: 100000 }) && !PR.worthIt(30000, { tokens: 30000, limit: 100000 }) && !PR.worthIt(20000, { tokens: 90000, limit: 100000 }) && PR.worthIt(9000, { tokens: 1, limit: 16000, local: true }), 'thresholds');
+    check('after a summary, originals of folded messages are dropped', JSON.stringify(Object.keys(PR.tidy(ms.slice(13), store))) === '[]' && Object.keys(PR.tidy(ms, store)).length === 4, Object.keys(PR.tidy(ms, store)));
+
+    // A real run: getting full, with stale reads -> one batch, sent shortened; the next message changes nothing.
+    const WD = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-cost7-'));
+    const sess = { id: 'p7', workdir: WD, messages: build() };
+    fakeOpenRouter(() => say('ok'));
+    SENT.length = 0;
+    const ev1 = await drain(runAgent({ session: sess, userText: 'turn 7', apiKey: 'k', model: 'm', contextLimit: 40000, access: 'full', askPermission: async () => true, maxTurns: 2 }));
+    const req1 = SENT[0].messages;
+    check('a run getting full leaves the stale parts out of what it sends', ev1.some((e) => e.type === 'pruned') && req1.some((m) => m.role === 'tool' && String(m.content).startsWith('[VOX PRUNED] An earlier read of a.js')) && !req1.some((m) => m.role === 'tool' && m.content === big('A', 9000)), ev1.map((e) => e.type).filter((t) => t !== 'token'));
+    check('the session keeps the originals for the chat', sess.prunedStore && sess.prunedStore.r1 === big('A', 9000), Object.keys(sess.prunedStore || {}));
+    SENT.length = 0;
+    const ev2 = await drain(runAgent({ session: sess, userText: 'turn 8', apiKey: 'k', model: 'm', contextLimit: 40000, access: 'full', askPermission: async () => true, maxTurns: 2 }));
+    const req2 = SENT[0].messages;
+    check('the next message leaves history as it was, so the cache holds', !ev2.some((e) => e.type === 'pruned') && JSON.stringify(req2.slice(0, req1.length)) === JSON.stringify(req1), ev2.some((e) => e.type === 'pruned'));
+    const UD = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-cost7-ud-'));
+    Object.assign(sess, { title: 't', model: 'm', createdAt: new Date().toISOString(), usage: [], todos: [] });
+    await require(path.join(ROOT, 'src/backend/sessions.js')).saveSession(UD, sess);
+    const back = await require(path.join(ROOT, 'src/backend/sessions.js')).loadSession(UD, 'p7');
+    check('the originals are saved with the session', back.prunedStore && back.prunedStore.r1 === big('A', 9000), Object.keys(back.prunedStore || {}));
+    check('the window gets them back when it opens a session', fs.readFileSync(path.join(ROOT, 'src/main/main.js'), 'utf8').includes("messages: require('../backend/prune').restore(sess.messages, sess.prunedStore),"), 'stubs shown');
+    fs.rmSync(WD, { recursive: true, force: true }); fs.rmSync(UD, { recursive: true, force: true });
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

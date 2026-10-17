@@ -85,6 +85,8 @@ async function saveSession(userData, session) {
     ...(session.goal ? [JSON.stringify({ kind: 'goal', goal: session.goal })] : []),
     // The prompt the session's requests start with (prefix.js), so the cache holds after a restart.
     ...(session.promptFrozen ? [JSON.stringify({ kind: 'prompt', prompt: session.promptFrozen })] : []),
+    // What was left out of the model's copy, kept so the chat can show it all (prune.js).
+    ...(session.prunedStore && Object.keys(session.prunedStore).length ? [JSON.stringify({ kind: 'pruned', store: session.prunedStore })] : []),
   ];
   await writeWhole(path.join(dir, `${session.id}.jsonl`), lines.join('\n'));
   return session;
@@ -158,6 +160,7 @@ async function loadSession(userData, id) {
     else if (o.kind === 'todos') session.todos = o.todos;
     else if (o.kind === 'goal') session.goal = o.goal;
     else if (o.kind === 'prompt') session.promptFrozen = o.prompt;
+    else if (o.kind === 'pruned') session.prunedStore = o.store || {};
     else if (o.kind === 'stop') (session.stops || (session.stops = [])).push(o.stop);
     else if (o.kind === 'run') (session.runLog || (session.runLog = [])).push(o.run);
   }

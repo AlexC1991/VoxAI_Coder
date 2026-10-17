@@ -48,6 +48,7 @@ const checkpoints = require('./tools/checkpoints');
 const { chatOnce, reasoningParam } = require('./providers/openrouter');
 const prefix = require('./prefix');
 const { createStuckWatch } = require('./stuck');
+const prune = require('./prune');
 const { teamPrompt, teamGuard, sharesData, explainProviderError } = require('./team');
 
 // Auto mode's safety check: one short question per action that would otherwise ask.
@@ -919,6 +920,19 @@ async function* runAgent(opts) {
       code: 'context-over-hard-limit',
       message: `Session context is still over the ${comp.hardLimit.toLocaleString()} hard limit after compaction (est. ${comp.estimatedAfter.toLocaleString()} tokens). Continuing may stall — consider /compact again or a fresh session.`,
     });
+  }
+  // Stale reads, old screenshots and long old outputs are left out of the model's copy in a
+  // batch, when it pays for the one full read it costs (prune.js); the chat keeps the originals.
+  if (comp.compacted) session.prunedStore = prune.tidy(session.messages, session.prunedStore);
+  else {
+    const store = session.prunedStore || (session.prunedStore = {});
+    const acts = prune.plan(session.messages, { store });
+    const save = acts.reduce((n, a) => n + a.save, 0);
+    if (acts.length && prune.worthIt(save, { tokens: estimateSessionTokens(session, systemPrompt), limit: ctxLimit, local: localModel })) {
+      prune.apply(session.messages, acts, store);
+      yield { type: 'pruned', items: acts.length, saved: save };
+      yield contextEvent();
+    }
   }
   // (Tool output is now bounded once at append time by boundToolResult(). The old
   // retroactive pass rewrote history mid-prefix on every send and destroyed the

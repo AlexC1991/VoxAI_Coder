@@ -1352,7 +1352,8 @@ app.whenReady().then(() => {
     // questions come from agent:live instead).
     const running = [...controllers.keys()].some((k) => k.startsWith(id + ':'));
     const ask = running ? null : pendingAsk(sess);
-    return { id: sess.id, title: sess.title, workdir: sess.workdir, model: sess.model, coderModel: sess.coderModel || '', messages: sess.messages, todos: sess.todos, usage: sess.usage, stats: sess.stats, stops: sess.stops || [], runLog: sess.runLog || [], context, pendingAsk: ask };
+    // The chat shows every read and screenshot, including those left out of the model's copy.
+    return { id: sess.id, title: sess.title, workdir: sess.workdir, model: sess.model, coderModel: sess.coderModel || '', messages: require('../backend/prune').restore(sess.messages, sess.prunedStore), todos: sess.todos, usage: sess.usage, stats: sess.stats, stops: sess.stops || [], runLog: sess.runLog || [], context, pendingAsk: ask };
   });
   // To the Recycle Bin, not erased: one misclick on Delete lost a whole conversation
   // for good. If the bin refuses, nothing is deleted and the user is told why.
