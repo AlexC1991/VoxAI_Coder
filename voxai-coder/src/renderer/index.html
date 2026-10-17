@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-zgLA9uD4p/OFin1ZM0lCbEixgklLMx9PGZeylLpfIow='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-n0TNPuGCEi2pGjpjkjWhwhFc1EvIODDX/pF89ZwXDN4='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -295,10 +295,11 @@ tests"). Scroll the row instead of breaking words:
 .set-ctl .txt{flex:none;width:260px}
 .keyrow input:focus,.set-ctl .txt:focus,.num:focus-within{border-color:var(--goldedge)}
 .num{display:inline-flex;align-items:center;background:var(--panel2);border:1px solid var(--edge2);border-radius:8px}
-.num input{width:80px;background:transparent;border:0;outline:0;color:var(--ink);text-align:right;font-family:"Sometype Mono",monospace;font-weight:600;font-size:13px;padding:6px 2px;-moz-appearance:textfield;font-variant-numeric:tabular-nums}
+.num input{field-sizing:content;width:auto;min-width:3ch;max-width:12ch;background:transparent;border:0;outline:0;color:var(--ink);text-align:center;font-family:"Sometype Mono",monospace;font-weight:600;font-size:13px;padding:6px 2px;-moz-appearance:textfield;font-variant-numeric:tabular-nums}
 .num input::-webkit-outer-spin-button,.num input::-webkit-inner-spin-button{-webkit-appearance:none;margin:0}
-.num-u{font-family:"Sometype Mono",monospace;font-size:11.5px;color:var(--faint);padding:0 2px 0 5px}
-.num-b{width:30px;height:32px;border:0;background:none;color:var(--dim);font-size:16px;cursor:pointer;border-radius:8px}
+.num-u{font-family:"Sometype Mono",monospace;font-size:11.5px;color:var(--faint);padding:0 2px 0 1px}
+.num-u.pre{font-size:13px;font-weight:600;color:var(--dim);padding:0 0 0 2px}
+.num-b{width:28px;height:30px;border:0;background:none;color:var(--dim);font-size:16px;cursor:pointer;border-radius:8px;flex:none}
 .num-b:hover{color:var(--ink)}
 .tog{width:40px;height:22px;border-radius:999px;border:0;background:var(--edge2);position:relative;cursor:pointer;flex:none;transition:background .15s}
 .tog::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--mut);transition:transform .15s,background .15s}
@@ -310,10 +311,8 @@ tests"). Scroll the row instead of breaking words:
 .seg button:hover{color:var(--ink)}
 .seg button[aria-pressed="true"]{background:var(--sel);color:var(--ink)}
 .seg button[aria-pressed="true"] small{color:var(--gold)}
-.presets{display:flex;gap:6px}
-.presets button{font-family:"Sometype Mono",monospace;font-size:12px;color:var(--mut);background:none;border:1px solid var(--edge2);padding:5px 11px;border-radius:7px;cursor:pointer}
-.presets button:hover{color:var(--ink);border-color:var(--sub)}
-.presets button.on{color:var(--gold);box-shadow:inset 0 0 0 1px var(--goldedge)}
+.spend-bal{flex-direction:row;align-items:center;gap:14px}
+.spend-bal b{font:600 14.5px "Sometype Mono",monospace;color:var(--ink);font-variant-numeric:tabular-nums;white-space:nowrap}
 .rng{display:flex;align-items:center;gap:12px}
 .rng input{width:170px;accent-color:var(--gold)}
 .rng output{font-family:"Sometype Mono",monospace;font-weight:600;font-size:13px;min-width:44px;text-align:right;color:var(--ink)}
@@ -1588,7 +1587,8 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
     <section class="set-page" data-set="spend" hidden>
       <header class="set-top"><h3>Spending</h3><p>A hard stop for each run, so a loop or a big fan-out can’t drain the account.</p></header>
       <div class="set-scroll">
-        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Limit per run</div><div class="set-desc">The run stops when it reaches this. Sub-agents and web searches draw from the same allowance.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease limit per run">−</button><input id="fRunBudget" type="number" min="0.25" max="100" step="0.25" placeholder="1.00" aria-label="limit per run"><span class="num-u">USD</span><button type="button" class="num-b" data-num="1" aria-label="Increase limit per run">+</button></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Limit per goal</div><div class="set-desc">A goal (/goal) keeps starting new runs until it is met. It pauses when all its runs together reach this.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease limit per goal">−</button><input id="fGoalBudget" type="number" min="0.5" max="500" step="0.5" placeholder="5.00" aria-label="limit per goal"><span class="num-u">USD</span><button type="button" class="num-b" data-num="1" aria-label="Increase limit per goal">+</button></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Quick limits per run</div><div class="set-desc">Typical runs on a DeepSeek Flash model cost under a cent.</div></div><div class="set-ctl"><div class="presets" id="budgetPresets"><button type="button" data-v="0.25">$0.25</button><button type="button" data-v="1.00">$1</button><button type="button" data-v="5.00">$5</button></div></div></div></div>
+        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Limit per run</div><div class="set-desc">The run stops when it reaches this. Sub-agents and web searches draw from the same allowance. Typical runs on a DeepSeek Flash model cost under a cent.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease limit per run">−</button><span class="num-u pre" aria-hidden="true">$</span><input id="fRunBudget" type="number" min="0.25" max="100" step="0.25" placeholder="1.00" aria-label="limit per run, in US dollars"><button type="button" class="num-b" data-num="1" aria-label="Increase limit per run">+</button></div></div></div><div class="set-row"><div class="set-txt"><div class="set-lbl">Limit per goal</div><div class="set-desc">A goal (/goal) keeps starting new runs until it is met. It pauses when all its runs together reach this.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease limit per goal">−</button><span class="num-u pre" aria-hidden="true">$</span><input id="fGoalBudget" type="number" min="0.5" max="500" step="0.5" placeholder="5.00" aria-label="limit per goal, in US dollars"><button type="button" class="num-b" data-num="1" aria-label="Increase limit per goal">+</button></div></div></div></div>
+        <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Balance</div><div class="set-desc">What is left on your OpenRouter account. Credits are bought on OpenRouter’s site, which opens in your browser.</div></div><div class="set-ctl spend-bal"><b id="spendBalance">—</b><button class="btn ghost" id="btnAddCredits" type="button">Add credits</button></div></div></div>
       </div>
     </section>
 
@@ -6707,9 +6707,8 @@ function syncSetControls(){
     const i = r.querySelector('input'), o = r.querySelector('output');
     o.textContent = Math.round(Number(i.value) * 100) + '%';
   });
-  const bud = Number($('fRunBudget').value || $('fRunBudget').placeholder);
-  $('budgetPresets').querySelectorAll('button').forEach((b) => b.classList.toggle('on', Math.abs(Number(b.dataset.v) - bud) < 1e-9));
   const bal = $('creditsTxt'); $('acctBalance').textContent = bal ? bal.textContent : '\u2014';
+  if ($('spendBalance')) $('spendBalance').textContent = bal ? bal.textContent : '\u2014';
 }
 function clampNum(inp){
   if (inp.value === '') return;
@@ -6882,7 +6881,11 @@ $('btnSave').onclick = () => { if (keysDirty()) saveSettingsNow(true); };
   NT_TOGS.forEach(([id]) => { const b = $(id); if (b) b.onclick = () => { b.setAttribute('aria-checked', String(b.getAttribute('aria-checked') !== 'true')); queueSettingsSave(); }; });
   $('wsToggle').onclick = () => { $('fWebSearch').value = $('fWebSearch').value === 'off' ? 'on' : 'off'; syncSetControls(); queueSettingsSave(); };
   $('wsEngine').querySelectorAll('button').forEach((b) => { b.onclick = () => { $('fWebEngine').value = b.dataset.v; syncSetControls(); queueSettingsSave(); }; });
-  $('budgetPresets').querySelectorAll('button').forEach((b) => { b.onclick = () => { $('fRunBudget').value = b.dataset.v; syncSetControls(); queueSettingsSave(); }; });
+  // OpenRouter sells credits only on its own site: the key can read the balance, not buy.
+  if ($('btnAddCredits')) $('btnAddCredits').onclick = async () => {
+    let r = null; try { r = await window.voxai.openExternal('https://openrouter.ai/settings/credits'); } catch {}
+    if (!r || !r.ok) toast('Could not open the browser. Credits are at openrouter.ai/settings/credits');
+  };
   // The sidebar's status row is the way into the account.
   const st = $('sideStatus'); if (st) st.onclick = () => openModal('account');
 })();
