@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-f8iOWwgD61vRzHdMjzliuvBH6DC5zw00RxHQcdmuTmE='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-j5WDAcmIGPC6+IiBCO5nrau9o87AnCo24lnccaKBLDE='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -741,7 +741,39 @@ tests"). Scroll the row instead of breaking words:
 .tr-ch .p{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
 .tr-ch .sp{flex:1}
 .tr-body{max-height:360px;overflow:auto}
-.tr-term{padding:9px 12px;font:12.5px/1.6 "Sometype Mono",monospace;color:var(--mut);white-space:pre-wrap;overflow-wrap:anywhere}
+.tr-term{padding:9px 12px;font:12.5px/1.6 "Sometype Mono",monospace;color:var(--mut);white-space:pre;min-width:max-content}
+/* the icon in a small square tinted by how it went; the note a pill in the same colour */
+.tr-icb{display:grid;place-items:center;width:22px;height:22px;flex:none;border-radius:6px;background:var(--panel2)}
+.tr-icb .tr-ic{width:13px;height:13px}
+.tr-icb.is-good{background:rgba(147,184,132,.15)} .tr-icb.is-good .tr-ic{stroke:var(--add)}
+.tr-icb.is-bad{background:rgba(207,122,102,.16)} .tr-icb.is-bad .tr-ic{stroke:var(--del)}
+.tr-icb.is-warn{background:rgba(200,169,97,.15)} .tr-icb.is-warn .tr-ic{stroke:var(--gold)}
+.tr-meta.pill{padding:1px 9px;border-radius:999px;font-size:11.5px;font-weight:500}
+.tr-meta.pill.is-good{background:rgba(147,184,132,.15);color:var(--add)}
+.tr-meta.pill.is-bad{background:rgba(207,122,102,.16);color:var(--del)}
+.tr-meta.pill.is-warn{background:rgba(200,169,97,.15);color:var(--gold)}
+/* what opens under a row: a box per part, code coloured, lines never broken mid-word */
+.tr-card.secs{border:0;background:none;display:flex;flex-direction:column;gap:8px;overflow:visible}
+.tr-sec{border:1px solid var(--edge2);border-radius:8px;background:var(--deep);overflow:hidden;min-width:0}
+.tr-sec.bad{border-color:rgba(207,122,102,.45)}
+.tr-sec-h{display:flex;align-items:center;gap:10px;padding:4px 6px 4px 12px;border-bottom:1px solid var(--edge);background:var(--panel);font:11.5px "Sometype Mono",monospace;color:var(--faint);min-width:0}
+.tr-sec-h .l{color:var(--mut);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.tr-sec-h .i{flex:1;text-align:right;white-space:nowrap}
+.tr-sec-h button{min-height:24px;padding:0 8px;border:1px solid var(--edge2);border-radius:6px;background:var(--panel2);color:var(--mut);font:11.5px "Sometype Mono",monospace;cursor:pointer}
+.tr-sec-h button:hover{color:var(--ink)}
+.tr-sec-b{max-height:420px;overflow:auto;padding:6px 0}
+.tr-lines{display:grid;min-width:max-content;font:12.5px/1.6 "Sometype Mono",monospace;color:var(--mut)}
+.tr-ln{display:flex;min-height:1.6em;padding-right:16px}
+.tr-ln .n{flex:none;width:44px;padding-right:12px;box-sizing:border-box;text-align:right;color:var(--faint);user-select:none}
+.tr-ln .t{white-space:pre}
+.tr-ln > .t:first-child{padding-left:12px}
+.tr-ln.good{color:var(--add)} .tr-ln.bad{color:#e3a898} .tr-ln.dim{color:var(--faint)}
+.tr-more-lines{display:block;width:100%;min-height:30px;border:0;border-top:1px solid var(--edge);background:var(--panel);color:var(--mut);font:12px "Sometype Mono",monospace;cursor:pointer}
+.tr-more-lines:hover{color:var(--ink)}
+/* the colours of code, in rows and in answers */
+.tk-kw,.tk-tag{color:#d99ab0} .tk-str{color:#a9c99a} .tk-num{color:#d8b56a} .tk-com{color:var(--faint);font-style:italic}
+.tk-key{color:#9fb4d8} .tk-cmd{color:var(--ink);font-weight:500} .tk-op,.tk-pun{color:var(--dim)} .tk-fn{color:#e6c98a}
+.code-lang{position:absolute;top:8px;right:72px;font:11px "Sometype Mono",monospace;color:var(--faint);pointer-events:none}
 .tr-term .p{color:var(--sub)}
 .tr-term .e{color:#e3a898}
 .tr-diff{font:12.5px/1.6 "Sometype Mono",monospace;min-width:max-content}
@@ -3153,7 +3185,8 @@ function rowChip(name, args){
   const a = args || {};
   const base = (p) => String(p || '').split(/[\\/]/).filter(Boolean).pop() || String(p || '');
   if ((name === 'read' || name === 'write' || name === 'edit' || name === 'patch') && a.path) return { text: base(a.path), title: String(a.path) };
-  if (name === 'shell') { const c = String(a.command || '').replace(/\s+/g, ' ').trim(); return c ? { text: c, title: String(a.command) } : null; }
+  // A command's main step, not the whole chain; the full command is on hover and in its detail.
+  if (name === 'shell') { const c = shellLook(a.command).target; return c ? { text: c, title: String(a.command) } : null; }
   if (name === 'todo') return null;
   if (name === 'build_state') return a.task ? { text: String(a.task), title: String(a.task) } : null;
   // The verb carries the action; the chip is the worktree's name, or nothing.
@@ -3239,6 +3272,179 @@ function shellParts(res){
     return { exit: ex ? Number(ex[1]) : 0, stdout: jsonStr(s, 'stdout') || '', stderr: jsonStr(s, 'stderr') || '' };
   }
   return { exit: 0, stdout: '', stderr: '', raw: s };
+}
+/* ---- how a command's row reads, and the code under a row --------------------------
+ * A command's chip used to be the whole chain on one line ("cd … && ls -l a b c && node
+ * --check js/main.js && echo …"), and its detail one grey block broken mid-word. The row now
+ * names the main step with "+3 steps" beside it ("Ran a test script /tmp/x.mjs" for a heredoc
+ * script), coloured by how it went, and opens to the script, the command one step per line, its
+ * output and its errors, each in its own box with colour. Mirrors Vox IDE's rows.ts.
+ */
+const SH_QUIET = new Set(['cd', 'echo', 'sleep', 'mkdir', 'true', 'export', 'set', 'printf', 'pwd', 'clear', 'wait', 'exit', 'source', 'trap', 'Set-Location', 'Write-Host']);
+/** The files a command writes with heredocs (cat > x <<'EOF' … EOF), and the command without their bodies. */
+function shHeredocs(command){
+  const lines = String(command || '').split('\n'), scripts = [], rest = [];
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const op = /<<-?\s*(['"]?)([A-Za-z_]\w*)\1/.exec(line);
+    if (!op) { rest.push(line); continue; }
+    const end = op[2], body = [];
+    i++;
+    while (i < lines.length && lines[i].trim() !== end) body.push(lines[i++]);
+    const to = /(?:>|tee)\s*(['"]?)([^\s'"<>;&|]+)\1/.exec(line.replace(op[0], ''));
+    if (to) {
+      scripts.push({ path: to[2], body: body.join('\n') });
+      rest.push(line.slice(0, Math.max(0, line.search(/\b(cat|tee)\b/))).replace(/(&&|;|\|\|)\s*$/, '').trimEnd());
+    } else rest.push(line, ...body, end);
+  }
+  return { scripts, rest: rest.filter((l, i) => l.trim() || i > 0).join('\n') };
+}
+/** A command's top-level steps and what joins each to the one before; a loop or condition is one step. */
+function shSteps(command){
+  const s = String(command || ''), steps = [];
+  let cur = '', join = '', quote = '', depth = 0;
+  const flush = (next) => {
+    const text = cur.replace(/\\\s*\n/g, ' ').replace(/\s+/g, ' ').trim();
+    if (text) steps.push({ join: steps.length ? join : '', text });
+    cur = ''; join = next;
+  };
+  for (let i = 0; i < s.length; i++) {
+    const c = s[i], two = s.slice(i, i + 2);
+    if (quote) { if (c === '\\') cur += s[i++] || ''; else if (c === quote) quote = ''; cur += c; continue; }
+    if (c === "'" || c === '"' || c === '`') quote = c;
+    else if (c === '(' || c === '{') depth++;
+    else if (c === ')' || c === '}') depth = Math.max(0, depth - 1);
+    else if (!depth && (two === '&&' || two === '||')) { flush(two); i++; continue; }
+    else if (!depth && (c === ';' || c === '\n') && !cur.endsWith('\\')
+      && !(/^\s*(for|while|until|if|case|select)\b/.test(cur) && !/\b(done|fi|esac)\s*$/.test(cur))) { flush(c === ';' ? ';' : ''); continue; }
+    cur += c;
+  }
+  flush('');
+  return steps;
+}
+const shProgram = (step) => (String(step).replace(/^[({\s]+/, '').split(/\s+/).find((w) => !/^[A-Za-z_]\w*=/.test(w)) || '');
+/** A command's row: its past verb, its main step or script, and "+N steps". */
+function shellLook(command){
+  const { scripts, rest } = shHeredocs(command);
+  const steps = shSteps(rest).filter((st) => shProgram(st.text) !== 'cd');
+  const main = steps.find((st) => !SH_QUIET.has(shProgram(st.text))) || steps[0];
+  const script = scripts.find((sc) => rest.includes(sc.path) || rest.includes(sc.path.split('/').pop()));
+  const others = steps.length - (main ? 1 : 0);
+  let verb = 'Ran', target = (main ? main.text : String(command || '').replace(/\s+/g, ' ')).slice(0, 140);
+  if (script) { verb = /test|spec|check/i.test(script.path) ? 'Ran a test script' : 'Ran a script'; target = script.path; }
+  else if (scripts.length && !main) { verb = 'Wrote a script'; target = scripts[0].path; }
+  return { verb, target, more: others > 0 ? '+' + others + (others === 1 ? ' step' : ' steps') : '', scripts, rest };
+}
+/** A command laid out one step per line, each later step under the one before with what joins it. */
+function layoutCommand(command){
+  return shSteps(command).filter((st, i) => i > 0 || shProgram(st.text) !== 'cd')
+    .map((st, i) => (i && st.join ? '  ' + st.join + ' ' + st.text : st.text)).join('\n');
+}
+/** How a row went: green tests passed or a server running, red failed, amber held back. */
+function rowTone(rec){
+  if (!rec || rec.ok === null) return '';
+  if (rec.stopped || rec.planHeld) return '';
+  if (rec.denied) return 'warn';
+  if (rec.ok === false) return 'bad';
+  if (rec.name === 'shell') {
+    const o = shellParts(rec.result);
+    if (o.background) return o.running ? 'good' : 'bad';
+    const tv = testVerdict(o.stdout + '\n' + o.stderr + '\n' + (o.raw || ''));
+    if ((tv && tv.failed) || o.exit) return 'bad';
+    if (tv && tv.passed) return 'good';
+  }
+  if (rec.name === 'lsp') { let o = null; try { o = JSON.parse(rec.result); } catch {} if (o && o.failed) return 'bad'; }
+  return '';
+}
+const CODE_LANG = { js: 'js', javascript: 'js', mjs: 'js', cjs: 'js', jsx: 'js', ts: 'js', tsx: 'js', typescript: 'js', css: 'css', scss: 'css', html: 'html', htm: 'html', xml: 'html', svg: 'html', vue: 'html', json: 'json', sh: 'sh', bash: 'sh', shell: 'sh', zsh: 'sh', console: 'sh', ps1: 'sh', powershell: 'sh', py: 'py', python: 'py' };
+const CODE_LANG_NAME = { js: 'javascript', css: 'css', html: 'html', json: 'json', sh: 'shell', py: 'python' };
+const langFor = (name) => (name ? CODE_LANG[String(name).toLowerCase().split('.').pop()] || '' : '');
+const CODE_WORDS = {
+  js: new Set('const let var function return if else for of in await async new import from export default try catch finally throw true false null undefined class extends this while do switch case break continue typeof instanceof interface type as'.split(' ')),
+  sh: new Set('if then else elif fi for in do done while until case esac export function return local'.split(' ')),
+  py: new Set('def return if elif else for in while import from as class try except finally raise with lambda None True False and or not is pass yield async await'.split(' ')),
+  json: new Set(['true', 'false', 'null']),
+};
+/** One line of code as coloured pieces: [text, kind]. */
+function tokenize(line, lang){
+  if (!lang) return [[line, 'txt']];
+  const out = [], words = CODE_WORDS[lang];
+  const push = (t, k) => { if (!t) return; const last = out[out.length - 1]; if (last && last[1] === k) last[0] += t; else out.push([t, k]); };
+  let first = true, i = 0, m;
+  while (i < line.length) {
+    const rest = line.slice(i), before = i ? line[i - 1] : ' ';
+    if ((lang === 'js' && (m = /^\/\/.*/.exec(rest))) || ((lang === 'sh' || lang === 'py') && /\s/.test(before) && (m = /^#.*/.exec(rest)))) { push(m[0], 'com'); break; }
+    if ((lang === 'css' || lang === 'js') && (m = /^\/\*.*?(\*\/|$)/.exec(rest))) { push(m[0], 'com'); i += m[0].length; continue; }
+    if (lang === 'html' && (m = /^<!--.*?(-->|$)/.exec(rest))) { push(m[0], 'com'); i += m[0].length; continue; }
+    if ((m = /^("(?:[^"\\]|\\.)*"?|'(?:[^'\\]|\\.)*'?|`[^`]*`?)/.exec(rest))) { push(m[0], lang === 'json' && /^\s*:/.test(line.slice(i + m[0].length)) ? 'key' : 'str'); i += m[0].length; first = false; continue; }
+    if (lang === 'html' && (m = /^<\/?[a-zA-Z][\w-]*/.exec(rest))) { push(m[0], 'tag'); i += m[0].length; continue; }
+    if (lang === 'html' && (m = /^[a-zA-Z-:@]+(?==)/.exec(rest))) { push(m[0], 'key'); i += m[0].length; continue; }
+    if (lang === 'css' && /^\s*$/.test(line.slice(0, i)) && (m = /^(--[\w-]+|[a-z-]+)(?=\s*:\s)/.exec(rest))) { push(m[0], 'key'); i += m[0].length; continue; }
+    if (lang === 'css' && (m = /^#[0-9a-fA-F]{3,8}\b/.exec(rest))) { push(m[0], 'num'); i += m[0].length; continue; }
+    if (lang === 'sh' && (m = /^(&&|\|\||\||;|>>|2>&1|>|<<|&)/.exec(rest))) { push(m[0], 'op'); i += m[0].length; first = true; continue; }
+    if (lang === 'sh' && first && (m = /^[A-Za-z_]\w*=\S*/.exec(rest))) { push(m[0], 'key'); i += m[0].length; continue; }
+    if (lang === 'sh' && /\s/.test(before) && (m = /^--?[\w-]+/.exec(rest))) { push(m[0], 'op'); i += m[0].length; continue; }
+    if (lang === 'sh' && (m = /^\$\{?\w+\}?/.exec(rest))) { push(m[0], 'key'); i += m[0].length; continue; }
+    if (!/[\w$#-]/.test(before) && (m = /^\d+(\.\d+)?(px|rem|em|ms|s|vw|vh|%)?/.exec(rest))) { push(m[0], 'num'); i += m[0].length; first = false; continue; }
+    if ((m = /^[A-Za-z_$][\w$-]*/.exec(rest))) {
+      const w = m[0];
+      let k = 'txt';
+      if (lang === 'sh' && first) { k = 'cmd'; first = false; }
+      else if (words && words.has(w)) k = 'kw';
+      else if ((lang === 'js' || lang === 'py') && /^\s*\(/.test(line.slice(i + w.length))) k = 'fn';
+      push(w, k); i += w.length; continue;
+    }
+    push(line[i], /\s/.test(line[i]) ? 'txt' : 'pun'); i++;
+  }
+  return out;
+}
+/** A line's coloured pieces, appended to a parent element (text only: never HTML). */
+function paintTokens(parent, line, lang){
+  for (const [t, k] of tokenize(line, lang)) { const sp = document.createElement('span'); sp.className = 'tk-' + k; sp.textContent = t; parent.appendChild(sp); }
+}
+/** How a line of command output reads: a pass, a failure, or noise. */
+function outTone(line){
+  if (/^\s*(✓|✔|ok\s+\d|PASS\b|√)/.test(line) || /\b\d+\s+passed\b/.test(line)) return 'good';
+  if (/^\s*(✗|✖|×|not ok\b|FAIL\b)|\b(Error|ERR!|failed|Traceback)\b/.test(line)) return 'bad';
+  if (/^\s*(npm (notice|warn)|warning:|\(node:\d+\))/i.test(line)) return 'dim';
+  return '';
+}
+/**
+ * One box of a row's detail: its label, a note, a Copy button, then the lines (code coloured and
+ * numbered when it is part of a file; output coloured by what each line says). Long ones fold.
+ */
+function detailBox(spec){
+  const box = el('div', 'tr-sec' + (spec.bad ? ' bad' : ''));
+  const h = el('div', 'tr-sec-h');
+  const l = el('span', 'l'); l.textContent = spec.label || ''; l.title = spec.label || ''; h.appendChild(l);
+  const i = el('span', 'i'); i.textContent = spec.info || ''; h.appendChild(i);
+  const copy = el('button'); copy.type = 'button'; copy.textContent = 'Copy';
+  copy.onclick = async (e) => { e.stopPropagation(); const ok = await copyText(spec.text || ''); copy.textContent = ok ? 'Copied' : 'Could not copy'; setTimeout(() => { copy.textContent = 'Copy'; }, 1400); };
+  h.appendChild(copy);
+  box.appendChild(h);
+  const body = el('div', 'tr-sec-b'), lines = el('div', 'tr-lines');
+  body.appendChild(lines); box.appendChild(body);
+  const all = String(spec.text || '').replace(/\n$/, '').split('\n');
+  const cap = spec.kind === 'output' ? 40 : 80;
+  const paint = (upto) => {
+    lines.textContent = '';
+    all.slice(0, upto).forEach((line, n) => {
+      const tone = spec.kind === 'output' ? (spec.bad ? 'bad' : outTone(line)) : '';
+      const row = el('div', 'tr-ln' + (tone ? ' ' + tone : ''));
+      if (spec.start) { const num = el('span', 'n'); num.textContent = String(spec.start + n); row.appendChild(num); }
+      const t = el('span', 't');
+      if (spec.kind === 'output') t.textContent = line; else paintTokens(t, line, spec.lang);
+      row.appendChild(t); lines.appendChild(row);
+    });
+  };
+  paint(cap);
+  if (all.length > cap) {
+    const more = el('button', 'tr-more-lines'); more.type = 'button';
+    more.textContent = 'Show ' + (all.length - cap) + ' more lines';
+    more.onclick = (e) => { e.stopPropagation(); paint(all.length); more.remove(); };
+    box.appendChild(more);
+  }
+  return box;
 }
 /* ---- sub-agents, on the row that delegated them ---------------------------------- */
 function subEvent(rec, event){
@@ -3607,8 +3813,14 @@ function paintRow(g){
   g.row.classList.toggle('can-open', canOpen);
   const top = g.top;
   top.textContent = '';
-  top.appendChild(running ? el('span', 'tr-spin') : trIcon(look.icon));
-  const verb = el('span', 'tr-verb'); verb.textContent = items.length === 1 ? verbFor(look, first) : look.verb; top.appendChild(verb);
+  // The icon sits in a small square tinted by how it went; a command reads in plain words.
+  const tone = items.length === 1 ? rowTone(first) : (fail ? 'bad' : '');
+  if (running) top.appendChild(el('span', 'tr-spin'));
+  else { const ib = el('span', 'tr-icb' + (tone ? ' is-' + tone : '')); ib.appendChild(trIcon(look.icon)); top.appendChild(ib); }
+  const sh = items.length === 1 && g.name === 'shell' ? shellLook((first.args || {}).command) : null;
+  const verb = el('span', 'tr-verb');
+  verb.textContent = sh && first.ok !== false ? (running ? 'Running' : sh.verb) : (items.length === 1 ? verbFor(look, first) : look.verb);
+  top.appendChild(verb);
   if (items.length > 1) {
     const chips = el('span', 'tr-chips');
     for (const r of items.slice(0, 3)) {
@@ -3620,10 +3832,11 @@ function paintRow(g){
   } else {
     const c = rowChip(g.name, first.args);
     if (c) { const ch = el('span', 'tr-chip'); ch.textContent = c.text; ch.title = c.title || c.text; top.appendChild(ch); }
+    if (sh && sh.more) { const mo = el('span', 'tr-more'); mo.textContent = sh.more; top.appendChild(mo); }
   }
   top.appendChild(el('span', 'tr-sp'));
   const m = items.length > 1 ? { html: items.length + ' files' + (fail ? ' \u00b7 <span class="tr-d">' + items.filter((r) => r.ok === false && !r.denied).length + ' failed</span>' : '') } : rowMeta(first);
-  const meta = el('span', 'tr-meta' + (m.bad ? ' bad' : ''), m.html);
+  const meta = el('span', 'tr-meta' + (m.bad ? ' bad' : '') + (tone && m.html && items.length === 1 ? ' pill is-' + tone : ''), m.html);
   top.appendChild(meta);
   g.metaEl = meta;
   const chev = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
@@ -3637,8 +3850,8 @@ function paintRow(g){
 function paintRowMeta(g){
   if (!g || !g.metaEl || g.items.length !== 1) return;
   const first = g.items[0];
-  const m = rowMeta(first);
-  g.metaEl.className = 'tr-meta' + (m.bad ? ' bad' : '');
+  const m = rowMeta(first), tone = rowTone(first);
+  g.metaEl.className = 'tr-meta' + (m.bad ? ' bad' : '') + (tone && m.html ? ' pill is-' + tone : '');
   g.metaEl.innerHTML = m.html;
   const canOpen = g.row.classList.contains('can-open') || !!(first.subs && first.subs.size);
   g.row.classList.toggle('can-open', canOpen);
@@ -3674,6 +3887,9 @@ function fillDetail(box, rec){
   const a = rec.args || {};
   const res = rec.result == null ? '' : String(rec.result);
   box.classList.toggle('bad', rec.ok === false && !rec.denied);
+  box.classList.remove('secs');
+  // Boxes of their own (script, command, output, file) instead of one card around them.
+  const boxes = (...specs) => { box.textContent = ''; box.classList.add('secs'); for (const s of specs) if (s) box.appendChild(detailBox(s)); };
   const head = (path, extra) => {
     const h = el('div', 'tr-ch');
     const p = el('span', 'p'); p.textContent = path; p.title = path; h.appendChild(p);
@@ -3708,13 +3924,20 @@ function fillDetail(box, rec){
     box.appendChild(body);
   }
   if (rec.ok === false) {
-    const t = term();
-    if (rec.name === 'shell' && a.command) { line(t, 'p', '$ ' + a.command); t.appendChild(document.createTextNode('\n')); }
-    line(t, rec.denied ? '' : 'e', res.replace(/^\s*DENIED_OR_ERROR:\s*/, '') || 'failed');
+    const why = res.replace(/^\s*DENIED_OR_ERROR:\s*/, '') || 'failed';
+    const laid = rec.name === 'shell' && a.command ? layoutCommand(shHeredocs(a.command).rest) : '';
+    boxes(laid && { label: 'Command', text: laid, lang: 'sh' }, { label: rec.denied ? 'Not run' : 'Failed', kind: 'output', text: why, bad: !rec.denied });
     return;
   }
   const diffs = rowDiffs(rec);
+  // A new file is code to read, with line numbers, not a wall of green "+" lines.
+  if (diffs && rec.name === 'write' && typeof a.content === 'string') {
+    const n = a.content.replace(/\n$/, '').split('\n').length;
+    boxes({ label: String(a.path || ''), info: n + (n === 1 ? ' line' : ' lines'), text: a.content, lang: langFor(a.path), start: 1 });
+    return;
+  }
   if (diffs) {
+    const lang = langFor(a.path);
     const c = diffCounts(diffs);
     head(String(a.path || ''), rec.name === 'write' ? '<span>' + c.add + (c.add === 1 ? ' line' : ' lines') + '</span>' : '<span class="tr-a">+' + c.add + '</span><span class="tr-d">\u2212' + c.del + '</span>');
     const d = el('div', 'tr-diff');
@@ -3727,7 +3950,7 @@ function fillDetail(box, rec){
         shown++;
         const r = el('div', x[0] === '+' ? 'add' : x[0] === '-' ? 'del' : 'ctx');
         const gl = el('span', 'g'); gl.textContent = x[0] === ' ' ? '' : (x[0] === '-' ? '\u2212' : '+');
-        const tx = el('span'); tx.textContent = x[1];
+        const tx = el('span'); paintTokens(tx, x[1], lang);
         r.appendChild(gl); r.appendChild(tx); d.appendChild(r);
       }
     });
@@ -3736,14 +3959,20 @@ function fillDetail(box, rec){
     return;
   }
   if (rec.name === 'shell') {
-    const o = shellParts(res);
-    const t = term();
-    line(t, 'p', '$ ' + String(a.command || ''));
-    if (o.stdout.trim()) t.appendChild(document.createTextNode('\n' + trunc(o.stdout.replace(/\s+$/, ''), 20000)));
-    if (o.stderr.trim()) line(t, 'e', '\n' + trunc(o.stderr.replace(/\s+$/, ''), 20000));
-    if (o.exit) line(t, 'e', '\nexit ' + o.exit);
-    if (o.raw && o.raw.trim()) t.appendChild(document.createTextNode('\n' + trunc(o.raw, 20000)));
-    if (o.note) line(t, 'p', '\n' + o.note);
+    // The script it wrote, the command one step per line, then what it printed and its errors apart.
+    const o = shellParts(res), L = shellLook(a.command);
+    const laid = layoutCommand(L.rest);
+    const steps = laid ? laid.split('\n').filter((l) => !/^\s/.test(l)).length : 0;
+    const out = o.stdout.replace(/\s+$/, ''), err = o.stderr.replace(/\s+$/, ''), raw = String(o.raw || '').trim();
+    boxes(
+      ...L.scripts.map((sc) => ({ label: 'Script', info: sc.path, text: sc.body, lang: langFor(sc.path) || 'sh', start: 1 })),
+      laid && { label: 'Command', info: steps > 1 ? steps + ' steps' : '', text: laid, lang: 'sh' },
+      out && { label: 'Output', kind: 'output', text: trunc(out, 20000), info: o.background ? (o.running ? 'still running' : 'stopped') : (o.exit ? 'exit ' + o.exit : '') },
+      err && { label: o.exit ? 'Errors' : 'Messages', kind: 'output', text: trunc(err, 20000), bad: !!o.exit, info: o.exit ? 'exit ' + o.exit : '' },
+      raw && { label: 'Output', kind: 'output', text: trunc(raw, 20000) },
+      !out && !err && !raw && { label: 'Output', kind: 'output', text: o.exit ? 'It ended with exit ' + o.exit + ' and printed nothing.' : 'Nothing printed.', bad: !!o.exit },
+      o.note && { label: 'Note', kind: 'output', text: o.note },
+    );
     return;
   }
   if (rec.name === 'web_fetch' && rec.display) {
@@ -3760,10 +3989,12 @@ function fillDetail(box, rec){
   }
   if (rec.name === 'read') {
     const content = jsonStr(res, 'content');
-    if (content != null) { head(String(a.path || ''), '<span>' + esc(summariseResult('read', res, true)) + '</span>'); term(trunc(content, 20000)); return; }
+    const from = Number((/"(?:from|start|offset)":\s*(\d+)/.exec(res) || [])[1]) || Number(a.offset) || 1;
+    if (content != null) { boxes({ label: String(a.path || ''), info: summariseResult('read', res, true), text: trunc(content, 20000), lang: langFor(a.path), start: from }); return; }
   }
-  let text = res;
-  try { text = JSON.stringify(JSON.parse(res), null, 2); } catch { /* plain text */ }
+  let text = res, json = false;
+  try { text = JSON.stringify(JSON.parse(res), null, 2); json = true; } catch { /* plain text */ }
+  if (json) { boxes({ label: 'Result', text: trunc(text, 8000), lang: 'json' }); return; }
   term(trunc(text, 8000) || 'done');
 }
 /** The counts and the time beside the step's name. */
@@ -8128,6 +8359,16 @@ function addCodeCopy(root){
     if (pre.parentElement && pre.parentElement.classList.contains('code-wrap')) continue;
     const wrap = el('div', 'code-wrap');
     pre.replaceWith(wrap); wrap.appendChild(pre);
+    // Coloured by its language, which is named above it: it was grey text all through.
+    const code = pre.querySelector('code');
+    const lang = code ? langFor((/language-([\w+#-]+)/.exec(code.className) || [])[1]) : '';
+    if (code && lang && !code.dataset.lit) {
+      const text = code.textContent;
+      code.textContent = '';
+      text.replace(/\n$/, '').split('\n').forEach((ln, i) => { if (i) code.appendChild(document.createTextNode('\n')); paintTokens(code, ln, lang); });
+      code.dataset.lit = '1';
+    }
+    if (lang) { const tag = el('span', 'code-lang'); tag.textContent = CODE_LANG_NAME[lang] || lang; wrap.appendChild(tag); }
     const b = el('button', 'code-copy', 'Copy');
     b.type = 'button';
     b.title = 'Copy this code';
