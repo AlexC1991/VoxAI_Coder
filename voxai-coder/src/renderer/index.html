@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-01cGDonbjlFRU8z09N4TE3rEIzUcE1Z1kFmbuaA0QH0='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-X3jaOXzoXP9JNeHBvNPXPUaVCXKLK1pdoUtTcAkrvB4='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -538,39 +538,95 @@ tests"). Scroll the row instead of breaking words:
 .sk-help code{font-family:"Sometype Mono",monospace;font-size:12px;color:var(--dim)}
 .mem-empty{padding:18px 16px;font-size:13px;color:var(--dim);line-height:1.6}
 /* ---- Settings: Apps (MCP) ---- */
-.mcp-row{align-items:center}
-.mcp-row.off .sk-main{opacity:.5}
-.mcp-dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--faint);align-self:flex-start;margin-top:6px}
-.mcp-dot.ok{background:var(--add)} .mcp-dot.bad{background:var(--del)} .mcp-dot.off{background:transparent;box-shadow:inset 0 0 0 1.5px var(--edge2)}
-.mcp-state{font-size:12px;color:var(--dim)}
-.mcp-state.ok{color:var(--add)} .mcp-state.bad{color:var(--del)}
-.mcp-cmd{font-family:"Sometype Mono",monospace;font-size:12px;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* One list for what you have, a set of starting points to add from, and an editor that takes the page. */
+#mcpHome[hidden],.mcp-edit[hidden]{display:none}
+.mcp-head{display:flex;align-items:baseline;gap:10px;margin-top:4px}
+.mcp-head h4{margin:0;font-size:11.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--faint)}
+.mcp-count{font-family:"Sometype Mono",monospace;font-size:11.5px;color:var(--faint);font-variant-numeric:tabular-nums}
+.mcp-link{margin-left:auto;border:0;background:none;padding:2px 0;color:var(--dim);font:12.5px Chivo,sans-serif;cursor:pointer;text-decoration:underline;text-decoration-color:var(--edge2);text-underline-offset:3px}
+.mcp-link:hover{color:var(--ink);text-decoration-color:var(--sub)}
+.mcp-ic{flex:none;display:inline-grid;place-items:center;width:30px;height:30px;border-radius:7px;background:var(--panel2);color:var(--mut)}
+.mcp-ic svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.mcp-ic.big{width:40px;height:40px;border-radius:9px}
+.mcp-ic.big svg{width:20px;height:20px}
+/* your apps */
+.mcp-list{border:1px solid var(--edge);border-radius:10px;background:var(--bg);flex:none}
+.mcp-app{display:grid;grid-template-columns:auto minmax(0,1fr) auto;column-gap:12px;row-gap:8px;align-items:center;padding:12px 14px;border-top:1px solid var(--edge)}
+.mcp-app:first-child{border-top:0}
+.mcp-app.off .mcp-main,.mcp-app.off .mcp-ic{opacity:.45}
+.mcp-main{min-width:0;display:flex;flex-direction:column;gap:3px}
+.mcp-name{display:flex;align-items:baseline;gap:8px;min-width:0;font-size:14px;font-weight:600;color:var(--ink)}
+.mcp-kind{font-size:12px;font-weight:400;color:var(--faint)}
+.mcp-st{display:flex;align-items:center;gap:6px;min-width:0;font-size:12.5px;color:var(--dim);white-space:nowrap}
+.mcp-st .mcp-dot{flex:none;width:6px;height:6px;border-radius:50%;background:var(--faint)}
+.mcp-st.ok{color:var(--add)} .mcp-st.ok .mcp-dot{background:var(--add)}
+.mcp-st.bad{color:var(--del)} .mcp-st.bad .mcp-dot{background:var(--del)}
+.mcp-st.off .mcp-dot{background:transparent;box-shadow:inset 0 0 0 1.5px var(--faint)}
+.mcp-st.busy .mcp-dot{background:none;width:9px;height:9px;border:1.5px solid var(--edge2);border-top-color:var(--gold);animation:spin .8s linear infinite}
+.mcp-tl{border:0;background:none;padding:0;color:inherit;font:inherit;cursor:pointer;text-decoration:underline;text-decoration-color:currentColor;text-decoration-thickness:1px;text-underline-offset:3px;text-decoration-style:dotted}
+.mcp-tl:hover{color:var(--ink)}
+.mcp-cmd{min-width:0;overflow:hidden;text-overflow:ellipsis;font:11.5px "Sometype Mono",monospace;color:var(--faint);padding-left:8px;margin-left:2px;border-left:1px solid var(--edge2)}
 .mcp-err{font-size:12.5px;line-height:1.5;color:var(--del);overflow-wrap:anywhere}
-.mcp-tools{display:flex;flex-wrap:wrap;gap:4px;margin-top:3px}
-.mcp-tools span{font-family:"Sometype Mono",monospace;font-size:11px;color:var(--mut);background:var(--panel2);border-radius:5px;padding:1px 7px}
-.mcp-tools span.more{background:none;color:var(--faint)}
-.mcp-acts{flex:none;display:flex;align-items:center;gap:4px}
-.mcp-acts .mf-del:hover{color:var(--ink)}
-.mcp-acts .tog{margin-left:6px}
-.mcp-ed{padding:0}
-.mcp-ed-top{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 16px 4px}
-.mcp-ed-top b{font-size:14px;color:var(--ink);margin-right:auto}
-.mcp-presets{display:flex;align-items:center;gap:4px;flex-wrap:wrap}
-.mcp-presets span{font-size:12px;color:var(--faint);margin-right:4px}
-.mcp-presets button{border:1px solid var(--edge2);background:none;color:var(--dim);border-radius:999px;padding:2px 10px;font:12px Chivo,sans-serif;cursor:pointer}
-.mcp-presets button:hover{color:var(--ink);border-color:var(--goldedge)}
-.mcp-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:10px 12px;padding:10px 16px 12px}
-.mcp-f{display:flex;flex-direction:column;gap:4px;min-width:0}
+.mcp-acts{display:flex;align-items:center;gap:2px}
+.mcp-ib{display:inline-grid;place-items:center;width:30px;height:30px;border:0;border-radius:7px;background:none;color:var(--dim);cursor:pointer}
+.mcp-ib svg{width:15px;height:15px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+.mcp-ib:hover{background:var(--sel);color:var(--ink)}
+.mcp-ib:disabled{opacity:.4;cursor:default;background:none}
+.mcp-acts .tog{margin-left:8px}
+.mcp-tools{grid-column:2/-1;display:flex;flex-wrap:wrap;gap:4px 12px;font:11.5px "Sometype Mono",monospace;color:var(--mut)}
+.mcp-tools span{cursor:default}
+.mcp-tools .more{color:var(--faint)}
+.mcp-empty{padding:16px;font-size:13px;line-height:1.6;color:var(--dim);border:1px dashed var(--edge2);border-radius:10px}
+/* add an app */
+.mcp-gallery{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}
+.mcp-card{display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto 1fr auto;column-gap:10px;row-gap:4px;text-align:left;padding:12px;border:1px solid var(--edge);border-radius:10px;background:none;color:var(--ink);cursor:pointer;font:inherit;transition:border-color .12s,background .12s}
+.mcp-card:hover{border-color:var(--goldedge);background:var(--panel)}
+.mcp-card:focus-visible,.mcp-ib:focus-visible,.mcp-link:focus-visible,.mcp-tl:focus-visible,.mcp-back:focus-visible,.mcp-del:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
+.mcp-card .mcp-ic{grid-row:1/3}
+.mcp-card b{font-size:13.5px;font-weight:600;align-self:center}
+.mcp-card p{margin:0;font-size:12px;line-height:1.45;color:var(--dim)}
+.mcp-card small{grid-column:2;font:11px "Sometype Mono",monospace;color:var(--faint);margin-top:4px}
+.mcp-card.added small{color:var(--add)}
+/* the editor */
+.mcp-edit{gap:16px}
+.mcp-back{align-self:flex-start;display:inline-flex;align-items:center;gap:4px;border:0;background:none;padding:2px 6px 2px 0;color:var(--dim);font:12.5px Chivo,sans-serif;cursor:pointer}
+.mcp-back svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.mcp-back:hover{color:var(--ink)}
+.mcp-ed-head{display:flex;align-items:flex-start;gap:12px}
+.mcp-ed-txt{min-width:0}
+.mcp-ed-txt h4{margin:0;font-size:16px;font-weight:700;color:var(--ink);text-wrap:balance}
+.mcp-ed-txt p{margin:3px 0 0;font-size:12.5px;line-height:1.55;color:var(--dim);max-width:62ch}
+.mcp-run{display:flex;align-items:baseline;gap:10px;padding:10px 12px;border:1px solid var(--edge);border-radius:8px;background:var(--deep);min-width:0}
+.mcp-run-lbl{flex:none;font-size:11px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--faint)}
+.mcp-run code{min-width:0;font:12.5px "Sometype Mono",monospace;color:var(--ink);overflow-wrap:anywhere;line-height:1.55}
+.mcp-run code.none{color:var(--faint)}
+.mcp-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.mcp-f{display:flex;flex-direction:column;gap:5px;min-width:0}
 .mcp-f.full{grid-column:1/-1}
 .mcp-f>span{font-size:12.5px;font-weight:600;color:var(--mut)}
 .mcp-f small{font-weight:400;color:var(--faint);margin-left:4px}
 .mcp-f input,.mcp-f textarea{background:var(--panel2);border:1px solid var(--edge2);border-radius:7px;color:var(--ink);padding:7px 10px;font-family:"Sometype Mono",monospace;font-size:12.5px;outline:0;resize:vertical;min-width:0}
 .mcp-f input:focus,.mcp-f textarea:focus{border-color:var(--goldedge)}
-.mcp-note{margin:0 16px 12px;font-size:12.5px;line-height:1.55;color:var(--dim);border-left:2px solid var(--goldedge);padding-left:10px}
-.mcp-out{margin:0 16px 12px;font-size:12.5px;line-height:1.55;color:var(--dim);display:flex;flex-direction:column;gap:4px}
-.mcp-out b{font-weight:600} .mcp-out .ok{color:var(--add)} .mcp-out .bad{color:var(--del)}
-.mcp-del{color:var(--dim)} .mcp-del.armed{color:var(--del);border-color:var(--del)}
-@media (max-width:720px){.mcp-grid{grid-template-columns:minmax(0,1fr)}}
+.mcp-more summary{display:inline-flex;align-items:center;gap:5px;list-style:none;cursor:pointer;font-size:12.5px;color:var(--dim)}
+.mcp-more summary::-webkit-details-marker{display:none}
+.mcp-more summary:hover{color:var(--ink)}
+.mcp-more summary:focus-visible{outline:2px solid var(--gold);outline-offset:2px;border-radius:3px}
+.mcp-more summary svg{width:13px;height:13px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;transition:transform .15s}
+.mcp-more[open] summary svg{transform:rotate(90deg)}
+.mcp-more[open] .mcp-grid{margin-top:12px}
+.mcp-out{display:flex;flex-direction:column;gap:6px;padding:10px 12px;border-left:2px solid var(--edge2);font-size:12.5px;line-height:1.55;color:var(--dim)}
+.mcp-out.ok{border-left-color:var(--add)} .mcp-out.bad{border-left-color:var(--del)}
+.mcp-out b{font-weight:600;color:var(--ink)} .mcp-out.ok b{color:var(--add)} .mcp-out.bad b{color:var(--del)}
+.mcp-out .mcp-tools{grid-column:auto}
+.mcp-out .mcp-spin{display:inline-block;width:10px;height:10px;margin-right:7px;border:1.5px solid var(--edge2);border-top-color:var(--gold);border-radius:50%;animation:spin .8s linear infinite;vertical-align:-1px}
+.mcp-edit{padding-bottom:0}
+.mcp-foot{position:sticky;bottom:0;margin-top:auto;display:flex;align-items:center;justify-content:flex-end;gap:8px;padding:12px 0 14px;border-top:1px solid var(--edge);background:var(--panel)}
+.mcp-del{margin-right:auto;border:0;background:none;padding:4px 0;color:var(--dim);font:12.5px Chivo,sans-serif;cursor:pointer}
+.mcp-del:hover{color:var(--del)}
+.mcp-del.armed{color:var(--del);font-weight:600}
+@media (max-width:820px){.mcp-gallery{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media (max-width:620px){.mcp-gallery,.mcp-grid{grid-template-columns:minmax(0,1fr)}.mcp-cmd{display:none}}
+@media (prefers-reduced-motion:reduce){.mcp-st.busy .mcp-dot,.mcp-out .mcp-spin{animation:none}}
 /* ---- Settings: Keyboard ---- */
 .key-row{display:flex;align-items:center;gap:16px;padding:10px 16px;border-top:1px solid var(--edge)}
 .key-row:first-child{border-top:0}
@@ -899,11 +955,14 @@ tests"). Scroll the row instead of breaking words:
 .turn-peek{display:flex;flex-direction:column;pointer-events:none;-webkit-mask-image:linear-gradient(to bottom,transparent,#000 70%);mask-image:linear-gradient(to bottom,transparent,#000 70%)}
 .turn-peek .top{display:flex;align-items:center;gap:9px;min-height:26px;color:var(--dim);font-size:13px;min-width:0}
 .turn-peek .tr-chev,.turn-peek .tr-meta{display:none}
-.turn-toggle{align-self:flex-start;max-width:100%;white-space:nowrap;display:inline-flex;align-items:center;gap:7px;min-height:30px;padding:0 12px 0 9px;border:1px solid var(--edge2);border-radius:999px;background:var(--panel);color:var(--mut);font:12.5px Chivo,sans-serif;cursor:pointer;transition:color .12s,border-color .12s,background .12s}
-.turn-toggle:hover{color:var(--ink);border-color:var(--sub);background:var(--panel2)}
-.turn-toggle svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;transition:transform .15s}
+.turn-toggle{align-self:stretch;max-width:100%;white-space:nowrap;display:flex;align-items:center;gap:7px;min-height:26px;padding:0;border:0;background:none;color:var(--dim);font:12.5px Chivo,sans-serif;cursor:pointer;transition:color .12s}
+.turn-toggle::after{content:"";flex:1 1 24px;min-width:24px;height:1px;background:var(--edge2);margin-left:4px}
+.turn-toggle:hover{color:var(--ink)}
+.turn-toggle:focus-visible{outline:2px solid var(--gold);outline-offset:3px;border-radius:4px}
+.turn-toggle svg{flex:none;width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;transition:transform .15s}
 .turn-toggle[aria-expanded="true"] svg{transform:rotate(180deg)}
-.turn-toggle .turn-took{font:11.5px "Sometype Mono",monospace;color:var(--faint);padding-left:7px;border-left:1px solid var(--edge2);overflow:hidden;text-overflow:ellipsis;min-width:0}
+.turn-toggle .turn-took{font:11.5px "Sometype Mono",monospace;color:var(--faint);overflow:hidden;text-overflow:ellipsis;min-width:0}
+.turn-toggle .turn-took::before{content:"\00b7";margin-right:7px;color:var(--faint)}
 .turn-work:not(.folded) > .turn-toggle{margin-top:2px}
 .run-cost{display:flex;flex-wrap:wrap;gap:4px 14px;margin-top:4px;font-size:11px}
 .rc-it{display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
@@ -1499,24 +1558,31 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
       </div>
     </section>
     <section class="set-page" data-set="mcp" hidden>
-      <header class="set-top"><h3>Apps (MCP)</h3><p>Programs that lend Vox their tools, so it can drive a browser, Blender, Figma or Windows apps. A server starts on this PC the first time a run needs it, and Vox asks before each call unless it has full access.</p></header>
-      <div class="set-scroll">
-        <div class="mem-bar"><span class="mem-where" id="mcpWhere"></span><button type="button" class="btn ghost" id="mcpImport">Import from Claude Desktop</button><button type="button" class="btn" id="mcpAdd">Add server</button></div>
-        <div class="set-group mcp-ed" id="mcpEd" hidden>
-          <div class="mcp-ed-top"><b id="mcpEdTitle">New server</b><div class="mcp-presets" id="mcpPresets" role="group" aria-label="Start from a known server"><span>Start from</span><button type="button" data-p="browser">Browser</button><button type="button" data-p="windows">Windows apps</button><button type="button" data-p="blender">Blender</button><button type="button" data-p="figma">Figma</button><button type="button" data-p="files">Files</button></div></div>
-          <div class="mcp-grid">
-            <label class="mcp-f"><span>Name</span><input id="mcpName" autocomplete="off" spellcheck="false" placeholder="browser"></label>
-            <label class="mcp-f"><span>Command</span><input id="mcpCmd" autocomplete="off" spellcheck="false" placeholder="npx"></label>
-            <label class="mcp-f full"><span>Arguments <small>one per line</small></span><textarea id="mcpArgs" rows="3" spellcheck="false" placeholder="-y&#10;@playwright/mcp@latest"></textarea></label>
-            <label class="mcp-f full"><span>Environment <small>NAME=value, one per line: keys a server needs. Kept in your settings file on this PC.</small></span><textarea id="mcpEnv" rows="2" spellcheck="false" placeholder="API_KEY=…"></textarea></label>
-            <label class="mcp-f full"><span>Start in <small>optional: the session's project folder when empty</small></span><input id="mcpCwd" autocomplete="off" spellcheck="false"></label>
-          </div>
-          <div class="mcp-note" id="mcpEdHint" hidden></div>
-          <div class="mcp-out" id="mcpTestOut" aria-live="polite" hidden></div>
-          <div class="set-actions"><button type="button" class="btn ghost mcp-del" id="mcpDel" hidden>Remove</button><span class="set-hint"></span><button type="button" class="btn ghost" id="mcpTestBtn">Test</button><button type="button" class="btn ghost" id="mcpCancel">Cancel</button><button type="button" class="btn" id="mcpSave">Save</button></div>
+      <header class="set-top"><h3>Apps (MCP)</h3><p>Let Vox use other programs: a browser, Windows apps, Blender, Figma. An app starts on this PC the first time a run needs it, and Vox asks before using it unless it has full access.</p></header>
+      <div class="set-scroll" id="mcpHome">
+        <div class="mcp-head"><h4>Your apps</h4><span class="mcp-count" id="mcpWhere"></span><button type="button" class="mcp-link" id="mcpImport">Import from Claude Desktop</button></div>
+        <div class="mcp-list" id="mcpBody"></div>
+        <div class="mcp-head"><h4>Add an app</h4></div>
+        <div class="mcp-gallery" id="mcpGallery"></div>
+        <p class="sk-help">Most apps start with <code>npx</code>, which comes with Node.js, or <code>uvx</code>, which comes with uv. An app on the web, with a URL instead of a command, can be reached through <code>npx -y mcp-remote &lt;url&gt;</code>. The first start downloads the app, so it can take a minute.</p>
+      </div>
+      <div class="set-scroll mcp-edit" id="mcpEd" hidden>
+        <button type="button" class="mcp-back" id="mcpCancel"><svg viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></svg>Apps</button>
+        <div class="mcp-ed-head"><span id="mcpEdIc"></span><div class="mcp-ed-txt"><h4 id="mcpEdTitle">Add an app</h4><p id="mcpEdHint" hidden></p></div></div>
+        <div class="mcp-run"><span class="mcp-run-lbl">Runs</span><code id="mcpPreview"></code></div>
+        <div class="mcp-grid">
+          <label class="mcp-f"><span>Name</span><input id="mcpName" autocomplete="off" spellcheck="false" placeholder="browser"></label>
+          <label class="mcp-f"><span>Command</span><input id="mcpCmd" autocomplete="off" spellcheck="false" placeholder="npx"></label>
+          <label class="mcp-f full"><span>Arguments <small>one per line</small></span><textarea id="mcpArgs" rows="3" spellcheck="false" placeholder="-y&#10;@playwright/mcp@latest"></textarea></label>
         </div>
-        <div class="mem-list" id="mcpBody"></div>
-        <p class="sk-help">Most servers start with <code>npx</code> (needs Node.js) or <code>uvx</code> (needs uv). A server on the web, with a URL instead of a command, can be reached through <code>npx -y mcp-remote &lt;url&gt;</code>. The first start of an <code>npx</code> or <code>uvx</code> server downloads it, so it can take a minute.</p>
+        <details class="mcp-more" id="mcpMore"><summary><svg viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></svg>Keys and start folder</summary>
+          <div class="mcp-grid">
+            <label class="mcp-f full"><span>Environment <small>NAME=value, one per line. Kept in your settings file on this PC.</small></span><textarea id="mcpEnv" rows="2" spellcheck="false" placeholder="API_KEY=…"></textarea></label>
+            <label class="mcp-f full"><span>Start in <small>the session's project folder when empty</small></span><input id="mcpCwd" autocomplete="off" spellcheck="false"></label>
+          </div>
+        </details>
+        <div class="mcp-out" id="mcpTestOut" aria-live="polite" hidden></div>
+        <div class="mcp-foot"><button type="button" class="mcp-del" id="mcpDel" hidden>Remove</button><button type="button" class="btn ghost" id="mcpTestBtn">Test</button><button type="button" class="btn" id="mcpSave">Save</button></div>
       </div>
     </section>
     <section class="set-page" data-set="keys" hidden>
@@ -6526,7 +6592,7 @@ function showSetPage(key){
   if (key === 'keys') renderKeys();
   if (key === 'local') renderLocal();
   if (key === 'skills') loadSkills();
-  if (key === 'mcp') loadMcp();
+  if (key === 'mcp') { mcpClose(); loadMcp(); }
 }
 /** Paint the switch, the engine picker, the percentages and the presets from the fields. */
 function syncSetControls(){
@@ -8274,20 +8340,54 @@ async function loadSkills(){
 })();
 
 // ---- Settings > Apps (MCP) ----
-// Servers that lend the agent another program's tools. They could only be set by hand in
-// the settings file; here they are added, tried and switched on or off.
-const MCP_TESTS = new Map();   // name -> last Test result, for the row
+// Programs that lend the agent their tools. They could only be set by hand in the
+// settings file; here they are picked from a few known apps or added by command, tried,
+// and switched on or off.
+const MCP_TESTS = new Map();   // name -> last Test result, for its row
+const MCP_OPEN = new Set();    // rows showing their tool list
 let MCP_EDIT = null;           // the name being edited, '' for a new one, null when closed
 let MCP_LOADS = 0;
-let MCP_FORM_TEST = null;      // { key, r }: the form's last Test, kept if that is what gets saved
-// Starting points only: each fills the form, and nothing is saved until Save.
-const MCP_PRESETS = {
-  browser: { name: 'browser', command: 'npx', args: ['-y', '@playwright/mcp@latest'], hint: 'Playwright’s browser: opens pages, clicks, fills forms and reads them. Needs Node.js.' },
-  windows: { name: 'windows', command: 'uvx', args: ['windows-mcp'], hint: 'Drives Windows apps: opens them, clicks, types and reads the screen. Needs uv (Python).' },
-  blender: { name: 'blender', command: 'uvx', args: ['blender-mcp'], hint: 'Needs uv, and the Blender MCP add-on running inside Blender (its sidebar: Connect to MCP server).' },
-  figma: { name: 'figma', command: 'npx', args: ['-y', 'mcp-remote', 'http://127.0.0.1:3845/mcp'], hint: 'Figma’s own server, from the Figma desktop app: switch it on there first (Preferences > Enable Dev Mode MCP Server).' },
-  files: { name: 'files', command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem'], hint: 'Reads and writes files in the folders listed under Arguments: add one per line.', folder: true },
+let MCP_FORM_TEST = null;      // { key, r }: the editor's last Test, kept if that is what gets saved
+const MCP_ICONS = {
+  browser: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M6.5 6.5h.01M9.5 6.5h.01"/>',
+  windows: '<rect x="4" y="4" width="7" height="7" rx="1"/><rect x="13" y="4" width="7" height="7" rx="1"/><rect x="4" y="13" width="7" height="7" rx="1"/><rect x="13" y="13" width="7" height="7" rx="1"/>',
+  blender: '<path d="M12 3l8 4.5v9L12 21l-8-4.5v-9z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/>',
+  figma: '<rect x="4" y="4" width="7" height="7" rx="1"/><circle cx="16.5" cy="7.5" r="3.5"/><path d="M8 13.5l4.5 7h-9z"/><path d="M14 15h6v5h-6z"/>',
+  files: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  custom: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 10l3 2.5L7 15M13 15h4"/>',
 };
+// Starting points: each fills the editor, and nothing is saved until Save.
+const MCP_PRESETS = {
+  browser: { title: 'Browser', name: 'browser', command: 'npx', args: ['-y', '@playwright/mcp@latest'], needs: 'Node.js', match: /@playwright\/mcp/i,
+    desc: 'Opens pages, clicks, fills in forms and reads them.', hint: 'Playwright’s browser. Needs Node.js.' },
+  windows: { title: 'Windows apps', name: 'windows', command: 'uvx', args: ['windows-mcp'], needs: 'uv', match: /windows-mcp/i,
+    desc: 'Opens apps on this PC, clicks, types and reads the screen.', hint: 'Needs uv, the Python tool runner.' },
+  blender: { title: 'Blender', name: 'blender', command: 'uvx', args: ['blender-mcp'], needs: 'uv and the add-on', match: /blender-mcp/i,
+    desc: 'Builds and changes 3D scenes in a running Blender.', hint: 'Needs uv, and the Blender MCP add-on running inside Blender: in its sidebar, press Connect to MCP server.' },
+  figma: { title: 'Figma', name: 'figma', command: 'npx', args: ['-y', 'mcp-remote', 'http://127.0.0.1:3845/mcp'], needs: 'Figma desktop app', match: /127\.0\.0\.1:3845|figma/i,
+    desc: 'Reads your designs, with their styles and variables.', hint: 'Uses the server built into Figma’s desktop app: switch it on there first, under Preferences.' },
+  files: { title: 'Files', name: 'files', command: 'npx', args: ['-y', '@modelcontextprotocol/server-filesystem'], needs: 'Node.js', match: /server-filesystem/i, folder: true,
+    desc: 'Reads and writes files in the folders you list.', hint: 'Works in the folders listed under Arguments, one per line. Needs Node.js.' },
+};
+const MCP_CUSTOM_HINT = 'Any MCP server that runs as a command on this PC. Its instructions give the command and its arguments.';
+function mcpKind(cfg){
+  const line = [cfg && cfg.command].concat((cfg && cfg.args) || []).join(' ');
+  for (const k of Object.keys(MCP_PRESETS)) if (MCP_PRESETS[k].match.test(line)) return k;
+  return 'custom';
+}
+function mcpIcon(kind, big){
+  const s = el('span', 'mcp-ic' + (big ? ' big' : ''));
+  s.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + (MCP_ICONS[kind] || MCP_ICONS.custom) + '</svg>';
+  return s;
+}
+function mcpSvgButton(label, paths){
+  const b = el('button', 'mcp-ib'); b.type = 'button'; b.title = label; b.setAttribute('aria-label', label);
+  b.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true">' + paths + '</svg>';
+  return b;
+}
+function mcpCmdText(cfg){
+  return [cfg.command].concat(cfg.args || []).filter(Boolean).map((a) => (/\s/.test(a) ? '"' + a + '"' : a)).join(' ');
+}
 /** "npx -y pkg" typed as the command: split it, unless it is a path with spaces. */
 function mcpSplitCommand(cmd, args){
   if (args.length || !/\s/.test(cmd)) return { command: cmd, args };
@@ -8303,7 +8403,7 @@ function mcpPlainError(err){
   if (m) return 'Windows could not find ' + m[1] + '. ' + (/^(npx|npm|node)$/i.test(m[1]) ? 'It comes with Node.js (nodejs.org).' : /^uvx?$/i.test(m[1]) ? 'It comes with uv (docs.astral.sh/uv).' : 'Check the name, or give its full path.');
   return t.charAt(0).toUpperCase() + t.slice(1);
 }
-/** The form as { name, cfg } or { error }. */
+/** The editor as { name, cfg } or { error }. */
 function mcpForm(){
   const name = $('mcpName').value.trim();
   const lines = (id) => $(id).value.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
@@ -8325,40 +8425,56 @@ function mcpFill(name, cfg){
   $('mcpArgs').value = ((cfg && cfg.args) || []).join('\n');
   $('mcpEnv').value = Object.entries((cfg && cfg.env) || {}).map(([k, v]) => k + '=' + v).join('\n');
   $('mcpCwd').value = (cfg && cfg.cwd) || '';
+  $('mcpMore').open = !!((cfg && cfg.cwd) || Object.keys((cfg && cfg.env) || {}).length);
 }
-function mcpHint(text){ const h = $('mcpEdHint'); h.textContent = text || ''; h.hidden = !text; }
-function mcpTestOut(r){
-  const o = $('mcpTestOut');
-  o.innerHTML = '';
-  if (!r) { o.hidden = true; return; }
-  o.hidden = false;
-  if (r.busy) { o.appendChild(el('span', '', 'Starting it… the first start of an npx or uvx server downloads it.')); return; }
-  const head = el('b', r.ok ? 'ok' : 'bad');
-  head.textContent = r.ok ? 'It works: ' + r.tools.length + (r.tools.length === 1 ? ' tool' : ' tools') + ' in ' + (r.ms / 1000).toFixed(1) + ' s' : 'It did not start';
-  o.appendChild(head);
-  if (!r.ok) { const e = el('span', 'mcp-err'); e.textContent = mcpPlainError(r.error); o.appendChild(e); }
-  else if (r.tools.length) o.appendChild(mcpToolChips(r.tools, 24));
+/** The command line the app will run, and its icon, as the fields change. */
+function mcpLive(){
+  const f = mcpForm();
+  const p = $('mcpPreview');
+  const text = f.cfg && f.cfg.command ? mcpCmdText(f.cfg) : '';
+  p.textContent = text || 'Fill in the command below';
+  p.classList.toggle('none', !text);
+  const ic = $('mcpEdIc'); ic.innerHTML = ''; ic.appendChild(mcpIcon(f.cfg ? mcpKind(f.cfg) : 'custom', true));
 }
-function mcpToolChips(tools, max){
+function mcpToolList(tools, max){
   const box = el('div', 'mcp-tools');
   for (const t of tools.slice(0, max)) { const c = el('span'); c.textContent = t.name; c.title = t.description || ''; box.appendChild(c); }
-  if (tools.length > max) box.appendChild(el('span', 'more', '+' + (tools.length - max) + ' more'));
+  if (tools.length > max) { const m = el('span', 'more'); m.textContent = '+' + (tools.length - max) + ' more'; box.appendChild(m); }
   return box;
 }
-function mcpOpen(name, cfg){
-  MCP_EDIT = name || '';
-  $('mcpEdTitle').textContent = name ? 'Edit ' + name : 'New server';
-  mcpFill(name, cfg);
-  mcpHint(''); mcpTestOut(null);
-  const d = $('mcpDel'); d.hidden = !name; d.classList.remove('armed'); d.textContent = 'Remove';
-  $('mcpPresets').hidden = !!name;
-  $('mcpEd').hidden = false;
-  $('mcpAdd').hidden = true;
-  MCP_FORM_TEST = null;
-  loadMcp();
-  (name ? $('mcpCmd') : $('mcpName')).focus();
+function mcpTestOut(r){
+  const o = $('mcpTestOut');
+  o.innerHTML = ''; o.className = 'mcp-out';
+  if (!r) { o.hidden = true; return; }
+  o.hidden = false;
+  if (r.busy) { o.innerHTML = '<span><i class="mcp-spin"></i>Starting it. The first start downloads the app, so this can take a minute.</span>'; return; }
+  o.classList.add(r.ok ? 'ok' : 'bad');
+  const head = el('b');
+  head.textContent = r.ok ? 'Connected: ' + r.tools.length + (r.tools.length === 1 ? ' tool' : ' tools') + ' in ' + (r.ms / 1000).toFixed(1) + ' s' : 'It did not start';
+  o.appendChild(head);
+  if (!r.ok) { const e = el('span'); e.textContent = mcpPlainError(r.error); o.appendChild(e); }
+  else if (r.tools.length) o.appendChild(mcpToolList(r.tools, 40));
 }
-function mcpClose(){ MCP_EDIT = null; $('mcpEd').hidden = true; $('mcpAdd').hidden = false; }
+/** Open the editor: a saved app by name, a preset to add, or a blank one. */
+function mcpOpen(name, cfg, preset){
+  MCP_EDIT = name || '';
+  MCP_FORM_TEST = null;
+  const p = !name && preset ? MCP_PRESETS[preset] : null;
+  let fill = cfg;
+  if (p) { const args = p.args.slice(); if (p.folder && memoryDir()) args.push(memoryDir()); fill = { command: p.command, args }; }
+  mcpFill(name || (p ? p.name : ''), fill);
+  const kind = name ? mcpKind(cfg) : (p ? preset : 'custom');
+  $('mcpEdTitle').textContent = name ? name : (p ? 'Add ' + p.title : 'Add your own app');
+  const hint = name ? (MCP_PRESETS[kind] ? MCP_PRESETS[kind].hint : '') : (p ? p.hint : MCP_CUSTOM_HINT);
+  const h = $('mcpEdHint'); h.textContent = hint; h.hidden = !hint;
+  const d = $('mcpDel'); d.hidden = !name; d.classList.remove('armed'); d.textContent = 'Remove';
+  mcpTestOut(null);
+  mcpLive();
+  $('mcpHome').hidden = true; $('mcpEd').hidden = false;
+  $('mcpEd').scrollTop = 0;
+  (name || p ? $('mcpTestBtn') : $('mcpName')).focus();
+}
+function mcpClose(){ MCP_EDIT = null; $('mcpEd').hidden = true; $('mcpHome').hidden = false; }
 async function loadMcp(){
   const box = $('mcpBody');
   if (!box || !window.voxai || !window.voxai.mcpList) return;
@@ -8370,34 +8486,48 @@ async function loadMcp(){
   const st = (r && r.status) || {};
   const names = Object.keys(all);
   const on = names.filter((n) => !all[n].disabled).length;
-  $('mcpWhere').textContent = names.length ? on + ' of ' + names.length + ' switched on' : '';
+  $('mcpWhere').textContent = names.length ? on + ' of ' + names.length + ' on' : '';
   box.innerHTML = '';
-  box.hidden = !names.length && MCP_EDIT !== null;
-  if (!names.length) { box.appendChild(el('div', 'mem-empty', 'No servers yet. Add one, or bring in the ones you set up for Claude Desktop or Cursor.')); return; }
+  box.className = names.length ? 'mcp-list' : 'mcp-empty';
+  if (!names.length) box.textContent = 'No apps yet. Pick one below, or bring in the ones you set up for Claude Desktop or Cursor.';
   for (const n of names) {
     const cfg = all[n]; const off = !!cfg.disabled; const t = MCP_TESTS.get(n); const live = st[n] || {};
-    const row = el('div', 'mem-fact mcp-row' + (off ? ' off' : ''));
-    let tone = '', say = 'Starts when a run needs it';
+    const kind = mcpKind(cfg);
+    const row = el('div', 'mcp-app' + (off ? ' off' : ''));
+    row.appendChild(mcpIcon(kind));
+    const main = el('div', 'mcp-main');
+    const top = el('div', 'mcp-name'); top.appendChild(document.createTextNode(n));
+    if (kind !== 'custom') { const k = el('span', 'mcp-kind'); k.textContent = MCP_PRESETS[kind].title; top.appendChild(k); }
+    main.appendChild(top);
+    let tone = '', say = 'Starts when a run needs it', count = null;
     if (off) { tone = 'off'; say = 'Off'; }
-    else if (live.running) { tone = 'ok'; say = 'Running · ' + live.tools + (live.tools === 1 ? ' tool' : ' tools'); }
-    else if (t && t.busy) say = 'Starting…';
-    else if (t && t.ok) { tone = 'ok'; say = 'Works · ' + t.tools.length + (t.tools.length === 1 ? ' tool' : ' tools'); }
+    else if (live.running) { tone = 'ok'; say = 'Running'; count = live.tools; }
+    else if (t && t.busy) { tone = 'busy'; say = 'Starting'; }
+    else if (t && t.ok) { tone = 'ok'; say = 'Works'; count = t.tools.length; }
     else if (t && !t.ok) { tone = 'bad'; say = 'Did not start'; }
-    row.appendChild(el('span', 'mcp-dot' + (tone ? ' ' + tone : '')));
-    const main = el('div', 'sk-main');
-    const top = el('div', 'sk-top');
-    const nm = el('span', 'sk-name'); nm.textContent = n;
-    const sv = el('span', 'mcp-state' + (tone === 'ok' || tone === 'bad' ? ' ' + tone : '')); sv.textContent = say;
-    top.appendChild(nm); top.appendChild(sv);
-    const cmd = el('div', 'mcp-cmd'); cmd.textContent = [cfg.command].concat(cfg.args || []).join(' '); cmd.title = cmd.textContent;
-    main.appendChild(top); main.appendChild(cmd);
-    if (t && !t.ok && t.error) { const e = el('div', 'mcp-err'); e.textContent = mcpPlainError(t.error); main.appendChild(e); }
-    if (t && t.ok && t.tools.length) main.appendChild(mcpToolChips(t.tools, 10));
+    const stl = el('div', 'mcp-st' + (tone ? ' ' + tone : ''));
+    stl.appendChild(el('i', 'mcp-dot'));
+    const sv = el('span'); sv.textContent = say + (count != null ? ',' : ''); stl.appendChild(sv);
+    if (count != null) {
+      const words = count + (count === 1 ? ' tool' : ' tools');
+      if (t && t.ok && t.tools.length) {
+        const tb = el('button', 'mcp-tl'); tb.type = 'button'; tb.textContent = words;
+        tb.setAttribute('aria-expanded', String(MCP_OPEN.has(n)));
+        tb.onclick = () => { if (MCP_OPEN.has(n)) MCP_OPEN.delete(n); else MCP_OPEN.add(n); loadMcp(); };
+        stl.appendChild(tb);
+      } else { const w = el('span'); w.textContent = words; stl.appendChild(w); }
+    }
+    const cmd = el('code', 'mcp-cmd'); cmd.textContent = mcpCmdText(cfg); cmd.title = cmd.textContent;
+    stl.appendChild(cmd);
+    main.appendChild(stl);
+    if (t && !t.ok && t.error && !off) { const e = el('div', 'mcp-err'); e.textContent = mcpPlainError(t.error); main.appendChild(e); }
     row.appendChild(main);
     const acts = el('div', 'mcp-acts');
-    const bt = el('button', 'mf-del', 'Test'); bt.type = 'button'; bt.disabled = !!(t && t.busy);
+    const bt = mcpSvgButton('Test ' + n, '<path d="M8 5.5v13l10.5-6.5z"/>');
+    bt.disabled = !!(t && t.busy);
     bt.onclick = () => mcpRunTest(n, cfg, true);
-    const be = el('button', 'mf-del', 'Edit'); be.type = 'button'; be.onclick = () => mcpOpen(n, cfg);
+    const be = mcpSvgButton('Edit ' + n, '<path d="M4 20l4-1 11-11-3-3L5 16z"/><path d="M14 6l3 3"/>');
+    be.onclick = () => mcpOpen(n, cfg);
     const tg = el('button', 'tog'); tg.type = 'button'; tg.setAttribute('role', 'switch'); tg.setAttribute('aria-checked', String(!off)); tg.setAttribute('aria-label', 'Let Vox use ' + n);
     tg.onclick = async () => {
       const r2 = await window.voxai.mcpSwitch(n, off);
@@ -8406,10 +8536,30 @@ async function loadMcp(){
     };
     acts.appendChild(bt); acts.appendChild(be); acts.appendChild(tg);
     row.appendChild(acts);
+    if (MCP_OPEN.has(n) && t && t.ok && t.tools.length) row.appendChild(mcpToolList(t.tools, 60));
     box.appendChild(row);
   }
+  mcpGallery(all);
 }
-/** Start a private copy of the server, list its tools and end it. `inRow`: from the list. */
+/** The apps to add from; one already added opens instead. */
+function mcpGallery(all){
+  const g = $('mcpGallery'); if (!g) return;
+  g.innerHTML = '';
+  const have = {};
+  for (const n of Object.keys(all)) { const k = mcpKind(all[n]); if (!have[k]) have[k] = n; }
+  for (const k of Object.keys(MCP_PRESETS).concat('custom')) {
+    const p = MCP_PRESETS[k];
+    const added = p && have[k];
+    const card = el('button', 'mcp-card' + (added ? ' added' : '')); card.type = 'button';
+    card.appendChild(mcpIcon(k));
+    const b = el('b'); b.textContent = p ? p.title : 'Your own'; card.appendChild(b);
+    const d = el('p'); d.textContent = p ? p.desc : 'Any MCP server that runs as a command.'; card.appendChild(d);
+    const s = el('small'); s.textContent = added ? 'Added as ' + added : (p ? 'Needs ' + p.needs : 'Command and arguments'); card.appendChild(s);
+    card.onclick = () => (added ? mcpOpen(added, all[added]) : mcpOpen('', null, p ? k : null));
+    g.appendChild(card);
+  }
+}
+/** Start a private copy of the app, list its tools and end it. `inRow`: from the list. */
 async function mcpRunTest(name, cfg, inRow){
   if (inRow) { MCP_TESTS.set(name, { busy: true }); loadMcp(); } else mcpTestOut({ busy: true });
   let r;
@@ -8419,21 +8569,14 @@ async function mcpRunTest(name, cfg, inRow){
   return r;
 }
 (function wireMcp(){
-  if (!$('mcpAdd')) return;
-  $('mcpAdd').onclick = () => mcpOpen('', null);
+  if (!$('mcpEd')) return;
+  $('mcpCancel').onclick = () => { mcpClose(); loadMcp(); };
+  for (const id of ['mcpName', 'mcpCmd', 'mcpArgs']) $(id).addEventListener('input', mcpLive);
   // "npx -y some-server" typed as the command: show it the way it will be saved.
   $('mcpCmd').onblur = () => {
-    const sp = mcpSplitCommand($('mcpCmd').value.trim(), $('mcpArgs').value.trim() ? ['x'] : []);
-    if (sp.args.length && !$('mcpArgs').value.trim()) { $('mcpCmd').value = sp.command; $('mcpArgs').value = sp.args.join('\n'); }
-  };
-  $('mcpCancel').onclick = () => { mcpClose(); loadMcp(); };
-  $('mcpPresets').onclick = (e) => {
-    const b = e.target.closest('button[data-p]'); if (!b) return;
-    const p = MCP_PRESETS[b.dataset.p]; if (!p) return;
-    const args = p.args.slice();
-    if (p.folder && memoryDir()) args.push(memoryDir());
-    mcpFill(p.name, { command: p.command, args });
-    mcpHint(p.hint); mcpTestOut(null);
+    if ($('mcpArgs').value.trim()) return;
+    const sp = mcpSplitCommand($('mcpCmd').value.trim(), []);
+    if (sp.args.length) { $('mcpCmd').value = sp.command; $('mcpArgs').value = sp.args.join('\n'); mcpLive(); }
   };
   $('mcpTestBtn').onclick = async () => {
     const f = mcpForm();
@@ -8448,8 +8591,8 @@ async function mcpRunTest(name, cfg, inRow){
     const was = MCP_EDIT || '';
     const r = await window.voxai.mcpSave(f.name, f.cfg, was);
     if (!r || !r.ok) { mcpTestOut({ ok: false, error: (r && r.error) || 'Could not save it.', tools: [] }); return; }
-    // The form's Test result stays with the row, if it tried what was just saved.
-    if (was && was !== f.name) MCP_TESTS.delete(was);
+    // The editor's Test result stays with the row, if it tried what was just saved.
+    if (was && was !== f.name) { MCP_TESTS.delete(was); MCP_OPEN.delete(was); }
     if (MCP_FORM_TEST && MCP_FORM_TEST.key === JSON.stringify(f.cfg)) MCP_TESTS.set(f.name, MCP_FORM_TEST.r); else MCP_TESTS.delete(f.name);
     flashSettingsSaved(was ? 'Saved' : f.name + ' added');
     mcpClose(); loadMcp();
@@ -8457,10 +8600,10 @@ async function mcpRunTest(name, cfg, inRow){
   $('mcpDel').onclick = async () => {
     const d = $('mcpDel');
     // Two presses, as the page cannot show a confirm box of its own here.
-    if (!d.classList.contains('armed')) { d.classList.add('armed'); d.textContent = 'Press again to remove'; return; }
+    if (!d.classList.contains('armed')) { d.classList.add('armed'); d.textContent = 'Press again to remove ' + MCP_EDIT; return; }
     const n = MCP_EDIT;
     const r = await window.voxai.mcpRemove(n);
-    if (r && r.ok) { MCP_TESTS.delete(n); flashSettingsSaved(n + ' removed'); } else flashSettingsSaved((r && r.error) || 'Could not remove it', true);
+    if (r && r.ok) { MCP_TESTS.delete(n); MCP_OPEN.delete(n); flashSettingsSaved(n + ' removed'); } else flashSettingsSaved((r && r.error) || 'Could not remove it', true);
     mcpClose(); loadMcp();
   };
   $('mcpImport').onclick = async () => {
@@ -8468,7 +8611,7 @@ async function mcpRunTest(name, cfg, inRow){
     try { r = await window.voxai.mcpImport(); } catch {}
     if (!r || !r.ok) { flashSettingsSaved('Could not read their settings', true); return; }
     if (!r.looked) toast('No Claude Desktop or Cursor settings found on this PC.');
-    else if (!r.added.length) toast('Nothing new to bring in' + (r.web ? ': ' + r.web + ' web server' + (r.web === 1 ? '' : 's') + ' skipped (add with npx -y mcp-remote <url>).' : '.'));
+    else if (!r.added.length) toast('Nothing new to bring in' + (r.web ? ': ' + r.web + ' web app' + (r.web === 1 ? '' : 's') + ' skipped (add with npx -y mcp-remote <url>).' : '.'));
     else toast('Brought in ' + r.added.map((a) => a.name).join(', ') + ', switched off: turn on the ones you want.');
     loadMcp();
   };

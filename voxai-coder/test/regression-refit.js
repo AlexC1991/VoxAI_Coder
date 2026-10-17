@@ -865,9 +865,11 @@ async function drain(gen) {
       const PL = read('src/preload/preload.js');
       check('[MCP] Settings can list, save, remove, switch, test and import', ['mcp:list', 'mcp:save', 'mcp:remove', 'mcp:switch', 'mcp:test', 'mcp:import'].every((c) => read('src/main/main.js').includes("ipcMain.handle('" + c + "'") && PL.includes("ipcRenderer.invoke('" + c + "'")), 'missing');
       const HM = read('src/renderer/index.html');
-      check('[MCP] the Apps (MCP) page is in Settings', HM.includes('<button type="button" data-set="mcp">') && HM.includes('<section class="set-page" data-set="mcp" hidden>') && HM.includes("if (key === 'mcp') loadMcp();"), 'no page');
-      check('[MCP] presets only fill the form', /\$\('mcpPresets'\)\.onclick = [\s\S]{0,400}mcpFill\(/.test(HM) && !/\$\('mcpPresets'\)\.onclick = [\s\S]{0,400}mcpSave/.test(HM), 'saves');
-      check('[MCP] a row being tested says Starting, not Did not start', HM.indexOf("else if (t && t.busy) say = 'Starting") > -1 && HM.indexOf("else if (t && t.busy) say = 'Starting") < HM.indexOf("else if (t && !t.ok) { tone = 'bad'; say = 'Did not start'; }"), 'order');
+      check('[MCP] the Apps (MCP) page is in Settings', HM.includes('<button type="button" data-set="mcp">') && HM.includes('<section class="set-page" data-set="mcp" hidden>') && HM.includes("if (key === 'mcp') { mcpClose(); loadMcp(); }"), 'no page');
+      check('[MCP] an app card only opens the editor', HM.includes("card.onclick = () => (added ? mcpOpen(added, all[added]) : mcpOpen('', null, p ? k : null));") && !/function mcpOpen\([\s\S]{0,1600}mcpSave/.test(HM.slice(HM.indexOf('function mcpOpen('), HM.indexOf('function mcpClose('))), 'saves');
+      // The fold under a finished turn is a plain line, not a capsule.
+      check('the steps fold is a plain line', /\.turn-toggle\{[^}]*border:0;background:none/.test(HM) && !/\.turn-toggle\{[^}]*border-radius:999px/.test(HM), 'capsule');
+      check('[MCP] a row being tested says Starting, not Did not start', HM.indexOf("else if (t && t.busy) { tone = 'busy'; say = 'Starting'; }") > -1 && HM.indexOf("else if (t && t.busy) { tone = 'busy'; say = 'Starting'; }") < HM.indexOf("else if (t && !t.ok) { tone = 'bad'; say = 'Did not start'; }"), 'order');
       check('[MCP] a missing program is said plainly', HM.includes("if (m) return 'Windows could not find ' + m[1]"), 'raw');
       check('[MCP] imported servers come in switched off', read('src/main/main.js').includes('all[name] = { ...c.cfg, disabled: true };'), 'on');
       require(path.join(ROOT, 'src/backend/tools/procs.js')).stopAll();
