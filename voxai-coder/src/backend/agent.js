@@ -47,6 +47,7 @@ const { processKills, onlyKills, harmlessBesidesKills, judgeKills, killKeys } = 
 const checkpoints = require('./tools/checkpoints');
 const { chatOnce, reasoningParam } = require('./providers/openrouter');
 const prefix = require('./prefix');
+const { createStuckWatch } = require('./stuck');
 const { teamPrompt, teamGuard, sharesData, explainProviderError } = require('./team');
 
 // Auto mode's safety check: one short question per action that would otherwise ask.
@@ -979,6 +980,8 @@ async function* runAgent(opts) {
   let planClosed = false;   // the finishing plan reminder, once per run
   let codeNudges = 0, savedThisRun = false;   // a local model that wrote its code in the reply (twice at most)
   let effortNext = null;
+  // Going round in circles in ways the identical-call check does not catch (stuck.js).
+  const stuck = createStuckWatch();
   // Auto and Full access are the "let it work" modes: pausing every 60 turns there
   // only meant someone typing "continue" seven times through one build. The spend
   // limit is their runaway guard -- unless the provider reports no cost, when the
@@ -1574,6 +1577,11 @@ async function* runAgent(opts) {
         // A skill is instructions asked for in order to be followed: cut to the usual
         // limit, the middle of a long one was lost. It comes in parts instead (skills.js).
         let text = boundToolResult(JSON.stringify(forModel), tc.name === 'skill' ? Math.max(Number(toolResultMaxChars) || 0, 32000) : toolResultMaxChars);
+        const stuckNote = stuck.after(tc.name, args, { ok: true, result });
+        if (stuckNote) {
+          text += '\n\n' + stuckNote;
+          yield { type: 'warning', code: 'stuck-check', message: /^\[progress/.test(stuckNote) ? 'Many steps without a change: asked Vox to act or ask you.' : 'The same thing kept failing: asked Vox to stop and rethink.' };
+        }
         // Keep the plan moving. Models set a plan out and then forget it (seen live: 0 of
         // 7 ticked through two minutes of work), and the user follows it on the input bar.
         // After a few actions with open steps and no update, say so -- once per stretch.
@@ -1620,8 +1628,10 @@ async function* runAgent(opts) {
         }
       } catch (err) {
         while (emitQueue.length) yield emitQueue.shift();
-        const msg = `DENIED_OR_ERROR: ${err.message}`;
+        const stuckNote = stuck.after(tc.name, args, { ok: false, error: err && err.message });
+        const msg = `DENIED_OR_ERROR: ${err.message}` + (stuckNote ? '\n\n' + stuckNote : '');
         session.messages.push({ role: 'tool', tool_call_id: id, content: msg });
+        if (stuckNote) yield { type: 'warning', code: 'stuck-check', message: 'The same change kept failing: asked Vox to stop and rethink.' };
         // A verification failure means the file WAS written and does not parse —
         // that is a change the parent must hear about, not a no-op.
         const failedMutation = MUTATING_TOOLS.has(tc.name) && err.verification

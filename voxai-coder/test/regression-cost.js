@@ -178,6 +178,39 @@ const textOf = (m) => (typeof m.content === 'string' ? m.content : (m.content ||
     check('and it comes before the closing-message rules, which still stand', quiet > 0 && close > quiet, { quiet, close });
   }
 
+  // ------------------------------------------------------------------ [P5]
+  console.log('\n[P5] the stuck detector');
+  {
+    const { createStuckWatch } = require(path.join(ROOT, 'src/backend/stuck.js'));
+    let w = createStuckWatch();
+    const fails = [1, 2, 3, 4, 5].map(() => w.after('edit', { path: 'a.js' }, { ok: false, error: 'before text not found in a.js' }));
+    check('a file that keeps failing to change: told at 3, told to ask the user at 5', !fails[0] && !fails[1] && /^\[stuck check\] Changing a\.js has now failed 3 times \(last: before text not found/.test(fails[2]) && !fails[3] && /tell the user what you were trying/.test(fails[4]), fails.map((f) => f.slice(0, 30)));
+    w = createStuckWatch();
+    w.after('edit', { path: 'a.js' }, { ok: false, error: 'x' }); w.after('edit', { path: 'a.js' }, { ok: false, error: 'x' });
+    w.after('edit', { path: 'a.js' }, { ok: true });
+    check('a success on the file starts the count again', w.after('edit', { path: 'a.js' }, { ok: false, error: 'x' }) === '', 'kept counting');
+    w = createStuckWatch();
+    const run = (cmd, exit, err) => w.after('shell', { command: cmd }, { ok: true, result: { exit, stdout: '', stderr: err } });
+    const c = [run('npm test -- --grep 12', 1, 'Error: Cannot find module x at line 4'), run('npm test -- --grep 13', 1, 'Error: Cannot find module x at line 9'), run('npm test -- --grep 14', 1, 'Error: Cannot find module x at line 2')];
+    check('the same command failing the same way 3 times, numbers aside', !c[0] && !c[1] && /^\[stuck check\] This command has failed the same way 3 times/.test(c[2]), c.map((x) => x.slice(0, 40)));
+    w = createStuckWatch();
+    run('npm test', 1, 'Error A'); run('npm test', 1, 'Error B');
+    check('different failures are not the same failure', run('npm test', 1, 'Error C') === '', 'flagged');
+    w = createStuckWatch();
+    const looks = Array.from({ length: 16 }, () => w.after('read', { path: 'x' }, { ok: true }));
+    check('15 looks without a change: one nudge, once', looks.filter(Boolean).length === 1 && /^\[progress check\] 15 steps/.test(looks[14]), looks.filter(Boolean).length);
+    // In a real run: three failing edits to one file. The third result carries the note.
+    const WD = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-cost5-'));
+    fs.writeFileSync(path.join(WD, 'app.js'), 'const a = 1;\n');
+    fakeOpenRouter((n) => (n <= 3 ? call('e' + n, 'edit', { path: 'app.js', before: 'const b = ' + n + ';', after: 'x' }) : say('done')));
+    const sess = { id: 'p5', workdir: WD, messages: [] };
+    const ev = await drain(runAgent({ session: sess, userText: 'go', apiKey: 'k', model: 'm', access: 'full', askPermission: async () => true, maxTurns: 6 }));
+    const results = sess.messages.filter((m) => m.role === 'tool').map((m) => String(m.content));
+    check('in a run, the third failed edit to the same file says stop and rethink', results.length === 3 && !/stuck check/.test(results[1]) && /\[stuck check\] Changing app\.js has now failed 3 times/.test(results[2]), results.map((r) => r.slice(0, 60)));
+    check('and the window is told', ev.some((e) => e.type === 'warning' && e.code === 'stuck-check'), ev.map((e) => e.type));
+    fs.rmSync(WD, { recursive: true, force: true });
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });
