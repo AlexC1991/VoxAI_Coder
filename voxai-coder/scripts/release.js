@@ -168,10 +168,12 @@ const say = (out) => { const t = String(out || '').replace(/\x1b\[[0-9;]*m/g, ''
 const title = `${version}: ${notes}`.slice(0, 240);
 if (!LINUX) {
   // The changelog travels with the code; each release's notes also go on the release.
+  // The day it was released where it was released: the UTC date read as the day before here (Australia).
+  const localDay = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
   const logPath = path.join(MAIN_DIR, 'CHANGELOG.md');
   const prev = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').replace(/^# Changes\s*/, '') : '';
   const log = prev.includes(`## ${version} `) ? null
-    : `# Changes\n\n## ${version} (${m.releasedAt.slice(0, 10)})\n\n${notes}\n\n${prev}`.replace(/\n{3,}/g, '\n\n');
+    : `# Changes\n\n## ${version} (${localDay()})\n\n${notes}\n\n${prev}`.replace(/\n{3,}/g, '\n\n');
   // Attach first, name last: a download on a save nobody can see stays hidden until the save
   // is named, so the feed switches to the new release with its installer and signed manifest
   // already in place. Named first, the feed briefly offered a release without its files.

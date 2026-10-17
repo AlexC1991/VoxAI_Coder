@@ -1,5 +1,9 @@
 # Changes
 
+## 0.2.87 (2026-10-18)
+
+Settings > Appearance: themes, accent colours, text size. Settings > Computer use: on/off switches and a status check. Attachments show as chips and thumbnails. Linux desktop control and preview fixes; Mac groundwork.
+
 ## 0.2.86 (2026-10-18)
 
 Several projects at once in one window: going back to a project whose run is still going no longer breaks it, and Stop ends a run waiting on an approval. The balance counts down as runs spend. Side by side, the session list opens into the pane you are working in. Releases now come from the main VoxAI Coder project.
