@@ -107,6 +107,7 @@ function makeLspTool() {
           }
         } else if (kind === 'py') {
           for (const f of list) {
+            // python3 off Windows: most Linux distributions have no plain "python" (see verify.js).
             const r = await run(process.platform === 'win32' ? 'python' : 'python3', ['-m', 'py_compile', f], ctx.workdir);
             results.checked += 1;
             if (r.code) { results.failed += 1; results.errors.push({ kind: 'python', file: path.relative(ctx.workdir, f), output: (r.stderr || '').slice(0, 1000) }); }

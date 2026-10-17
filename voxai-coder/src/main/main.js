@@ -84,6 +84,10 @@ function writeSettingsFile(obj) {
   fs.writeFileSync(SETTINGS_PATH, text);
   try { const st = fs.statSync(SETTINGS_PATH); settingsText = text; settingsStamp = st.mtimeMs + ':' + st.size; } catch { settingsText = null; }
 }
+// The OS keychain: DPAPI on Windows; on Linux libsecret (GNOME Keyring or KWallet). A Linux
+// session with no keyring running can still report available, with Electron encrypting under a
+// key built into it ("basic_text"), which protects far less -- docs/LINUX.md says to install one.
+// The XOR mask below is only for when safeStorage cannot run at all.
 function encryptSecret(plain) {
   if (safeStorage.isEncryptionAvailable())
     return { enc: safeStorage.encryptString(plain).toString('base64'), store: 'keychain' };
@@ -2528,6 +2532,7 @@ ipcMain.handle('openrouter:generations', async (_e, { limit = 40, cursor } = {})
   ipcMain.handle('update:install', () => (updater ? updater.install() : false));
 });
 
+// Closing the window quits on Windows and Linux (macOS apps stay in the dock by convention).
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 // Servers and watchers the agent left running end with the app, not after it. A
 // python http.server started for a preview was still listening once the app was gone.

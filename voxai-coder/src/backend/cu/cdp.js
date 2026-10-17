@@ -22,6 +22,8 @@ const CHROME_CANDIDATES = [
   'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe',
   'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
   '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  // Linux: the distro packages, the snap and the vendors' .deb/.rpm installs. A Flatpak browser
+  // has no fixed path to run (it lives behind flatpak run), so set CHROME_PATH for one.
   '/usr/bin/google-chrome',
   '/usr/bin/google-chrome-stable',
   '/usr/bin/chromium',

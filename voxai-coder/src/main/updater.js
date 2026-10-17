@@ -2,7 +2,7 @@
  * Updates from CodeRook.
  *
  * Releases are published to the public project batty-251/voxai-coder-releases (the
- * code stays private in voxai-coder). CodeRook serves an electron-updater feed for
+ * code is in voxai-coder, and on GitHub). CodeRook serves an electron-updater feed for
  * it -- latest.yml with each file's size and SHA-512 -- so electron-updater does the
  * checking, downloading and installing.
  *

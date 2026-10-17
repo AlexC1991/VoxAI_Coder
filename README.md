@@ -51,6 +51,8 @@ Electron): no external agent binary and no subscription, just your
 - **Windows:** [the installer from CodeRook](https://api.coderook.com/v1/public/projects/batty-251/voxai-coder-releases/updates/VoxAI-Coder-Setup-0.2.85.exe),
   or both files from [GitHub Releases](https://github.com/AlexC1991/VoxAI_Coder/releases).
 - **Linux:** from the [releases project on CodeRook](https://coderook.com/batty-251/voxai-coder-releases).
+  Installing, what differs on Linux, and fixes for common problems:
+  **[the Linux guide](docs/LINUX.md)**.
 
 The installed app keeps itself up to date. It checks for new versions when it opens,
 downloads them in the background and offers to restart when one is ready. Updates come from
@@ -175,7 +177,9 @@ VoxAI_Coder/
 │   ├── src/preload/        the bridge between the UI and main (window.voxai)
 │   ├── resources/          icons, built-in skills, the public update key
 │   └── test/               regression tests
+├── docs/LINUX.md           using VoxAI Coder on Linux, and fixing it
 ├── docs/screenshots/       the pictures on this page
+├── LINUX-BUILD.md          building on Linux and adding it to a release
 └── benchmark/              runs against other agents
 ```
 

@@ -34,6 +34,9 @@ npm run dist:linux # AppImage + installer script (on Linux; see ../LINUX-BUILD.m
 npm run release -- --notes "..."   # sign update.json and publish to CodeRook
 ```
 
+On Linux: [../LINUX-BUILD.md](../LINUX-BUILD.md) has the prerequisites (node-pty compiles
+during `npm ci`), the build and the release steps, and a map of the Linux code.
+
 `src/renderer/index.html` carries a CSP hash for its inline script. Any edit to it needs
 `node scripts/csp.js`; start, dev, test and dist run it for you.
 

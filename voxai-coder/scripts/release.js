@@ -6,7 +6,7 @@
  * 1. Signs update.json (version, installer name, size, SHA-512, notes) with the
  *    release key made by `npm run release-key`.
  * 2. Saves a version to the public CodeRook project voxai-coder-releases (README and
- *    CHANGELOG only -- the code stays in the private voxai-coder project), names it
+ *    CHANGELOG only -- the code is in the voxai-coder project and on GitHub), names it
  *    v<version>, and attaches the installer and update.json to it.
  * 3. Reads the public update feed back to confirm installed copies can see it.
  *
@@ -19,7 +19,7 @@
  * one version carries both installers and each platform verifies its own manifest. It
  * reuses that release's notes and leaves the README alone. Run it after the Windows
  * release -- a version with only an AppImage would leave Windows copies waiting on an
- * .exe that never comes.
+ * .exe that never comes. The Linux side's steps are in LINUX-BUILD.md at the repository root.
  */
 const crypto = require('crypto');
 const fs = require('fs');
@@ -170,6 +170,9 @@ would rather run it directly.
 
 The Linux build is made on Linux after the Windows one, so for a while after a release
 these links may not work yet.
+
+Help for Linux (what you need, what differs from Windows, fixes for common problems):
+https://github.com/AlexC1991/VoxAI_Coder/blob/main/docs/LINUX.md
 
 ## Updates
 

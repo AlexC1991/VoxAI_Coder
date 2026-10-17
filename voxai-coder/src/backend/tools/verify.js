@@ -37,6 +37,7 @@ const CHECKERS = {
   '.js': (f) => ['node', ['--check', f]],
   '.cjs': (f) => ['node', ['--check', f]],
   '.mjs': (f) => ['node', ['--check', f]],
+  // Most Linux distributions ship only python3; plain "python" is missing or Python 2.
   '.py': (f) => [process.platform === 'win32' ? 'python' : 'python3', ['-m', 'py_compile', f]],
   '.rb': (f) => ['ruby', ['-c', f]],
   '.php': (f) => ['php', ['-l', f]],

@@ -35,7 +35,12 @@ function available() {
     return { ok: Boolean(loadPty()), error: loadError };
 }
 
-/** The user's real shell, and a sensible login environment. */
+/**
+ * The user's real shell, and a sensible login environment. On Linux, bash and zsh start as
+ * login shells (-l): an AppImage started from the menu inherits the desktop's bare
+ * environment, and only a login shell reads ~/.profile, where nvm, pyenv and a user's PATH
+ * additions usually live.
+ */
 function shellInfo() {
     const shell = process.platform === 'win32' ? 'powershell.exe' : (process.env.SHELL || '/bin/bash');
     const args = [];
