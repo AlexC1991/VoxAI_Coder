@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-B+J9IWalQUR2QC6jWbdN1f1AfTQjnRQKNUgmnGiqQQw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-R6z7a+ulx+0NSQDSL0ZL9yBgAszGIaFrStMUt4vQkdM='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -8575,10 +8575,10 @@ function keysDirty(){
 // so saving is unchanged.
 const SET_PICKS = {
   sub: { input: 'fSubModel', none: 'Same as the session', title: 'Sub-agent model',
-    note: 'Can use tools · cheapest first',
+    note: 'Models that can use tools',
     fits: (m) => m.tools !== false },
   eyes: { input: 'fVisionHelper', none: 'Off', title: 'Model that describes screenshots',
-    note: 'Can read images · cheapest first',
+    note: 'Models that can read images',
     fits: (m) => m.vision === true },
 };
 let SET_POP = null;   // { which, box, list, search, hot }
@@ -8607,24 +8607,57 @@ function renderSetPick(){
     r.onclick = (e) => { e.stopPropagation(); chooseSetPick(id); };
     list.appendChild(r);
   };
-  if (!q) add('', p.none, '', '');
   if (!ALL_MODELS.length) {
+    add('', p.none, '', '');
     list.appendChild(el('div', 'mp-empty', S && S.hasOpenRouterKey ? 'Loading models from OpenRouter…' : 'Add your OpenRouter key in Account to choose a model.'));
     return;
   }
   if (!PK_BROWSE) PK_BROWSE = browseModelIds(ALL_MODELS);
   // Routers price at -1 ("it depends"): no price to show or sort by, so they are left out.
-  let ms = ALL_MODELS.filter((m) => p.fits(m) && !refusedWhy(m.id) && Number(m.promptCents) >= 0 && Number(m.completionCents) >= 0);
-  if (q) ms = ms.filter((m) => { const d = describeModel(m); return (d.name + ' ' + d.provider + ' ' + m.id).toLowerCase().includes(q); });
-  else ms = ms.filter((m) => PK_BROWSE.has(m.id) || m.id === cur);
-  ms.sort((a, b) => modelCost(a) - modelCost(b) || describeModel(a).name.localeCompare(describeModel(b).name));
-  // Paid first, cheapest first; free ones last, as their rate limits are tight for real work.
-  const paid = ms.filter((m) => modelCost(m) > 0), free = ms.filter((m) => modelCost(m) === 0);
-  const row = (m) => { const d = describeModel(m); add(m.id, d.name + (d.provider ? ' · ' + d.provider : ''), modelPrice(m), m.id); };
-  if (paid.length) { list.appendChild(el('div', 'mp-label', '<span>' + esc(p.note) + '</span><span>per 1M in · out</span>')); paid.slice(0, 250).forEach(row); }
-  if (free.length) { list.appendChild(el('div', 'mp-label', '<span>Free, with tight rate limits</span>')); free.slice(0, 80).forEach(row); }
-  if (!ms.length) list.appendChild(el('div', 'mp-empty', 'No model matches.'));
-  const sel = list.querySelector('.mp-row.sel'); if (sel && !q) sel.scrollIntoView({ block: 'nearest' });
+  const fit = ALL_MODELS.filter((m) => p.fits(m) && !refusedWhy(m.id) && Number(m.promptCents) >= 0 && Number(m.completionCents) >= 0);
+  const prov = (m) => describeModel(m).provider || 'Other';
+  const row = (m, withProv) => { const d = describeModel(m); add(m.id, d.name + (withProv && d.provider ? ' · ' + d.provider : ''), modelPrice(m), m.id); };
+  if (q) {
+    // Search reaches every model that fits, cheapest first.
+    const hits = fit.filter((m) => { const d = describeModel(m); return (d.name + ' ' + d.provider + ' ' + m.id).toLowerCase().includes(q); })
+      .sort((a, b) => modelCost(a) - modelCost(b));
+    hits.slice(0, 200).forEach((m) => row(m, true));
+    if (!hits.length) list.appendChild(el('div', 'mp-empty', 'No model matches.'));
+    return;
+  }
+  const browse = fit.filter((m) => PK_BROWSE.has(m.id) || m.id === cur);
+  if (SET_POP.view && SET_POP.view !== 'home') {
+    // One company's models, as the picker by Send shows them.
+    const mine = browse.filter((m) => prov(m) === SET_POP.view);
+    const back = el('div', 'mp-back', '<i>‹</i>' + esc(SET_POP.view) + ' <span>' + mine.length + (mine.length === 1 ? ' model' : ' models') + '</span>');
+    back.onclick = (e) => { e.stopPropagation(); SET_POP.view = 'home'; renderSetPick(); list.scrollTop = 0; };
+    list.appendChild(back);
+    mine.forEach((m) => row(m, false));
+    return;
+  }
+  // Home: the choice it has now, then the companies.
+  list.appendChild(el('div', 'mp-label', '<span>' + esc(p.note) + '</span><span>per 1M in · out</span>'));
+  add('', p.none, '', '');
+  const curM = cur ? modelEntry(cur) : null;
+  if (curM) row(curM, true);
+  else if (cur) add(cur, modelLabel(cur), '', cur);
+  list.appendChild(el('div', 'mp-sep'));
+  const counts = new Map();
+  browse.forEach((m) => counts.set(prov(m), (counts.get(prov(m)) || 0) + 1));
+  const curProv = curM ? prov(curM) : '';
+  const provs = [...counts.keys()].sort((a, b) => (a === curProv ? -1 : b === curProv ? 1 : a.localeCompare(b)));
+  list.appendChild(el('div', 'mp-label', '<span>Providers</span><span>' + provs.length + '</span>'));
+  provs.forEach((pv) => {
+    const r = el('div', 'mp-row prov');
+    r.dataset.go = pv;
+    r.appendChild(el('span', 'ck', ''));
+    const n = el('span', 'nm'); n.textContent = pv; r.appendChild(n);
+    r.appendChild(el('span', 'ct', String(counts.get(pv))));
+    r.appendChild(el('span', 'go', '›'));
+    r.onmouseenter = () => { list.querySelectorAll('.hot').forEach((x) => x.classList.remove('hot')); r.classList.add('hot'); };
+    r.onclick = (e) => { e.stopPropagation(); SET_POP.view = pv; renderSetPick(); list.scrollTop = 0; };
+    list.appendChild(r);
+  });
 }
 function chooseSetPick(id){
   if (!SET_POP) return;
@@ -8653,7 +8686,8 @@ function openSetPick(which){
   b.setAttribute('aria-expanded', 'true');
   search.oninput = renderSetPick;
   search.onkeydown = (e) => {
-    const rows = [...list.querySelectorAll('.mp-row')];
+    const rows = [...list.querySelectorAll('.mp-row, .mp-back')];
+    if (e.key === 'Backspace' && !search.value && SET_POP.view && SET_POP.view !== 'home') { e.preventDefault(); SET_POP.view = 'home'; renderSetPick(); return; }
     let i = rows.findIndex((x) => x.classList.contains('hot'));
     if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
       e.preventDefault();
