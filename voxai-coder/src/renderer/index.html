@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-Cna53IhvgbKRb9dw1nJuzAaqu2Nq+gGfkFLiQahd0Lw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-G4sjw/JP1ZS4SejtYsiM3ANdVILUjoFSqAPanJs5wpU='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -5360,8 +5360,12 @@ let PK_BROWSE = null;   // ids in the everyday list, worked out once per catalog
 function pkFoot(id){
   const m = modelEntry(id);
   // Just the model's full name (its id on hover): nothing that can wrap and move the list.
-  $('pkId').textContent = id ? ((m && m.name) || id) : '';
-  $('pkId').title = id || '';
+  // And what a message has really cost you on it: a price per token says little when one model
+  // writes twice as much as another (from your own sessions, coststats.js).
+  const cs = id && COST_STATS[id];
+  const per = cs && cs.runs >= 3 ? ' · about $' + (cs.median < 0.1 ? cs.median.toFixed(3) : cs.median.toFixed(2)) + ' a message for you' : '';
+  $('pkId').textContent = id ? ((m && m.name) || id) + per : '';
+  $('pkId').title = id ? id + (per ? ' -- the middle of your last ' + cs.runs + ' messages with it, sub-agents included' : '') : '';
 }
 /**
  * One picker for both chips. From the model chip it picks the session's model; from the Team
@@ -5369,8 +5373,16 @@ function pkFoot(id){
  * 1M in and out (teamCoders). The menu moves to the chip that opened it.
  */
 let PK_FOR = 'model';
+// What a message has cost you on each model, from your own sessions: { id: { runs, median } }.
+let COST_STATS = {}, COST_STATS_AT = 0;
+function loadCostStats(){
+  if (!window.voxai.modelCostStats || Date.now() - COST_STATS_AT < 60000) return;
+  COST_STATS_AT = Date.now();
+  window.voxai.modelCostStats().then((s) => { COST_STATS = s || {}; if ($('chipModel').classList.contains('open')) renderModelMenu(); }).catch(() => {});
+}
 function openPicker(chip, mode){
   PK_FOR = mode;
+  loadCostStats();
   const m = $('menuModel');
   if (m && m.parentNode !== chip) chip.appendChild(m);
   PK_VIEW = 'home';
@@ -5661,6 +5673,7 @@ async function openSession(id){
           continue;
         }
         if (/^\[VOX PLAN\]/.test(first)) { finalizeRunCard(); continue; }
+        if (/^\[VOX CHECK\]/.test(first)) { finalizeRunCard(); continue; }
         // What changed in the project, told to the model (backend/prefix.js): not a message of yours.
         if (/^\[VOX CONTEXT\]/.test(first)) continue;
         if (/^\[VOX CUTOFF\]/.test(first)) {

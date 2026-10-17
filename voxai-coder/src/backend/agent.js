@@ -342,7 +342,8 @@ async function loadDurableContext(workdir, userData, opts = {}) {
       }
     } catch { /* no such file */ }
   }
-  // How to test, build and lint it, from its own files.
+  // What the project is, at a glance, and how to test, build and lint it, from its own files.
+  try { const ov = require('./projectfacts').overviewSection(workdir, { local: opts.local }); if (ov) parts.push(ov); } catch { /* unreadable */ }
   try { const cmds = require('./projectfacts').commandsSection(workdir); if (cmds) parts.push(cmds); } catch { /* unreadable */ }
   if (memFacts.length) {
     // Only the facts that matter to this session go in every request; the rest are a search away.
@@ -1008,6 +1009,11 @@ async function* runAgent(opts) {
   // after one (see the finishReason === 'length' handling below).
   let cutoffs = 0;
   let planClosed = false;   // the finishing plan reminder, once per run
+  // Code changed since anything was last run or looked at (a check, a test, the preview):
+  // finishing then means a "done" nobody has seen work. One reminder per run.
+  let unchecked = false, checkAsked = false;
+  const DOC_ONLY = /\.(md|markdown|txt|rst)$/i;
+  const CHECKS = new Set(['shell', 'terminal_run', 'computer', 'lsp']);
   let codeNudges = 0, savedThisRun = false;   // a local model that wrote its code in the reply (twice at most)
   let effortNext = null;
   // Going round in circles in ways the identical-call check does not catch (stuck.js).
@@ -1304,6 +1310,17 @@ async function* runAgent(opts) {
           + open.slice(0, 6).map((t) => '"' + String(t.text || t.title || t.content || '').slice(0, 60) + '"').join(', ') + '). '
           + 'Call todo with the whole list: mark the steps that are done. For any not done, say which and why in one line. Do not start new work.' });
         yield { type: 'warning', code: 'plan-close', message: 'The plan still had open steps; asked the agent to close it.' };
+        continue;
+      }
+      // Changed code, ran nothing since: check before saying it is done (or say why not), once.
+      if (unchecked && !checkAsked && !isSubAgent && !planMode && String(content || '').trim()) {
+        checkAsked = true;
+        let how = '';
+        try { const c = require('./projectfacts').detectCommands(session.workdir).find((x) => /Tests|Type check|Build/.test(x.what)); if (c) how = ` with ${c.command}`; } catch { /* none found */ }
+        session.messages.push({ role: 'assistant', content });
+        session.messages.push({ role: 'user', content: `[VOX CHECK] You changed code and have not run or looked at anything since. Before you finish, check that it works${how} -- `
+          + 'or open it in the preview for a page or an app. If a check does not apply, say why in one line. Then give your closing message.' });
+        yield { type: 'warning', code: 'check-nudge', message: 'Files changed with nothing run since: asked Vox to check its work before finishing.' };
         continue;
       }
       if (!String(content || '').trim()) {
@@ -1628,6 +1645,8 @@ async function* runAgent(opts) {
         // Report file mutations structurally, not just as prose in the result blob.
         // A parent delegating work needs to know WHICH files changed without
         // re-reading the tree or trusting a summary sentence.
+        if (MUTATING_TOOLS.has(tc.name) && !DOC_ONLY.test(String(args.path || (result && result.path) || ''))) unchecked = true;
+        else if (CHECKS.has(tc.name)) unchecked = false;
         const mutated = MUTATING_TOOLS.has(tc.name) && result && typeof result === 'object'
           ? {
             path: args.path || result.path || null,

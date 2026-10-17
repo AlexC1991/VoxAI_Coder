@@ -19,14 +19,14 @@
 const crypto = require('crypto');
 
 const DATE_LINE = /Today's date: \d{4}-\d{2}-\d{2}\. /;
-const SECTIONS = ['PROJECT NOTES', 'PROJECT COMMANDS', 'PROJECT MEMORY', 'BUILD STATE', 'SKILLS'];
+const SECTIONS = ['PROJECT NOTES', 'PROJECT OVERVIEW', 'PROJECT COMMANDS', 'PROJECT MEMORY', 'BUILD STATE', 'SKILLS'];
 
 /** The durable block split into its sections, by heading. */
 function sectionsOf(durable) {
   const out = {};
   const text = String(durable || '');
   const heads = [];
-  const re = /^\[(PROJECT NOTES|PROJECT COMMANDS|PROJECT MEMORY|BUILD STATE|SKILLS)\]/gm;
+  const re = /^\[(PROJECT NOTES|PROJECT OVERVIEW|PROJECT COMMANDS|PROJECT MEMORY|BUILD STATE|SKILLS)\]/gm;
   let m;
   while ((m = re.exec(text))) heads.push({ name: m[1], at: m.index });
   heads.forEach((h, i) => { out[h.name] = text.slice(h.at, i + 1 < heads.length ? heads[i + 1].at : text.length).trim(); });

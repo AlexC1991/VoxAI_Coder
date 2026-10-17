@@ -346,6 +346,48 @@ const textOf = (m) => (typeof m.content === 'string' ? m.content : (m.content ||
     fs.rmSync(D, { recursive: true, force: true });
   }
 
+  // ------------------------------------------------------------------ [P9]
+  console.log('\n[P9] your cost per message, a project overview, a check before "done"');
+  {
+    const CS = require(path.join(ROOT, 'src/backend/coststats.js'));
+    const SD = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-cost9-'));
+    const sessFile = (id, model, runs) => fs.writeFileSync(path.join(SD, id + '.jsonl'), [JSON.stringify({ kind: 'meta', id, model })].concat(runs.map((r) => JSON.stringify({ kind: 'run', run: r }))).join('\n'));
+    sessFile('s1', 'google/gemini-4-argon', [{ cost: 0.30 }, { cost: 0.10 }, { cost: 0.20, model: 'google/gemini-4-argon' }, { cost: 0 }]);
+    sessFile('s2', 'deepseek/deepseek-v4.1-flash', [{ cost: 0.01 }, { cost: 0.03, model: 'google/gemini-4-argon' }]);
+    const st = await CS.modelCosts(SD);
+    check('cost per message per model, from the sessions, a run\'s own model first', st['google/gemini-4-argon'].runs === 4 && Math.abs(st['google/gemini-4-argon'].median - 0.15) < 1e-9 && st['deepseek/deepseek-v4.1-flash'].runs === 1, st);
+    fs.rmSync(SD, { recursive: true, force: true });
+    const HM = fs.readFileSync(path.join(ROOT, 'src/renderer/index.html'), 'utf8'), MM = fs.readFileSync(path.join(ROOT, 'src/main/main.js'), 'utf8');
+    check('runs now record their model, and the picker footer says what a message costs you, after 3', MM.includes("model: sess.model || getSettings(false).openrouterModel || '',") && HM.includes("const per = cs && cs.runs >= 3 ? ") && HM.includes("' a message for you'"), 'missing');
+
+    const PF = require(path.join(ROOT, 'src/backend/projectfacts.js'));
+    const D = fs.mkdtempSync(path.join(os.tmpdir(), 'voxai-cost9p-'));
+    for (const d of ['src', 'test', 'node_modules', '.git', 'dist']) fs.mkdirSync(path.join(D, d));
+    fs.writeFileSync(path.join(D, 'package.json'), JSON.stringify({ description: 'A shop', scripts: { test: 'vitest' }, dependencies: { react: '1', stripe: '1' }, devDependencies: { vite: '1', vitest: '1' } }));
+    fs.writeFileSync(path.join(D, 'README.md'), '![badge](x)\n# Shop\n\nSells hats.\n');
+    fs.writeFileSync(path.join(D, 'notes.tmp'), 'x');
+    const ov = PF.overviewSection(D);
+    check('the overview: folders (no node_modules, .git or dist), key files, stack, README', ov.includes('Folders: src/, test/') && !/node_modules|dist\//.test(ov) && ov.includes('Key files: README.md, package.json') && ov.includes('Uses: react, vite, vitest') && ov.includes('About: A shop') && ov.includes('README begins: # Shop Sells hats.') && !ov.includes('badge'), ov);
+    check('a local model gets it without the README', !PF.overviewSection(D, { local: true }).includes('README begins'), 'readme');
+
+    // The check before "done", in real runs.
+    const runWith = async (steps) => {
+      const sess = { id: 'p9-' + Math.random(), workdir: D, messages: [] };
+      fakeOpenRouter((n) => steps[n - 1] || say('done'));
+      const ev = await drain(runAgent({ session: sess, userText: 'add a hat', apiKey: 'k', model: 'm', access: 'full', askPermission: async () => true, maxTurns: 8 }));
+      return { sess, ev, nudges: sess.messages.filter((m) => m.role === 'user' && /^\[VOX CHECK\]/.test(textOf(m))) };
+    };
+    let r = await runWith([call('w1', 'write', { path: 'src/hat.js', content: 'export const hat = 1;\n' }), say('Added the hat.'), say('The tests pass. Added the hat.')]);
+    check('changed code, ran nothing, said done: one reminder naming the project\'s test command', r.nudges.length === 1 && textOf(r.nudges[0]).includes('with npm test') && r.ev.some((e) => e.type === 'warning' && e.code === 'check-nudge'), r.nudges.map(textOf));
+    check('and the run then finishes', r.ev.some((e) => e.type === 'done'), r.ev.map((e) => e.type).slice(-3));
+    r = await runWith([call('w1', 'write', { path: 'src/hat.js', content: 'export const hat = 2;\n' }), call('s1', 'shell', { command: 'echo checked' }), say('Added the hat; checked it.')]);
+    check('ran something after the change: no reminder', r.nudges.length === 0, r.nudges.length);
+    r = await runWith([call('w1', 'write', { path: 'NOTES.md', content: '# notes\n' }), say('Wrote the notes.')]);
+    check('only docs changed: no reminder', r.nudges.length === 0, r.nudges.length);
+    check('the chat does not draw the reminder as your message', HM.includes('if (/^\\[VOX CHECK\\]/.test(first)) { finalizeRunCard(); continue; }'), 'drawn');
+    fs.rmSync(D, { recursive: true, force: true });
+  }
+
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error(e); process.exit(1); });

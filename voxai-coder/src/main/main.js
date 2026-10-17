@@ -1324,6 +1324,8 @@ app.whenReady().then(() => {
     return { ok: true, added, web, looked };
   });
   ipcMain.handle('sessions:search', (_e, query) => store.searchSessions(userData(), query));
+  // What a message has cost you on each model, from your own sessions (the model picker).
+  ipcMain.handle('models:costStats', () => require('../backend/coststats').modelCosts(store.sessionsDir(userData())));
   ipcMain.handle('sessions:create', async (_e, { title, workdir, model }) => {
     const s = getSettings(false);
     // Only a folder that is there. A typo made a session in C:\does\not\exist without a
@@ -1759,7 +1761,8 @@ app.whenReady().then(() => {
         // How long it took and what it cost, under the answer -- a finished build said nothing of
         // either (the user: "no end recorded time lapsed"). Kept, so a reopened session shows it too.
         if (!store.isDeleted(sess)) {
-          const took = { at: sess.messages.length, ms: Date.now() - runT0, cost: runCost, tokens: runTokens, end: runEnd, ...(runParts ? { parts: runParts.parts, extras: runParts.extras } : {}) };
+          // model: which one this run was on, for what a message costs per model (coststats.js).
+          const took = { at: sess.messages.length, ms: Date.now() - runT0, cost: runCost, tokens: runTokens, end: runEnd, model: sess.model || getSettings(false).openrouterModel || '', ...(runParts ? { parts: runParts.parts, extras: runParts.extras } : {}) };
           const log = sess.runLog || (sess.runLog = []);
           log.push(took); if (log.length > 300) log.splice(0, log.length - 300);
           const c3 = allRenderers(); c3 && c3.send('agent:event', { sessionId, runKey, event: { type: 'run_summary', ...took } });

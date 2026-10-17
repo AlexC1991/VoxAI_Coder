@@ -83,4 +83,41 @@ function commandsSection(workdir) {
     + c.map((x) => `- ${x.what}: ${x.command}`).join('\n');
 }
 
-module.exports = { pickFacts, detectCommands, commandsSection };
+// What a project is, at a glance: its folders, its key files, the frameworks it uses and the
+// start of its README -- so a session starts working instead of spending its first steps
+// listing and opening files. Only things that rarely change (no file counts, no git status),
+// so the session's fixed prompt is not disturbed every time a file is added.
+const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'out', 'release', 'coverage', '.next', '.nuxt', 'target', 'venv', '.venv', '__pycache__', '.idea', '.vscode', '.voxai', '.cache', 'tmp', 'temp', 'vendor']);
+const KEY_FILE = /^(package\.json|tsconfig(\.\w+)?\.json|vite\.config\.\w+|next\.config\.\w+|astro\.config\.\w+|svelte\.config\.\w+|webpack\.config\.\w+|electron-builder\.\w+|wrangler\.(toml|json|jsonc)|cargo\.toml|go\.mod|pyproject\.toml|requirements\.txt|setup\.py|makefile|cmakelists\.txt|dockerfile|docker-compose\.ya?ml|readme(\.\w+)?|agents\.md|claude\.md|\.env\.example|index\.html|manage\.py|gemfile|pom\.xml|build\.gradle(\.kts)?|\w+\.sln|\w+\.csproj)$/i;
+const STACK = ['react', 'next', 'vue', 'nuxt', 'svelte', '@sveltejs/kit', 'astro', 'solid-js', 'angular', '@angular/core', 'electron', 'vite', 'webpack', 'express', 'fastify', 'hono', 'koa', 'typescript', 'tailwindcss', 'three', 'phaser', 'pixi.js', 'prisma', 'drizzle-orm', 'mongoose', 'jest', 'vitest', 'mocha', 'playwright', '@playwright/test', 'cypress', 'wrangler', 'react-native', 'expo'];
+
+function overviewSection(workdir, { local = false } = {}) {
+  let ents = [];
+  try { ents = fs.readdirSync(workdir, { withFileTypes: true }); } catch { return ''; }
+  const dirs = ents.filter((e) => e.isDirectory() && !SKIP_DIRS.has(e.name) && !e.name.startsWith('.')).map((e) => e.name + '/').sort().slice(0, 25);
+  const files = ents.filter((e) => e.isFile() && KEY_FILE.test(e.name)).map((e) => e.name).sort();
+  if (!dirs.length && !files.length) return '';
+  const lines = [`[PROJECT OVERVIEW] ${path.basename(workdir)}, at a glance (from its files when the session started; read them for detail):`];
+  if (dirs.length) lines.push('Folders: ' + dirs.join(', '));
+  if (files.length) lines.push('Key files: ' + files.join(', '));
+  const pkg = readJson(path.join(workdir, 'package.json'));
+  if (pkg) {
+    const deps = Object.assign({}, pkg.dependencies || {}, pkg.devDependencies || {});
+    const stack = STACK.filter((d) => deps[d]);
+    if (stack.length) lines.push('Uses: ' + stack.join(', '));
+    if (pkg.description) lines.push('About: ' + String(pkg.description).slice(0, 200));
+  }
+  if (!local) {
+    const readme = files.find((f) => /^readme(\.md|\.txt)?$/i.test(f));
+    if (readme) {
+      try {
+        const text = fs.readFileSync(path.join(workdir, readme), 'utf8')
+          .split(/\r?\n/).filter((l) => l.trim() && !/^\s*(!\[|<img|\[!\[|<p align|<\/?div)/i.test(l)).slice(0, 8).join(' ').replace(/\s+/g, ' ').slice(0, 500);
+        if (text) lines.push('README begins: ' + text);
+      } catch { /* unreadable */ }
+    }
+  }
+  return lines.join('\n');
+}
+
+module.exports = { pickFacts, detectCommands, commandsSection, overviewSection };

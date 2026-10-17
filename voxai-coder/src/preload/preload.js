@@ -228,6 +228,7 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
   openrouterGenerations: (opts) => ipcRenderer.invoke('openrouter:generations', opts || {}),
   openrouterModels: () => ipcRenderer.invoke('openrouter:models'),
   modelFlex: (id) => ipcRenderer.invoke('models:flex', id),
+  modelCostStats: () => ipcRenderer.invoke('models:costStats'),
   setModelFlex: (id, on, price) => ipcRenderer.invoke('models:setFlex', { id, on, price }),
   openrouterTestMgmt: (key) => ipcRenderer.invoke('openrouter:testMgmt', { key }),
 

@@ -1948,8 +1948,9 @@ async function drain(gen) {
     check('describing turned off says so', off && /describing them is turned off in Settings/.test(off.text), off);
     check('it shows above the box, and when the model is picked', HTML.includes('id="shEyes"') && HTML.includes("const eyes = $('shEyes'), en = screenshotNote();")
       && HTML.includes("  const en = screenshotNote(id);\n  if (en && !seenNote('eyes:' + id)) toast(en.text);"), 'places');
-    check('the picker footer is one fixed line with the model\'s full name, nothing else', HTML.includes('<span class="pk-foot" id="modelMenuFoot" aria-live="polite"><span class="fid" id="pkId"></span></span>')
-      && HTML.includes("$('pkId').textContent = id ? ((m && m.name) || id) : '';") && HTML.includes('.pk-foot{display:flex;align-items:center;border-top:1px solid var(--edge);padding:0 12px;height:30px;')
+    check('the picker footer is one fixed line: the model\'s full name, and what a message costs you on it', HTML.includes('<span class="pk-foot" id="modelMenuFoot" aria-live="polite"><span class="fid" id="pkId"></span></span>')
+      && HTML.includes("$('pkId').textContent = id ? ((m && m.name) || id) + per : '';") && HTML.includes('.pk-foot{display:flex;align-items:center;border-top:1px solid var(--edge);padding:0 12px;height:30px;')
+      && HTML.includes('.pk-foot .fid{font-size:12px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;')
       && !HTML.includes('pkFacts') && !HTML.includes('function modelFacts('), 'footer');
   }
 
