@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-vKKv9QavryDojLqbR1gbr0EcSmlNTPcaeOBnFSrdyzo='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-3fAfEyyOCqr7/3RqGmHdftd3JeXKsj2p7iXcwFscbnQ='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -786,24 +786,10 @@ tests"). Scroll the row instead of breaking words:
 .upd-row .upd-meta[hidden]{display:none}
 .upd-row.dl .set-lbl{color:var(--ink)}
 .upd-row.dl .set-lbl::before{content:"";width:8px;height:8px;border-radius:50%;border:1.5px solid var(--edge2);border-top-color:var(--gold);animation:spin .8s linear infinite}
-/* Settings sidebar */
-.set-upd{display:flex;flex-direction:column;gap:7px;margin:0 6px 12px;padding:10px 10px 11px;border:1px solid var(--edge2);border-radius:9px;background:var(--panel2)}
-.set-upd[hidden]{display:none}
-.set-upd.ready{border-color:var(--goldedge)}
-.set-upd .su-top{display:flex;align-items:center;gap:8px;font-size:12px;color:var(--mut);line-height:1.35}
-.set-upd .su-top .upd-dot{flex:none}
-.set-upd #setUpdTxt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.set-upd .su-pct{flex:none;font:11.5px 'Sometype Mono',monospace;color:var(--dim);font-variant-numeric:tabular-nums}
-.set-upd.ready .su-top{color:var(--ink);font-weight:600}
-.set-upd.ready .upd-dot{background:var(--gold);box-shadow:0 0 5px var(--goldedge)}
-.set-upd:not(.ready) .upd-dot{animation:pulse 1.6s infinite}
-.set-upd .su-act{align-self:flex-start;border:1px solid var(--gold);background:none;color:var(--gold);border-radius:6px;padding:3px 10px;font:600 12px Chivo,sans-serif;cursor:pointer}
-.set-upd .su-act:hover{background:rgba(200,169,97,.1)}
-.set-upd .su-act[hidden]{display:none}
 /* the note in the main window */
 .upd-pill{position:relative;overflow:hidden}
 .upd-pill .upd-track{position:absolute;left:0;right:0;bottom:0;height:2px;border-radius:0}
-@media (prefers-reduced-motion:reduce){.upd-track i::after,.upd-track.indet i,.upd-row.dl .set-lbl::before,.set-upd .upd-dot{animation:none}.upd-track i{transition:none}}
+@media (prefers-reduced-motion:reduce){.upd-track i::after,.upd-track.indet i,.upd-row.dl .set-lbl::before{animation:none}.upd-track i{transition:none}}
 /* ---- Settings: Apps (MCP) ---- */
 /* One list for what you have, a set of starting points to add from, and an editor that takes the page. */
 #mcpHome[hidden],.mcp-edit[hidden]{display:none}
@@ -1767,7 +1753,6 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
     <button type="button" data-set="skills"><svg viewBox="0 0 24 24"><path d="M5 4.5A1.5 1.5 0 0 1 6.5 3H19v15H6.5A1.5 1.5 0 0 0 5 19.5zM5 19.5A1.5 1.5 0 0 0 6.5 21H19M9 7h6M9 10.5h4"/></svg>Skills</button>
     <button type="button" data-set="mcp"><svg viewBox="0 0 24 24"><path d="M9 3v5M15 3v5M6 8h12v3a6 6 0 0 1-12 0zM12 17v4"/></svg>Apps (MCP)</button>
     <button type="button" data-set="keys"><svg viewBox="0 0 24 24"><rect x="2.5" y="6" width="19" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01M7 14h10"/></svg>Keyboard</button>
-    <div class="set-upd" id="setUpd" hidden aria-live="polite"><div class="su-top"><span class="upd-dot"></span><span id="setUpdTxt"></span><span class="su-pct" id="setUpdPct"></span></div><span class="upd-track"><i></i></span><button type="button" class="su-act" id="setUpdAct" hidden>Restart now</button></div>
     <div class="set-foot">Changes save as you go.<br><span id="setVersion">VoxAI Coder</span></div>
   </nav>
   <div class="set-main">
@@ -10122,21 +10107,8 @@ function paintUpdate(){
     btn.className = st.state === 'ready' ? 'btn' : 'btn ghost';
   }
 
-  // ---- Settings sidebar: on every page of Settings, under the version ----
-  const su = $('setUpd');
-  if (su) {
-    const show = st.state === 'downloading' || st.state === 'ready';
-    su.hidden = !show;
-    if (show) {
-      su.classList.toggle('ready', st.state === 'ready');
-      $('setUpdTxt').textContent = UPD_SAY || (st.state === 'ready' ? 'Update ' + st.next + ' ready' : 'Downloading ' + st.next);
-      $('setUpdPct').textContent = st.state === 'downloading' && !UPD_SAY ? pct + '%' : '';
-      $('setUpdAct').hidden = st.state !== 'ready';
-      track(su, mode === 'done' ? '' : mode);
-    }
-  }
 
-  // ---- the note in the main window: not while Settings is open, which has its own ----
+  // ---- the note in the main window: not while Settings is open (Account > Updates has it there) ----
   if (!pill) return;
   pill.classList.remove('ready', 'dl', 'bad');
   let away = ''; try { away = localStorage.getItem('voxUpdAway') || ''; } catch {}
@@ -10172,7 +10144,6 @@ async function restartIntoUpdate(){
 if (window.voxai && window.voxai.updates) {
   $('updTxt').onclick = () => { if (UPD.state === 'ready') restartIntoUpdate(); else openModal('account'); };
   $('updX').onclick = () => { try { localStorage.setItem('voxUpdAway', UPD.state + ':' + (UPD.next || '')); } catch {} $('updPill').hidden = true; };
-  if ($('setUpdAct')) $('setUpdAct').onclick = () => restartIntoUpdate();
   $('btnUpdCheck').onclick = async () => {
     if (UPD.state === 'ready') { restartIntoUpdate(); return; }
     const st = await window.voxai.updates.check(); if (st) { UPD = st; paintUpdate(); }
