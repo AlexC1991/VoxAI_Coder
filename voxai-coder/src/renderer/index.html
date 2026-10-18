@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-X8vEDZoOgnx15vMmdjiWmArfn0GDjarGxBhEZmY5n2I='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-yrioA85Gltz3EAKrQbSHe5fFEUpYbqxHtSCfiz60ORk='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -964,7 +964,12 @@ tests"). Scroll the row instead of breaking words:
 /* ===================== conversation refit (approved 2026-09-25) ===================== */
 /* thread rhythm: answers read as prose, not as a stack of announcements */
 .md{font-size:15px;line-height:1.65;text-wrap:pretty;overflow-wrap:break-word}
-.user{align-self:flex-end;max-width:80%;background:var(--panel2);border:0;border-radius:14px 14px 4px 14px;padding:10px 14px;font-size:14.5px;line-height:1.55}
+.user{align-self:flex-end;max-width:80%;background:var(--panel2);border:0;border-radius:14px 14px 4px 14px;padding:10px 14px;font-size:14.5px;line-height:1.55;position:relative}
+/* Fork from here: under the message, on hover (or keyboard focus), so it does not crowd the thread. */
+.user .u-fork{position:absolute;right:2px;bottom:-22px;display:flex;align-items:center;gap:5px;height:22px;padding:0 8px;border:1px solid var(--edge2);border-radius:6px;background:var(--panel);color:var(--dim);font:12px Chivo,sans-serif;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .12s}
+.user:hover .u-fork,.user .u-fork:focus-visible{opacity:1;pointer-events:auto}
+.user .u-fork:hover{color:var(--gold);border-color:var(--goldedge)}
+.user.steer .u-fork{display:none}
 /* what you said while it worked: a compact note in your colour, and whether Vox has read it */
 .user.steer{max-width:70%;padding:8px 12px 9px;font-size:13.5px;background:rgba(200,169,97,.07);box-shadow:inset 0 0 0 1px var(--goldedge);border-radius:12px 12px 4px 12px;animation:runIn .2s ease}
 .steer-tag{display:flex;align-items:center;gap:7px;margin-bottom:4px;font:500 11.5px Chivo,sans-serif;color:var(--gold)}
@@ -3178,8 +3183,32 @@ function addUser(text, attachParts){
     }
   }
   const t = el('div'); t.textContent = text || ''; u.appendChild(t);
+  // Fork from here: a new session with everything before this message (see forkFrom).
+  const fk = el('button', 'u-fork', '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="9" r="2"/><path d="M6 7v10"/><path d="M18 11c0 4-6 3-12 6"/></svg><span>Fork</span>');
+  fk.type = 'button';
+  fk.title = 'Fork from here: a new session with everything before this message, and the message back in the box to change. This one stays as it is.';
+  fk.onclick = (e) => { e.stopPropagation(); forkFrom(u, t.textContent); };
+  u.appendChild(fk);
   const r = RR(); if(r){ r.appendChild(u); followThread(true); }
   return u;
+}
+/**
+ * Fork from one of your messages (Pi's /fork): try another way from that point without losing
+ * this one. The new session opens with the message back in the box.
+ */
+async function forkFrom(bubble, text){
+  const v = [...viewStore.values()].find((x) => x && x.root && x.root.contains(bubble));
+  if (!v || !v.id) return;
+  const nth = [...v.root.querySelectorAll('.user:not(.steer)')].indexOf(bubble);
+  let r = null;
+  try { r = await window.voxai.sessionsFork(v.id, nth, text); } catch (e) { r = { ok: false, error: String((e && e.message) || e) }; }
+  if (!r || !r.ok) { toast((r && r.error) || 'Could not fork it.'); return; }
+  await refreshSessionList();
+  if (PANE) { toast('Forked into a new session: "' + r.title + '". Open it from the list.'); return; }
+  await openSession(r.id);
+  const p = $('prompt'); p.value = r.text || ''; p.dispatchEvent(new Event('input', { bubbles: true })); p.focus();
+  if (Array.isArray(r.images) && r.images.length) { PENDING_ATTACH = r.images.map((im, i) => ({ dataUrl: im.image_url && im.image_url.url, name: 'image ' + (i + 1) })).filter((a) => a.dataUrl); try { renderAttachTray(); } catch {} }
+  toast('Forked: everything before that message, with it back in the box to change and send.');
 }
 /**
  * A steering instruction, shown in the thread as the message the user sent.

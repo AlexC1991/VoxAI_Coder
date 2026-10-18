@@ -33,6 +33,49 @@ function newId() {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}_${crypto.randomBytes(3).toString('hex')}`;
 }
 
+// Messages the app wrote under your name -- its notes to the model -- are not drawn as your
+// messages (renderer openSession). [VOX CMD] is: it is a slash command you typed.
+const APP_NOTE = /^\[VOX (REWIND|PLAN|CHECK|CONTEXT|CUTOFF|GOAL|COMPACTED CONTEXT|TOOL SCREENSHOTS)\]/;
+const textOfMessage = (m) => (typeof m.content === 'string' ? m.content
+  : (Array.isArray(m.content) ? m.content.filter((p) => p && p.type === 'text').map((p) => p.text).join(' ') : ''));
+/** What a message you sent says, as the thread shows it. */
+function shownText(m) {
+  const t = textOfMessage(m);
+  return /^\[VOX CMD\] /.test(t) ? t.split('\n')[0].replace(/^\[VOX CMD\] /, '') : t;
+}
+/** Indices of the messages drawn as yours, in order. */
+function personMessages(messages) {
+  const out = [];
+  (messages || []).forEach((m, i) => { if (m && m.role === 'user' && !APP_NOTE.test(textOfMessage(m))) out.push(i); });
+  return out;
+}
+
+/**
+ * A copy of a session up to (not including) one of your messages: try another way from that point
+ * without losing the first (Pi's /fork). The message is picked by its place among yours and checked
+ * by its text: older turns summarised away shift the count, so the text decides when they differ.
+ * The copy keeps the original's frozen prompt, so its first request can reuse the original's cache.
+ */
+function forkSession(src, { nth, text } = {}) {
+  const mine = personMessages(src.messages);
+  const norm = (s) => String(s || '').replace(/\s+/g, ' ').trim();
+  const want = norm(text);
+  let at = Number.isInteger(nth) ? mine[nth] : undefined;
+  if (want && (at === undefined || norm(shownText(src.messages[at])) !== want)) {
+    const same = mine.filter((i) => norm(shownText(src.messages[i])) === want);
+    at = same.length ? same.reduce((best, i) => (Math.abs(mine.indexOf(i) - nth) < Math.abs(mine.indexOf(best) - nth) ? i : best), same[0]) : undefined;
+  }
+  if (at === undefined) return { ok: false, error: 'That message is no longer in the session (older turns were summarised). Fork from a later one.' };
+  const copy = createSession({ workdir: src.workdir, model: src.model, title: ('Fork: ' + String(src.title || 'session')).slice(0, 80) });
+  copy.coderModel = src.coderModel || '';
+  copy.messages = JSON.parse(JSON.stringify(src.messages.slice(0, at)));
+  if (src.promptFrozen) copy.promptFrozen = src.promptFrozen;
+  if (src.prunedStore && Object.keys(src.prunedStore).length) copy.prunedStore = JSON.parse(JSON.stringify(src.prunedStore));
+  const m = src.messages[at];
+  const images = Array.isArray(m.content) ? m.content.filter((p) => p && p.type === 'image_url') : [];
+  return { ok: true, session: copy, text: shownText(m), images };
+}
+
 function createSession({ workdir, model, title, parentId }) {
   return {
     id: newId(),
@@ -292,4 +335,4 @@ function exportSession(session) {
   return lines.join('\n');
 }
 
-module.exports = { markDeleted, isDeleted, createSession, saveSession, loadSession, listSessions, searchSessions, endsOnQuestion, deleteSession, sessionsDir, recordUsage, exportSession, isSubSession };
+module.exports = { markDeleted, isDeleted, createSession, saveSession, loadSession, listSessions, searchSessions, endsOnQuestion, deleteSession, sessionsDir, recordUsage, exportSession, isSubSession, forkSession, personMessages };

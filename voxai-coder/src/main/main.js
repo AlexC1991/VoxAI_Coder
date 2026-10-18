@@ -1352,6 +1352,16 @@ app.whenReady().then(() => {
     live.set(sess.id, sess);
     return { ok: true, id: sess.id, title: sess.title, workdir: sess.workdir, model: sess.model, updatedAt: sess.updatedAt };
   });
+  // A copy up to one of your messages (backend/sessions.js forkSession), opened with that message
+  // back in the box to change and send.
+  ipcMain.handle('sessions:fork', async (_e, { id, nth, text } = {}) => {
+    const src = await getLive(id);
+    const r = store.forkSession(src, { nth: Number(nth), text });
+    if (!r.ok) return r;
+    await store.saveSession(userData(), r.session);
+    live.set(r.session.id, r.session);
+    return { ok: true, id: r.session.id, title: r.session.title, text: r.text, images: r.images };
+  });
   ipcMain.handle('sessions:open', async (_e, id) => {
     const sess = await getLive(id);
     // Fix 1: surface persisted usage ledger back to the UI

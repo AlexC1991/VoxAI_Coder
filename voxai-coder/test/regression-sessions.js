@@ -641,6 +641,38 @@ function loadWith(file, stubs) {
   }
 
   try { fs.rmSync(WD, { recursive: true, force: true }); } catch {}
-  console.log(`\n${pass} passed, ${fail} failed`);
+  
+// ---- Fork from one of your messages (Pi's /fork) ----
+{
+  const S = require(path.join(__dirname, '..', 'src', 'backend', 'sessions.js'));
+  const src = S.createSession({ workdir: 'C:/p', model: 'm', title: 'Red button' });
+  src.promptFrozen = 'FROZEN';
+  src.messages = [
+    { role: 'user', content: '[VOX CONTEXT] the project changed' },
+    { role: 'user', content: 'make a red button' },
+    { role: 'assistant', content: 'done' },
+    { role: 'user', content: '[VOX CHECK] check it' },
+    { role: 'assistant', content: 'checked' },
+    { role: 'user', content: [{ type: 'text', text: 'now make it blue' }, { type: 'image_url', image_url: { url: 'data:image/png;base64,AA' } }] },
+    { role: 'assistant', content: 'blue' },
+    { role: 'user', content: '[VOX CMD] /review\nreview the changes' },
+  ];
+  check('your messages are the ones the thread draws as yours (app notes are not; a slash command is)', JSON.stringify(S.personMessages(src.messages)) === '[1,5,7]', S.personMessages(src.messages));
+  const r = S.forkSession(src, { nth: 1, text: 'now make it blue' });
+  check('a fork keeps everything before the message, gives it back with its picture, and keeps the cached prompt', r.ok && r.session.messages.length === 5 && r.text === 'now make it blue'
+    && r.images.length === 1 && r.session.promptFrozen === 'FROZEN' && r.session.id !== src.id && r.session.title === 'Fork: Red button' && src.messages.length === 8, { ok: r.ok, n: r.session && r.session.messages.length });
+  // Older turns summarised away shift the count: the text decides.
+  const shifted = S.forkSession(src, { nth: 2, text: 'now make it blue' });
+  check('when the count is off (turns summarised away), the text finds the right message', shifted.ok && shifted.session.messages.length === 5, shifted.session && shifted.session.messages.length);
+  const cmd = S.forkSession(src, { nth: 2, text: '/review' });
+  check('a slash command is forked from as you typed it', cmd.ok && cmd.text === '/review' && cmd.session.messages.length === 7, cmd.text);
+  const gone = S.forkSession(src, { nth: 9, text: 'something summarised away' });
+  check('a message that is no longer there says so', !gone.ok && /summarised/.test(gone.error), gone);
+  const H = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'index.html'), 'utf8');
+  check('each of your messages has a Fork button; the fork opens with the message back in the box', H.includes("const fk = el('button', 'u-fork',") && H.includes('r = await window.voxai.sessionsFork(v.id, nth, text);')
+    && H.includes("const p = $('prompt'); p.value = r.text || '';") && fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8').includes("ipcMain.handle('sessions:fork'"), 'wiring');
+}
+
+console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })().catch((e) => { console.error('HARNESS ERROR:', e); process.exit(2); });

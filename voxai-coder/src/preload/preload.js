@@ -71,6 +71,7 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
   // sessions (our own JSONL store)
   sessionsList: () => ipcRenderer.invoke('sessions:list'),
   sessionsCreate: (opts) => ipcRenderer.invoke('sessions:create', opts || {}),
+  sessionsFork: (id, nth, text) => ipcRenderer.invoke('sessions:fork', { id, nth, text }),
   sessionsSetCoder: (id, model) => ipcRenderer.invoke('sessions:setCoder', { id, model }),
   dataShareSet: (workdir, ok) => ipcRenderer.invoke('datashare:set', { workdir, ok: !!ok }),
   sessionsOpen: (id) => ipcRenderer.invoke('sessions:open', id),
