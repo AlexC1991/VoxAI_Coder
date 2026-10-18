@@ -198,7 +198,7 @@ if (BRIDGE && !LINUX) {
   fs.mkdirSync(RELEASES_DIR, { recursive: true });
   const home = `https://coderook.com/${OWNER}/${PROJECT}`;
   const dl = `${FEED}/${encodeURIComponent(file)}`;
-  fs.writeFileSync(path.join(RELEASES_DIR, 'README.md'), `# VoxAI Coder releases have moved
+  const movedReadme = `# VoxAI Coder releases have moved
 
 From ${version}, VoxAI Coder is released from its main project: ${home}
 
@@ -208,7 +208,7 @@ Copies installed from here update by themselves: ${version} is published here as
 from it on they check the main project.
 
 Linux, building from source and help: https://github.com/AlexC1991/VoxAI_Coder
-`);
+`;
   const steps = [
     ['submit', '--name', LEGACY_PROJECT, '-m', title],
     ['attach', installer],
@@ -219,6 +219,7 @@ Linux, building from source and help: https://github.com/AlexC1991/VoxAI_Coder
     console.log(`dry run -- and, for copies still on the old feed, in ${RELEASES_DIR}:`);
     for (const st of steps) console.log('  cbx ' + st.map((x) => (/\s/.test(x) ? JSON.stringify(x) : x)).join(' ').slice(0, 160));
   } else {
+    fs.writeFileSync(path.join(RELEASES_DIR, 'README.md'), movedReadme);
     for (const st of steps) say(cbxRun(st, RELEASES_DIR));
   }
 }
