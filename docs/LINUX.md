@@ -113,7 +113,7 @@ when they are set. Skills in `~/.claude/skills` and `~/.codex/skills` are picked
 | **The terminal panel** (`>_`) | PowerShell | your `$SHELL`, as a login shell |
 | **`sudo` and password prompts** | n/a | refused in the agent's shell; it runs them in the terminal panel, where you type the password |
 | **Models on this PC** | yes (llama.cpp, Vulkan) | yes (llama.cpp's Linux Vulkan build, x64 or ARM64); on the GPU with a Vulkan driver, on the CPU without |
-| **Computer use: desktop apps** | yes | not yet (Windows UI Automation) |
+| **Computer use: desktop apps** | yes (UI Automation) | yes on X11 and XWayland windows, with `xdotool` and `xwininfo`; screenshots from the desktop's own tool, ImageMagick's `import` or `grim` (see [Troubleshooting](#the-agent-cannot-use-desktop-apps)) |
 | **Computer use: the browser** | Chrome or Edge | Chrome, Chromium, Edge or Brave, found in `/usr/bin` or `/snap/bin` |
 | **The preview pane** | yes | yes |
 | **MCP apps** | all | all but *Windows apps* |
@@ -233,6 +233,32 @@ Computer use drives a real Chrome-family browser. Install one of Google Chrome, 
 Microsoft Edge or Brave in the usual place (`/usr/bin/google-chrome`, `/usr/bin/chromium`,
 `/snap/bin/chromium`, ...). A Flatpak-only browser is not found. The preview pane needs
 nothing extra.
+
+### The agent cannot use desktop apps
+
+Desktop control drives windows through `xdotool` and lists them with `xwininfo`, and takes
+screenshots with whatever the desktop offers: its own screenshot tool (COSMIC's
+`cosmic-screenshot`), ImageMagick's `import` on X11, or `grim` on wlroots compositors
+(Sway, Hyprland).
+
+```bash
+sudo apt install xdotool x11-utils imagemagick   # Debian / Ubuntu (x11-utils has xwininfo)
+sudo dnf install xdotool xwininfo ImageMagick    # Fedora
+sudo pacman -S xdotool xorg-xwininfo imagemagick # Arch
+sudo apt install grim                            # wlroots desktops, for screenshots
+```
+
+On Wayland only XWayland windows can be reached (most X11 apps, and everything under Wine or
+Proton); a native Wayland window is not listed. If screenshots fail but clicks work, the
+desktop refuses X11 capture: install its own screenshot tool or `grim`, or log into an X11
+session.
+
+### The preview is blank or does not follow the page
+
+Some Linux compositors do not repaint an embedded view until it moves. The app nudges the
+preview by a pixel after each page load to make them repaint; if it still stays blank, resize
+the window once. On Wayland, previews you are not looking at stay inside the main window
+instead of a hidden one, since Wayland gives no hidden window to keep them in.
 
 ### Models on this PC run on the CPU, not the graphics card
 

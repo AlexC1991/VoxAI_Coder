@@ -13,9 +13,8 @@
  * use); Windows-key shortcuts are refused; password boxes are never read or typed into; password
  * managers and private browser windows are never looked into.
  */
-const input = require('./win-input');
-const native = require('./native');
-const { UiaHelper } = require('./uia');
+// This system's backend (cu/platform.js): Windows, Linux, or none yet.
+const { input, native, UiaHelper } = require('./platform');
 
 const uia = new UiaHelper();
 // Set by main.js, which owns the Esc kill switch.

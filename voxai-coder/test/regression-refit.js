@@ -1128,6 +1128,7 @@ async function drain(gen) {
         new vm.Script(PRE).runInNewContext({
           require: () => ({ contextBridge: { exposeInMainWorld: () => { exposed = true; } }, ipcRenderer: { invoke() {}, on() {}, send() {}, removeListener() {} } }),
           location: { protocol: u.protocol, pathname: u.pathname }, URL, decodeURIComponent,
+          process: { platform: 'win32' }, // the bridge tells the page which system it is on
         });
         return exposed;
       };
@@ -1158,9 +1159,11 @@ async function drain(gen) {
     {
       const H = read('src/renderer/index.html');
       check('a dropped image is attached', H.includes("document.addEventListener('drop', (e) => {") && H.includes('addImageFiles(e.dataTransfer.files);'), 'nothing');
-      check('a pasted image is attached, text pastes as usual', H.includes("$('prompt').addEventListener('paste', (e) => {") && H.includes("if (!files.some((f) => /^image\\//i.test(f.type || ''))) return;"), 'nothing');
-      check('a file that is not an image goes in as an @-mention (sent with the message), from the project folder when inside it', H.includes('window.voxai.pathForFile(f)') && H.includes("ta.value = (ta.value && !/\\s$/.test(ta.value) ? ta.value + ' ' : ta.value) + paths.map(rel).map(q).join(' ') + ' ';")
-        && H.includes("const q = (p) => '@' + (/\\s/.test(p) ? '\"' + p + '\"' : p);"), 'dropped');
+      check('a pasted picture or file is attached, text pastes as usual', H.includes("$('prompt').addEventListener('paste', (e) => {") && H.includes('const files = e.clipboardData ? [...e.clipboardData.files] : [];') && H.includes('if (!files.length) return;'), 'nothing');
+      // A file is a chip in the box now (it used to be typed into it), and goes as an @-mention
+      // line when the message is sent; [BB] in regression-sessions.js checks that line.
+      check('a file that is not an image is attached as a chip and sent as an @-mention, from the project folder when inside it', H.includes('window.voxai.pathForFile(f)') && H.includes("PENDING_ATTACH.push({ kind: 'file', path: p, name: f.name || baseName(p), bytes: f.size || 0 })")
+        && H.includes("return files.map((a) => { const p = rel(a.path); return '@' + (/\\s/.test(p) ? '\"' + p + '\"' : p); }).join(' ');"), 'dropped');
       check('"Keys saved" only when a key was typed', H.includes("flashSettingsSaved(('openrouterKey' in patch || 'managementKey' in patch) ? 'Keys saved' : 'Saved');"), 'always');
     }
     // Text that is not ours is text, not HTML: a queued message with an onerror
@@ -2595,7 +2598,7 @@ async function drain(gen) {
     const SPl = read('src/main/split.js'), PRE = read('src/preload/preload.js');
     check('a dialog or menu in the page is not covered by the preview or split panes: they step aside and a snapshot stands in', H.includes("const OVERLAY_OPEN = '.modal-bg.show, .share-bg, .chip.open';")
       && H.includes('const shots = await window.voxai.split.overlay(true);') && H.includes('#overlayShots{position:fixed;inset:0;z-index:30;pointer-events:none}')
-      && M.includes("ipcMain.handle('overlay:hold', async (e, on) => {") && M.includes('if (overlayHeld) { v.setVisible(false); continue; }') && M.includes('split.hold(dragHeld || overlayHeld)')
+      && M.includes("ipcMain.handle('overlay:hold', async (e, on) => {") && M.includes('if (overlayHeld) { v._revealed = false; v.setVisible(false); continue; }') && M.includes('split.hold(dragHeld || overlayHeld)')
       && SPl.includes('function shown() {') && PRE.includes("overlay: (on) => ipcRenderer.invoke('overlay:hold', !!on),"), 'overlay');
     check('the session on show gets its own browser in the preview as soon as it has one (it showed a blank page)', M.includes('    if (sid === shownSid) showBrowserOf(sid);'), 'shown');
     check('a parked browser sleeps when no run uses it and wakes for a run or when shown', M.includes('function napBrowser(v, asleep) {') && M.includes('napBrowser(v, !browserInUse(v));')

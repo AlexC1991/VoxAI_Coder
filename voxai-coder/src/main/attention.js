@@ -299,9 +299,14 @@ function createAttention({ app, getWindow, getSettings, saveSetting, pendingPerm
     lastCount = n;
     if (w && !w.isDestroyed()) {
       try {
-        if (s.notifyTaskbar && n > 0) { const b = await badgeFor(n); w.setOverlayIcon(b, `${n} waiting for you`); }
-        else w.setOverlayIcon(null, '');
-        if (n === 0) w.flashFrame(false);
+        if (process.platform === 'win32') {
+          if (s.notifyTaskbar && n > 0) { const b = await badgeFor(n); w.setOverlayIcon(b, `${n} waiting for you`); }
+          else w.setOverlayIcon(null, '');
+        } else {
+          // macOS: the number on the Dock icon (and Unity launchers on Linux), the system's own badge.
+          require('electron').app.setBadgeCount(s.notifyTaskbar ? n : 0);
+        }
+        if (n === 0) w.flashFrame(false);   // on macOS this stops the Dock icon bouncing
       } catch { /* not on this platform */ }
     }
     if (tray) {

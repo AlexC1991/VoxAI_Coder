@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-/LAejZJJP9fQYhHQlrWYJREYF9U5KyJmKx4TI12HLVQ='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-DkkHqluuTfgAKFG2VT35QrmUBsofZ8LFHJAroAm/SAw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -43,6 +43,9 @@ button{font-family:inherit} ::selection{background:rgba(200,169,97,.26)}
 .titlebar .tb-proj{flex:none;white-space:nowrap}
 .titlebar .tb-btn{width:32px;height:28px;flex:none;display:grid;place-items:center;border:0;border-radius:6px;background:transparent;color:var(--dim);cursor:pointer;margin-right:4px}
 .titlebar .tb-btn:hover{background:var(--sel);color:var(--gold)}
+/* macOS: its own traffic lights sit at the left of this bar (main.js, titleBarStyle). */
+html[data-platform="darwin"] .titlebar{padding-left:80px}
+html[data-platform="darwin"] .titlebar .window-buttons{display:none}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .titlebar .tb-title{flex:0 1 auto;font-size:13px;color:var(--mut);font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .titlebar .tb-spacer{flex:1}
@@ -1273,13 +1276,36 @@ tests"). Scroll the row instead of breaking words:
 .sh-steer b{color:var(--mut);font-weight:400;overflow:hidden;text-overflow:ellipsis;max-width:260px}
 .sh-steer button{border:0;background:none;color:var(--sub);cursor:pointer;font:12px Chivo,sans-serif;padding:2px 6px;border-radius:5px}
 .sh-steer button:hover{color:var(--ink);background:var(--sel)}
-.attach-tray{display:flex;align-items:center;gap:8px;min-width:0;overflow:hidden}
+/* ---- attachments: a chip each in the box (picture or file), with its name and size ---- */
+.attach-tray{display:flex;flex-wrap:wrap;align-items:center;gap:6px;min-width:0}
 .attach-tray[hidden]{display:none}
-.attach-thumb{position:relative;display:flex;align-items:center;gap:7px;min-width:0;color:var(--mut)}
-.attach-thumb img{width:26px;height:26px;border-radius:5px;object-fit:cover;display:block;flex:none;border:1px solid var(--edge2)}
-.attach-thumb .an{font-size:12.5px;max-width:160px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.attach-thumb .rm{border:0;background:none;color:var(--sub);cursor:pointer;font-size:12px;padding:0 3px;border-radius:4px}
-.attach-thumb .rm:hover{color:var(--del)}
+.att-chip{position:relative;display:flex;align-items:center;gap:8px;max-width:240px;min-width:0;padding:4px 4px 4px 4px;border:1px solid var(--edge2);border-radius:8px;background:var(--panel)}
+.att-chip .att-thumb{width:32px;height:32px;border-radius:5px;object-fit:cover;flex:none;display:block;cursor:zoom-in;background:var(--deep)}
+.att-chip .att-ico{width:32px;height:32px;border-radius:5px;flex:none;display:grid;place-items:center;background:var(--panel2);color:var(--dim)}
+.att-chip .att-txt{display:flex;flex-direction:column;min-width:0;line-height:1.3}
+.att-chip .att-name{font-size:12.5px;color:var(--ink);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.att-chip .att-meta{font:11px "Sometype Mono",monospace;color:var(--faint);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.att-chip .rm{flex:none;width:20px;height:20px;border:0;background:none;color:var(--sub);cursor:pointer;font-size:11px;border-radius:5px;display:grid;place-items:center}
+.att-chip .rm:hover{color:var(--del);background:var(--sel)}
+/* Dragging files over the window: the box says where they go. */
+.composer.drop-on{position:relative}
+.composer.drop-on::after{content:'Drop to attach';position:absolute;inset:0;display:grid;place-items:center;border:1.5px dashed var(--gold);border-radius:14px;background:color-mix(in srgb,var(--deep) 86%,transparent);color:var(--gold);font:600 13px Chivo,sans-serif;pointer-events:none;z-index:5}
+/* Sent: pictures as a row of thumbnails (one alone shows larger), files as chips. */
+.user .u-imgs{display:flex;flex-wrap:wrap;gap:6px;margin:2px 0 6px}
+.user .u-img{display:block;border-radius:8px;border:1px solid var(--edge2);cursor:zoom-in;object-fit:cover;background:var(--deep)}
+.user .u-imgs.one .u-img{max-width:260px;max-height:220px}
+.user .u-imgs.many .u-img{width:92px;height:92px}
+.user .u-files{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.user .u-file{display:inline-flex;align-items:center;gap:6px;max-width:260px;padding:3px 8px 3px 6px;border-radius:6px;border:1px solid var(--edge2);background:var(--panel);color:var(--dim);font:12px "Sometype Mono",monospace;cursor:pointer}
+.user .u-file span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.user .u-file:hover{color:var(--ink);border-color:var(--goldedge)}
+/* A picture full size: a click on a thumbnail (yours or the agent's screenshots). It is a
+   modal-bg, so the preview and the panes step aside while it is open (syncOverlay). */
+.img-viewer{position:fixed;inset:0;z-index:400;display:none;place-items:center;background:rgba(6,6,8,.86);cursor:zoom-out}
+.img-viewer.show{display:grid}
+.img-viewer img{max-width:92vw;max-height:84vh;border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.6);background:#0e0f14}
+.img-viewer .iv-cap{margin-top:10px;font:12px "Sometype Mono",monospace;color:#cfcfd6;text-align:center}
+.cu-shot img{cursor:zoom-in}
 .ctxbar{display:flex;align-items:center;gap:8px;font:12.5px Chivo,sans-serif;color:var(--dim);cursor:default;min-width:0;flex:0 1 auto;margin-left:auto;padding:3px 4px 3px 8px;margin-block:-3px;border-radius:7px;outline:0;transition:background .12s}
 .ctxbar[hidden]{display:none}
 /* Alone on the shelf it reads from the left, like everything else in the box. */
@@ -1563,7 +1589,7 @@ html[data-split].pane-on .work .workhead,.pane-mode.pane-on .workhead{box-shadow
          outlived them, holding only a Settings link; Settings is the gear above. -->
   <div class="main">
     <div class="side">
-      <button class="newsess" id="btnNew">✎ New session <kbd>Ctrl N</kbd></button>
+      <button class="newsess" id="btnNew">✎ New session <kbd id="newKbd">Ctrl N</kbd></button>
       <div class="search">⌕ <input id="q" placeholder="Search sessions"><button class="sel-btn" id="btnSelect" type="button" title="Select sessions to delete several at once (Ctrl+click and Shift+click work too)">Select</button></div>
       <div class="sesslist" id="sessions"></div>
       <div class="sel-bar" id="selBar" hidden><span class="sel-count" id="selCount"></span><button type="button" id="selAll" title="Select every session in the list">All</button><button type="button" class="danger" id="selDelete" title="Move the selected sessions to the Recycle Bin (Delete)">Delete</button><button type="button" id="selCancel" title="Clear the selection (Esc)">Cancel</button></div>
@@ -1634,7 +1660,7 @@ html[data-split].pane-on .work .workhead,.pane-mode.pane-on .workhead{box-shadow
           <div class="edit" id="cmpEdit">
           <textarea id="prompt" rows="1" placeholder="Ask anything" aria-label="Message"></textarea>
           <div class="composer-row">
-            <button class="cmpbtn" id="btnAttach" title="Attach image"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
+            <button class="cmpbtn" id="btnAttach" title="Attach pictures or files"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg></button>
             <button class="cmpbtn" id="btnMic" title="Voice to text"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"></rect><path d="M5 12a7 7 0 0 0 14 0"></path><line x1="12" y1="19" x2="12" y2="21"></line></svg></button>
             <span class="vdiv"></span>
             <span class="chip" id="chipModel"><b id="chipModelVal"></b><svg class="cv" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 15 12 9 18 15"></polyline></svg>
@@ -1655,7 +1681,8 @@ html[data-split].pane-on .work .workhead,.pane-mode.pane-on .workhead{box-shadow
 </button>
           </div>
           </div>
-          <input type="file" id="fileInput" accept="image/*" multiple style="display:none">
+          <input type="file" id="fileInput" multiple style="display:none">
+          <div id="imgViewer" class="modal-bg img-viewer" role="dialog" aria-label="Picture" hidden><div><img id="imgViewerImg" alt=""><div class="iv-cap" id="imgViewerCap"></div></div></div>
         </div>
         <div class="composer-keys" id="cmpKeys"><span>↵ send</span><span>⇧↵ new line</span></div>
       </div></div>
@@ -3173,19 +3200,49 @@ function paintJump(){
 
 // --- simple blocks ---
 function addMsg(text){ const m = el('div','md'); m.innerHTML = renderVTE(text||''); if (typeof addCodeCopy === 'function') addCodeCopy(m); const r = RR(); if(r){ r.appendChild(m); followThread(); } return m; }
+/**
+ * The files a message carried: its last line when that line is only @-mentions (how attached files
+ * go, see send()). Returns the text without it and the paths. A mention inside a sentence stays text.
+ */
+function splitAttachedFiles(text){
+  const s = String(text || '');
+  const nl = s.lastIndexOf('\n');
+  const last = s.slice(nl + 1).trim();
+  if (!last || !/^(@("[^"]+"|\S+)\s*)+$/.test(last)) return { text: s, files: [] };
+  const files = [...last.matchAll(/@(?:"([^"]+)"|(\S+))/g)].map((m) => m[1] || m[2]);
+  return { text: nl >= 0 ? s.slice(0, nl).trimEnd() : '', files };
+}
 function addUser(text, attachParts){
   const u = el('div','user');
-  if (attachParts && attachParts.length) {
-    for (const part of attachParts) {
-      if (part && part.type === 'image_url' && part.image_url) {
-        const img = document.createElement('img');
-        img.src = part.image_url.url;
-        img.style.cssText = 'max-width:220px;max-height:220px;border-radius:8px;border:1px solid var(--edge2);display:block;margin:4px 0';
-        u.appendChild(img);
-      }
-    }
+  const pics = (attachParts || []).filter((p) => p && p.type === 'image_url' && p.image_url);
+  if (pics.length) {
+    const row = el('div', 'u-imgs ' + (pics.length === 1 ? 'one' : 'many'));
+    pics.forEach((part, i) => {
+      const img = document.createElement('img');
+      img.className = 'u-img'; img.alt = 'Attached picture ' + (i + 1);
+      img.src = part.image_url.url || part.image_url;
+      img.title = 'See it full size';
+      img.onclick = () => openImageViewer(img.src, pics.length > 1 ? 'Picture ' + (i + 1) + ' of ' + pics.length : 'Attached picture');
+      row.appendChild(img);
+    });
+    u.appendChild(row);
   }
+  const sp = splitAttachedFiles(text);
+  text = sp.text;
   const t = el('div'); t.textContent = text || ''; u.appendChild(t);
+  if (sp.files.length) {
+    const row = el('div', 'u-files');
+    const wd = viewDir(RT()) || '';
+    for (const p of sp.files) {
+      const f = el('button', 'u-file', '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>');
+      f.type = 'button';
+      const name = el('span'); name.textContent = baseName(p); f.appendChild(name);
+      f.title = p + '\nIts contents went with the message. Click to show it in its folder.';
+      f.onclick = (e) => { e.stopPropagation(); window.voxai.revealFile(p, wd).then((r) => { if (!r || !r.ok) toast((r && r.error) || 'Could not find that file.'); }).catch(() => {}); };
+      row.appendChild(f);
+    }
+    u.appendChild(row);
+  }
   // Fork from here: a new session with everything before this message (see forkFrom).
   const fk = el('button', 'u-fork', '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="9" r="2"/><path d="M6 7v10"/><path d="M18 11c0 4-6 3-12 6"/></svg><span>Fork</span>');
   fk.type = 'button';
@@ -3210,7 +3267,7 @@ async function forkFrom(bubble, text){
   if (PANE) { toast('Forked into a new session: "' + r.title + '". Open it from the list.'); return; }
   await openSession(r.id);
   const p = $('prompt'); p.value = r.text || ''; p.dispatchEvent(new Event('input', { bubbles: true })); p.focus();
-  if (Array.isArray(r.images) && r.images.length) { PENDING_ATTACH = r.images.map((im, i) => ({ dataUrl: im.image_url && im.image_url.url, name: 'image ' + (i + 1) })).filter((a) => a.dataUrl); try { renderAttachTray(); } catch {} }
+  if (Array.isArray(r.images) && r.images.length) { PENDING_ATTACH = r.images.map((im, i) => ({ kind: 'image', dataUrl: im.image_url && im.image_url.url, name: 'image ' + (i + 1) })).filter((a) => a.dataUrl); try { renderAttachTray(); } catch {} }
   toast('Forked: everything before that message, with it back in the box to change and send.');
 }
 /**
@@ -5787,7 +5844,9 @@ async function openSession(id){
         endOfRun(mi, before);
         if (typeof m.content === 'string') addUser(m.content);
         else { // multimodal content array {text, image_url}
-          const text = (m.content||[]).filter(p=>p&&p.type==='text').map(p=>p.text).join(' ');
+          // What you wrote: the app's own parts (the contents of @-mentioned files, [VOX FILES]) went to
+          // the model, not into your message. Joined in, a reopened session showed whole files in the bubble.
+          const text = (m.content||[]).filter(p=>p&&p.type==='text'&&!/^\[VOX [A-Z ]+\]/.test(p.text||'')).map(p=>p.text).join('\n');
           const imgs  = (m.content||[]).filter(p=>p&&p.type==='image_url');
           addUser(text, imgs);
         }
@@ -6914,69 +6973,144 @@ $('prompt').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shi
 
 
 // ===== image attachments =====
-let PENDING_ATTACH = [];   // [{dataUrl, name}]
-
-function pendingAttachments(){ return PENDING_ATTACH.map(a => ({ type: 'image_url', image_url: { url: a.dataUrl } })); }
+/**
+ * What goes with the next message: pictures ({kind:'image', dataUrl, name, bytes, w, h}) and
+ * files ({kind:'file', path, name, bytes}). A file used to be pasted into the text as an
+ * @-mention -- a raw "C:\\..." path in the box and in the sent message. It is a chip now, and
+ * becomes that @-mention only when the message goes (backend/mentions.js sends its contents).
+ */
+let PENDING_ATTACH = [];
+const attKind = (a) => (a && a.kind) || (a && a.dataUrl ? 'image' : 'file');
+function pendingAttachments(){ return PENDING_ATTACH.filter((a) => attKind(a) === 'image').map(a => ({ type: 'image_url', image_url: { url: a.dataUrl } })); }
 function clearAttachments(){ PENDING_ATTACH = []; const tr = $('attachTray'); if (tr){ tr.innerHTML=''; tr.hidden = true; } paintShelf(); }
+const attBytes = (n) => (!(n > 0) ? '' : n < 1024 ? n + ' B' : n < 1048576 ? Math.round(n / 1024) + ' KB' : (n / 1048576).toFixed(1) + ' MB');
+const baseName = (p) => String(p || '').split(/[\\/]/).filter(Boolean).pop() || String(p || '');
+/** The @-mention line for the attached files, as the message is sent (inside the project: from its folder). */
+function attachedFileLine(v){
+  const files = PENDING_ATTACH.filter((a) => attKind(a) === 'file' && a.path);
+  if (!files.length) return '';
+  const root = String(viewDir(v || actView()) || '').replace(/\\/g, '/').replace(/\/+$/, '');
+  const rel = (p) => { const f = p.replace(/\\/g, '/'); return root && f.toLowerCase().startsWith(root.toLowerCase() + '/') ? f.slice(root.length + 1) : p; };
+  return files.map((a) => { const p = rel(a.path); return '@' + (/\s/.test(p) ? '"' + p + '"' : p); }).join(' ');
+}
 function renderAttachTray(){
   const tr = $('attachTray'); if(!tr) return;
   tr.innerHTML = '';
+  const pics = PENDING_ATTACH.filter((a) => attKind(a) === 'image');
   PENDING_ATTACH.forEach((a, i) => {
-    const thumb = el('div','attach-thumb');
-    const img = document.createElement('img'); img.src = a.dataUrl; img.alt = '';
-    thumb.appendChild(img);
-    // With one image the name fits; with several, the thumbnails say enough.
-    if (PENDING_ATTACH.length === 1) { const nm = el('span', 'an'); nm.textContent = a.name || 'image'; thumb.appendChild(nm); }
-    const rm = el('button','rm','\u2715'); rm.type = 'button'; rm.title = 'Remove ' + (a.name || 'image');
+    const chip = el('div', 'att-chip');
+    if (attKind(a) === 'image') {
+      const img = document.createElement('img'); img.className = 'att-thumb'; img.src = a.dataUrl; img.alt = '';
+      img.title = 'See it full size';
+      img.onclick = () => openImageViewer(a.dataUrl, a.name || 'image');
+      chip.appendChild(img);
+    } else {
+      chip.appendChild(el('span', 'att-ico', '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/></svg>'));
+    }
+    const txt = el('div', 'att-txt');
+    const nm = el('span', 'att-name'); nm.textContent = a.name || (attKind(a) === 'image' ? 'image' : baseName(a.path)); nm.title = a.path || a.name || '';
+    const meta = el('span', 'att-meta');
+    meta.textContent = attKind(a) === 'image'
+      ? [a.w && a.h ? a.w + '\u00d7' + a.h : '', attBytes(a.bytes), a.shrunk ? 'shrunk' : ''].filter(Boolean).join(' \u00b7 ')
+      : [attBytes(a.bytes), 'sent with it'].filter(Boolean).join(' \u00b7 ');
+    if (a.shrunk) meta.title = 'Made smaller to send (' + attBytes(a.origBytes) + ' before): a picture this size costs the same to read and tells the model as much.';
+    txt.appendChild(nm); txt.appendChild(meta); chip.appendChild(txt);
+    const rm = el('button','rm','\u2715'); rm.type = 'button'; rm.title = 'Remove ' + (a.name || 'it');
     rm.onclick = () => { PENDING_ATTACH.splice(i,1); renderAttachTray(); };
-    thumb.appendChild(rm);
-    tr.appendChild(thumb);
+    chip.appendChild(rm);
+    tr.appendChild(chip);
   });
   tr.hidden = !PENDING_ATTACH.length;
   paintShelf();
 }
-/** Stage image files for the next message; say what was left out. */
+/**
+ * A picture made small enough to send: 1568 px on its long side is what Claude reads best (and
+ * is plenty for the others); a bigger one costs more tokens for nothing and swells the saved
+ * session. PNG stays PNG (screenshots keep sharp text) unless it is still over 1.5 MB; GIFs (they
+ * may move) and anything already small are left alone.
+ */
+const MAX_SIDE = 1568, MAX_BYTES = 1.5 * 1048576;
+function shrinkImage(dataUrl, type){
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      const w = img.naturalWidth, h = img.naturalHeight, bytes = Math.round(dataUrl.length * 0.75);
+      const scale = Math.min(1, MAX_SIDE / Math.max(w, h || 1));
+      if (/gif/i.test(type) || (scale === 1 && bytes <= MAX_BYTES)) return resolve({ dataUrl, w, h, bytes, shrunk: false });
+      const c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w * scale)); c.height = Math.max(1, Math.round(h * scale));
+      const g = c.getContext('2d'); g.imageSmoothingQuality = 'high'; g.drawImage(img, 0, 0, c.width, c.height);
+      let out = c.toDataURL(/png/i.test(type) ? 'image/png' : 'image/jpeg', 0.9);
+      if (out.length * 0.75 > MAX_BYTES) out = c.toDataURL('image/jpeg', 0.85);
+      resolve({ dataUrl: out, w: c.width, h: c.height, bytes: Math.round(out.length * 0.75), shrunk: true, origBytes: bytes });
+    };
+    img.onerror = () => resolve({ dataUrl, w: 0, h: 0, bytes: Math.round(dataUrl.length * 0.75), shrunk: false });
+    img.src = dataUrl;
+  });
+}
+/** Stage pictures and files for the next message; say what could not be. */
 function addImageFiles(files){
   const all = Array.from(files || []).filter(Boolean);
-  const imgs = all.filter((f) => /^image\//i.test(f.type || ''));
+  const imgs = all.filter((f) => /^image\/(png|jpe?g|webp|gif)$/i.test(f.type || ''));
   imgs.forEach((f) => {
+    if (f.size > 30 * 1048576) { toast((f.name || 'That picture') + ' is over 30 MB: too big to send.'); return; }
     const reader = new FileReader();
-    reader.onload = () => { PENDING_ATTACH.push({ dataUrl: reader.result, name: f.name || 'pasted image' }); renderAttachTray(); };
+    reader.onload = async () => {
+      const s = await shrinkImage(String(reader.result || ''), f.type);
+      PENDING_ATTACH.push({ kind: 'image', dataUrl: s.dataUrl, name: f.name || 'pasted image', bytes: s.bytes, w: s.w, h: s.h, shrunk: s.shrunk, origBytes: s.origBytes });
+      renderAttachTray();
+    };
     reader.readAsDataURL(f);
   });
-  // Anything else goes into the message as its path on disk, which the agent can read.
-  const others = all.filter((f) => !/^image\//i.test(f.type || ''));
-  const paths = others.map((f) => { try { return (window.voxai && window.voxai.pathForFile) ? window.voxai.pathForFile(f) : ''; } catch { return ''; } }).filter(Boolean);
-  if (paths.length) {
-    const ta = $('prompt');
-    // As @-mentions, so the files go WITH the message (backend/mentions.js) instead of as bare
-    // paths the agent then has to go and read. Inside the project, the path from its folder.
-    const root = String(viewDir(actView()) || '').replace(/\\/g, '/').replace(/\/+$/, '');
-    const rel = (p) => { const f = p.replace(/\\/g, '/'); return root && f.toLowerCase().startsWith(root.toLowerCase() + '/') ? f.slice(root.length + 1) : p; };
-    const q = (p) => '@' + (/\s/.test(p) ? '"' + p + '"' : p);
-    ta.value = (ta.value && !/\s$/.test(ta.value) ? ta.value + ' ' : ta.value) + paths.map(rel).map(q).join(' ') + ' ';
-    ta.dispatchEvent(new Event('input', { bubbles: true }));
-    ta.focus();
+  // Anything else is attached by its place on disk; its contents go with the message.
+  const others = all.filter((f) => !imgs.includes(f));
+  let lost = 0;
+  for (const f of others) {
+    let p = '';
+    try { p = (window.voxai && window.voxai.pathForFile) ? window.voxai.pathForFile(f) : ''; } catch { p = ''; }
+    if (!p) { lost++; continue; }
+    if (!PENDING_ATTACH.some((a) => a.path === p)) PENDING_ATTACH.push({ kind: 'file', path: p, name: f.name || baseName(p), bytes: f.size || 0 });
   }
-  const lost = others.length - paths.length;
+  if (others.length - lost) renderAttachTray();
   if (lost) toast(lost === 1 ? 'That file could not be added. Type its path instead.' : lost + ' files could not be added. Type their paths instead.');
   return imgs.length;
 }
+/** A picture full size; Esc or a click closes it. */
+function openImageViewer(src, caption){
+  const bg = $('imgViewer'); if (!bg) return;
+  $('imgViewerImg').src = src; $('imgViewerCap').textContent = caption || '';
+  bg.hidden = false; bg.classList.add('show');
+}
+function closeImageViewer(){ const bg = $('imgViewer'); if (!bg) return; bg.classList.remove('show'); bg.hidden = true; $('imgViewerImg').removeAttribute('src'); }
+// Moved to the end of the page: inside the message box, whose containment makes a fixed element
+// relative to it, it would open inside the box instead of over the window.
+document.body.appendChild($('imgViewer'));
+$('imgViewer').addEventListener('click', closeImageViewer);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('imgViewer').classList.contains('show')) { e.stopImmediatePropagation(); closeImageViewer(); } }, true);
+// The agent's screenshots open the same way.
+document.addEventListener('click', (e) => { const im = e.target && e.target.closest && e.target.closest('.cu-shot img'); if (im) openImageViewer(im.src, (im.parentElement.querySelector('.cu-shot-cap') || {}).textContent || 'screen'); });
 $('btnAttach').onclick = () => $('fileInput').click();
 $('fileInput').onchange = (e) => { addImageFiles(e.target.files); e.target.value = ''; };
 // Dropping a file on the window used to load it IN PLACE of the app (now blocked in
 // the main process, which left the drop silently doing nothing). An image is attached,
 // the same as the + button; anything else is explained. Pasting an image works too.
 const hasFiles = (e) => !!(e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files'));
+// While files are dragged over the window the message box says "Drop to attach". The counter
+// is there because dragenter/dragleave fire for every element crossed on the way.
+let dragDepth = 0;
+const dropOn = (on) => { const c = document.querySelector('#screen-work .composer'); if (c) c.classList.toggle('drop-on', on); };
+document.addEventListener('dragenter', (e) => { if (hasFiles(e)) { dragDepth++; dropOn(true); } });
+document.addEventListener('dragleave', (e) => { if (hasFiles(e) && --dragDepth <= 0) { dragDepth = 0; dropOn(false); } });
 document.addEventListener('dragover', (e) => { if (hasFiles(e)) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; } });
 document.addEventListener('drop', (e) => {
+  dragDepth = 0; dropOn(false);
   if (!hasFiles(e)) return;
   e.preventDefault();
   addImageFiles(e.dataTransfer.files);
 });
 $('prompt').addEventListener('paste', (e) => {
+  // Copied files of any kind (a picture, or files copied in the file manager); text pastes as usual.
   const files = e.clipboardData ? [...e.clipboardData.files] : [];
-  if (!files.some((f) => /^image\//i.test(f.type || ''))) return;   // text pastes as usual
+  if (!files.length) return;
   e.preventDefault();
   addImageFiles(files);
 });
@@ -6987,7 +7121,8 @@ function micSupported(){ return !!(window.SpeechRecognition || window.webkitSpee
 // The mic lit for a second and went out: speech recognition in Electron has no speech
 // service behind it ("network"), and the error only reached the console. Say so, and
 // point to the dictation Windows already has. Found in a live run.
-const WIN_DICTATE = /Windows/i.test(navigator.userAgent) ? ' Press Win+H in the message box to dictate with Windows voice typing instead.' : '';
+const WIN_DICTATE = /Windows/i.test(navigator.userAgent) ? ' Press Win+H in the message box to dictate with Windows voice typing instead.'
+  : /Mac OS X|Macintosh/i.test(navigator.userAgent) ? ' Press the Dictation key (or Fn twice) in the message box to dictate with macOS dictation instead.' : '';
 const MIC_ERRORS = {
   'network': 'Voice input isn’t available in this app: it needs a speech service it can’t reach.' + WIN_DICTATE,
   'not-allowed': 'Microphone access was refused.' + WIN_DICTATE,
@@ -8765,7 +8900,12 @@ async function send(){
     v = actView();
     if (!v) return;
   }
-  const text = $('prompt').value.trim();
+  // Attached files go as @-mentions on a line of their own (the sent message shows them as chips);
+  // with nothing typed, attachments alone still make a message.
+  const typed = $('prompt').value.trim();
+  const fileLine = attachedFileLine(v);
+  const nPics = PENDING_ATTACH.filter((a) => attKind(a) === 'image').length;
+  const text = [typed || (fileLine || nPics ? 'Take a look at ' + (nPics && !fileLine ? (nPics === 1 ? 'this picture.' : 'these pictures.') : 'the attached ' + (fileLine && nPics ? 'files and pictures.' : 'files.')) : ''), fileLine].filter(Boolean).join('\n');
   // /goal <condition> | /goal (show) | /goal clear -- see backend/goal.js
   if (/^\/goal(\s|$)/i.test(text) && !v.pendingAsk) { await goalCommand(v, text); return; }
   if (/^\/(review|init|rewind|loop)(\s|$)/i.test(text) && !v.pendingAsk) { $('slashMenu').hidden = true; await slashCommand(v, text); return; }
@@ -9847,24 +9987,30 @@ function stepSession(dir){
  * One table for the shortcuts and the Settings > Keyboard page, so the page can never
  * list a key that does not work. `run` returns false to let the key through.
  */
+// The app's own shortcuts use Cmd on a Mac and Ctrl elsewhere ("Mod" in the table); Ctrl+Tab stays
+// Ctrl everywhere, as macOS apps do it too.
+const IS_MAC = !!(window.voxai && window.voxai.platform === 'darwin');
+document.documentElement.dataset.platform = (window.voxai && window.voxai.platform) || '';
+const MOD = (e) => (IS_MAC ? e.metaKey : e.ctrlKey);
+const KEY_LABEL = (k) => (k === 'Mod' ? (IS_MAC ? '\u2318' : 'Ctrl') : IS_MAC && k === 'Alt' ? '\u2325' : IS_MAC && k === 'Shift' ? '\u21e7' : k);
 const SHORTCUTS = [
   { keys: ['Enter'], label: 'Send the message', note: true },
   { keys: ['Shift', 'Enter'], label: 'New line in the message', note: true },
   { keys: ['Esc'], label: 'Stop the answer that is running', test: (e) => e.key === 'Escape' && !e.ctrlKey && !e.altKey && !e.metaKey,
     run: () => { const v = actView(); if (!v || !v.busy || overlayOpen()) return false; stopCurrent(); toast('Stopped.'); return true; } },
-  { keys: ['Ctrl', 'V'], label: 'Paste text, images or files into the message, from anywhere in the window', note: true },
+  { keys: ['Mod', 'V'], label: 'Paste text, images or files into the message, from anywhere in the window', note: true },
   { keys: ['↑'], label: 'In an empty message box: bring back your last message', note: true },
-  { keys: ['Ctrl', 'N'], label: 'New session', note: true },
-  { keys: ['Ctrl', 'O'], label: 'Open a folder', note: true },
-  { keys: ['Ctrl', 'K'], label: 'Search sessions', test: (e) => e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k',
+  { keys: ['Mod', 'N'], label: 'New session', note: true },
+  { keys: ['Mod', 'O'], label: 'Open a folder', note: true },
+  { keys: ['Mod', 'K'], label: 'Search sessions', test: (e) => MOD(e) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k',
     run: () => { const q = $('q'); if (!q) return false; q.focus(); q.select(); return true; } },
-  { keys: ['Ctrl', 'L'], label: 'Go to the message box', test: (e) => e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'l',
+  { keys: ['Mod', 'L'], label: 'Go to the message box', test: (e) => MOD(e) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'l',
     run: () => { $('prompt').focus(); return true; } },
-  { keys: ['Ctrl', ','], label: 'Settings', test: (e) => e.ctrlKey && !e.shiftKey && !e.altKey && e.key === ',',
+  { keys: ['Mod', ','], label: 'Settings', test: (e) => MOD(e) && !e.shiftKey && !e.altKey && e.key === ',',
     run: () => { if ($('modalBg').classList.contains('show')) closeModal(); else openModal(); return true; } },
-  { keys: ['Ctrl', '\\'], label: 'Show or hide the preview', test: (e) => e.ctrlKey && !e.shiftKey && !e.altKey && e.key === '\\',
+  { keys: ['Mod', '\\'], label: 'Show or hide the preview', test: (e) => MOD(e) && !e.shiftKey && !e.altKey && e.key === '\\',
     run: () => { const t = $('ppToggle'); if (!t) return false; t.click(); return true; } },
-  { keys: ['Ctrl', 'Shift', 'C'], label: 'Copy the last answer', test: (e) => e.ctrlKey && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'c',
+  { keys: ['Mod', 'Shift', 'C'], label: 'Copy the last answer', test: (e) => MOD(e) && e.shiftKey && !e.altKey && e.key.toLowerCase() === 'c',
     run: () => {
       const v = actView(); const mds = v ? [...v.root.querySelectorAll(':scope > .md')] : [];
       const last = mds[mds.length - 1];
@@ -9876,6 +10022,8 @@ const SHORTCUTS = [
   { keys: ['Ctrl', 'Shift', 'Tab'], label: 'Previous session', test: (e) => e.ctrlKey && e.shiftKey && e.key === 'Tab', run: () => { stepSession(-1); return true; } },
   { keys: ['Alt', '↑ / ↓'], label: 'Move a queued message (with its handle focused)', note: true },
 ];
+// The New session button's hint, in this system's keys.
+if (IS_MAC && $('newKbd')) $('newKbd').textContent = '⌘N';
 document.addEventListener('keydown', (e) => {
   if (e.defaultPrevented || e.isComposing) return;
   for (const s of SHORTCUTS) {
@@ -10156,7 +10304,7 @@ function renderKeys(){
     const row = el('div', 'key-row');
     const d = el('span', 'kd'); d.textContent = s.label;
     const k = el('span', 'kk');
-    s.keys.forEach((x) => { const kb = document.createElement('kbd'); kb.textContent = x; k.appendChild(kb); });
+    s.keys.forEach((x) => { const kb = document.createElement('kbd'); kb.textContent = KEY_LABEL(x); k.appendChild(kb); });
     row.appendChild(d); row.appendChild(k); box.appendChild(row);
   }
 }

@@ -468,7 +468,9 @@ function createWindow() {
     icon: path.join(__dirname, '..', '..', 'resources', process.platform === 'win32' ? 'icon.ico' : 'icon.png'),
     // The UI draws its own title bar (Forge-style, with in-UI window buttons),
     // so the platform frame is removed — the app is not a shell over a web page.
-    frame: false,
+    // macOS keeps its own traffic lights over the UI's bar (the page leaves room for them and
+    // hides its own buttons: html[data-platform="darwin"]).
+    ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset', trafficLightPosition: { x: 14, y: 11 } } : { frame: false }),
     resizable: true,
     webPreferences: {
       preload: path.join(__dirname, '..', 'preload', 'preload.js'),
@@ -486,8 +488,12 @@ function createWindow() {
   // The parked browsers' windows go with the app's, or the app would never quit.
   w.on('closed', () => { for (const v of [defaultBrowser, ...sessionBrowsers.values()]) unpark(v); });
   if (attention) attention.wireWindow(w);
-  // Native application menu (File / View / Help) — Alt reveals it on Windows
+  // Native application menu (File / View / Help) — Alt reveals it on Windows. On macOS the menu
+  // bar is always there and needs the app menu first and an Edit menu: without Edit, Cmd+C, Cmd+V
+  // and Cmd+A do nothing in the app's text fields.
+  const mac = process.platform === 'darwin';
   const template = [
+    ...(mac ? [{ role: 'appMenu' }] : []),
     { label: 'File', submenu: [
       { label: 'New Session', accelerator: 'CmdOrCtrl+N', click: () => relay('new-session') },
       { type: 'separator' },
@@ -495,11 +501,13 @@ function createWindow() {
       { type: 'separator' },
       { role: 'quit' },
     ]},
+    ...(mac ? [{ role: 'editMenu' }] : []),
     { label: 'View', submenu: [
       { role: 'reload' }, { role: 'toggleDevTools' }, { type: 'separator' },
       { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' },
       { type: 'separator' }, { role: 'togglefullscreen' },
     ]},
+    ...(mac ? [{ role: 'windowMenu' }] : []),
     { label: 'Help', submenu: [
       { label: 'About VoxAI Coder', click: () => dialog.showMessageBox(w, {
         type: 'info', title: 'VoxAI Coder',
@@ -546,11 +554,12 @@ const localEngineMod = require('./local-engine');
 const localModelDirs = () => getSettings(false).localModelsDirs || [];
 const localEngine = localEngineMod.createLocalEngine({
   // Beside your models (the first folder), not on C: -- that drive was nearly full. Nowhere else to go: app data.
-  // Linux: always the XDG data folder (~/.local/share). Beside the models it could land on a shared
-  // NTFS drive (a dual-boot PC), where the build's library symlinks cannot be made and llama-server
-  // then cannot find its libraries.
+  // Linux: always the XDG data folder (~/.local/share); macOS: ~/Library/Application Support.
+  // Beside the models it could land on a shared NTFS or exFAT drive (a dual-boot PC, an external
+  // disk), where the build's library symlinks cannot be made and llama-server cannot start.
   baseDir: () => (process.platform !== 'win32'
-    ? path.join(process.env.XDG_DATA_HOME || path.join(require('os').homedir(), '.local', 'share'), 'voxai-coder-engine')
+    ? path.join(process.platform === 'darwin' ? path.join(require('os').homedir(), 'Library', 'Application Support')
+      : (process.env.XDG_DATA_HOME || path.join(require('os').homedir(), '.local', 'share')), 'voxai-coder-engine')
     : localModelDirs()[0] ? path.join(localModelDirs()[0], '.voxai-engine') : path.join(process.env.LOCALAPPDATA || require('os').tmpdir(), 'voxai-coder-engine')),
   log: (m) => { try { console.log('[local] ' + m); } catch {} },
   onState: (st) => { try { const c = allRenderers(); c && c.send('local:state', st); } catch {} },
@@ -565,8 +574,8 @@ require('../backend/providers/openrouter').localEndpoint.expected = () => { cons
 require('../backend/providers/openrouter').localEndpoint.onSlow = (info) => { try { const c = allRenderers(); c && c.send('local:slow', info); } catch {} };
 /** Catalogue entries for the models in the local folder: free, tool-calling, no image input. */
 // The engine is llama.cpp's Windows (Vulkan) build, unpacked with Windows tar, sized with PowerShell: on
-// Windows and Linux (x64, ARM64) each have a llama.cpp build pinned in local-engine.js; elsewhere
-// (macOS) there is none, and models on this PC are not offered.
+// Windows, Linux and macOS (x64, ARM64) each have a llama.cpp build pinned in local-engine.js;
+// anywhere else there is none, and models on this PC are not offered.
 const LOCAL_SUPPORTED = !!localEngineMod.engineFor();
 function localCatalog() {
   const dirs = localModelDirs();
@@ -849,6 +858,17 @@ function makeBrowserView() {
     wc.on('did-navigate', () => wakeParked(v));
     wc.on('did-navigate-in-page', told);
     wc.on('page-title-updated', () => broadcastTabs());
+    // Linux: the page on show is nudged on every load and every in-page change (a single-page app
+    // swapping sections counts), and a few times after, because such an app paints its sections
+    // after the load: the preview otherwise kept showing the old site until the window was resized.
+    if (process.platform === 'linux') {
+      const settle = () => {
+        if (v !== browserV) return;   // only the one on show: a parked page is under the chat
+        nudgeView(v); setTimeout(() => nudgeView(v), 150); setTimeout(() => nudgeView(v), 600); setTimeout(() => nudgeView(v), 1500);
+        nudgeWindow(); setTimeout(() => nudgeWindow(), 300); setTimeout(() => nudgeWindow(), 1200);
+      };
+      for (const ev of ['dom-ready', 'did-finish-load', 'did-navigate-in-page', 'did-frame-finish-load']) wc.on(ev, settle);
+    }
     // The preview sits inside the app's own chrome, so its scrollbars have to look like the
     // app's. Injected CSS dies with the document, so this runs for every navigation.
     wc.on('dom-ready', () => { try { wc.insertCSS(PREVIEW_SCROLLBAR_CSS); } catch {} });
@@ -916,14 +936,36 @@ function parkWindow(v) {
   v._park = p;
   return p;
 }
-/** Above the window's page (on show in the preview) or parked off screen (drawing, unseen). */
+/**
+ * Above the window's page (on show in the preview) or parked out of sight (drawing, unseen).
+ * From the Linux edition, which found three ways the preview could end up showing nothing.
+ */
 function stackBrowser(v, onTop) {
-  if (!rootV || !v || v._onTop === onTop) return;
+  if (!rootV || !v) return;
+  // On top by its flag but not in the window's tree (something took it out): showing it again
+  // has to put it back, or it stays loaded, sized and invisible.
+  let inTree = true;
+  try { const kids = rootV.children; if (Array.isArray(kids)) inTree = kids.includes(v); } catch { inTree = true; }
+  if (v._onTop === onTop && inTree) return;
   try {
     if (v._onTop === false && v._park && !v._park.isDestroyed()) { v._park.contentView.removeChildView(v); unpark(v); }
-    else if (v._onTop === true) rootV.removeChildView(v);
-    if (onTop) rootV.addChildView(v, Math.max(0, (rootV.children || []).indexOf(chatV)) + 1);
-    else {
+    else if (v._onTop === false || v._onTop === true) { try { rootV.removeChildView(v); } catch { /* not in it */ } }
+    if (onTop) {
+      // Appended. The index used to come from rootV.children, and where a View has no children
+      // list that threw, the catch left the view parked -- loaded, measured, never shown. The
+      // chat is always child 0, so appending is the same place.
+      rootV.addChildView(v);
+    } else if (PARK_IN_WINDOW) {
+      // Linux: no park window. On Wayland the compositor ignores both things it relied on -- the
+      // off-screen position (it put the window ON screen: the stray blank window people saw) and
+      // its opacity. So a parked view stays in the window's own tree, at the bottom, under the
+      // opaque chat: it keeps drawing and cannot cover anything, whatever a coordinate does.
+      v.setBounds({ x: 0, y: 0, width: parkSize.width, height: parkSize.height });
+      v.setVisible(true);
+      rootV.addChildView(v, 0);
+      v._onTop = false;
+      return;
+    } else {
       v.setVisible(true);
       v.setBounds({ x: 0, y: 0, width: parkSize.width, height: parkSize.height });
       parkWindow(v).contentView.addChildView(v);
@@ -931,6 +973,40 @@ function stackBrowser(v, onTop) {
     v._onTop = onTop;
     if (!onTop) wakeParked(v);
   } catch { /* stays where it was */ }
+}
+// Where a parked browser waits: in an off-screen window (Windows, macOS), or under the chat in
+// the window itself (Linux, see stackBrowser).
+const PARK_IN_WINDOW = process.platform === 'linux';
+/**
+ * Make the compositor pick up what a view now shows. On Linux (found on the Linux edition's
+ * machine) a child view's surface is not refreshed when its page changes: it rendered, it was
+ * placed right, and nothing appeared until the WINDOW was resized -- an invalidate alone did not
+ * do it, the size change did. So the view is made a pixel taller and put straight back, within a
+ * frame: nothing moves on screen.
+ */
+function nudgeView(v) {
+  if (process.platform !== 'linux' || !v) return;
+  try {
+    const b = v.getBounds();
+    if (!b || b.width < 2 || b.height < 2) return;
+    v.setBounds({ x: b.x, y: b.y, width: b.width, height: b.height + 1 });
+    setTimeout(() => { try { v.setBounds(b); v.webContents.invalidate(); } catch { /* gone */ } }, 16);
+  } catch { /* gone */ }
+}
+/**
+ * The same for the window, which is what resizing by hand did: nudging the view alone was not
+ * always enough. Maximised windows take it too (measured there); a full-screen one is left alone.
+ */
+function nudgeWindow() {
+  if (process.platform !== 'linux') return;
+  try {
+    const w = win();
+    if (!w || w.isDestroyed() || w.isMinimized() || w.isFullScreen()) return;
+    const b = w.getBounds();
+    if (!b || b.width < 50 || b.height < 50) return;
+    w.setBounds({ x: b.x, y: b.y, width: b.width, height: b.height + 1 });
+    setTimeout(() => { try { w.setBounds(b); layoutAtlas(); } catch { /* gone */ } }, 16);
+  } catch { /* gone */ }
 }
 /**
  * A page loaded into a parked browser starts out hidden (nothing tells it the off-screen window
@@ -1036,11 +1112,15 @@ function layoutAtlas() {
         const r = previewRect;
         stackBrowser(v, true);
         napBrowser(v, false);
-        if (overlayHeld) { v.setVisible(false); continue; }
+        if (overlayHeld) { v._revealed = false; v.setVisible(false); continue; }
         v.setBounds({ x: Math.max(0, Math.round(r.x)), y: Math.max(0, Math.round(r.y)), width: Math.max(20, Math.round(r.width)), height: Math.max(20, Math.round(r.height)) });
         try { if (typeof v.setBorderRadius === 'function') v.setBorderRadius(6); } catch {}
         v.setVisible(true);
+        // Linux: a preview that has just come on show is nudged so the compositor draws it (see
+        // nudgeView) -- once per showing, never on every layout.
+        if (process.platform === 'linux' && v._revealed !== true) { v._revealed = true; nudgeView(v); nudgeWindow(); }
       } else {
+        v._revealed = false;   // hidden: the next showing nudges for a fresh surface
         stackBrowser(v, false);
         try { const p = v._park; if (p && !p.isDestroyed()) { const b = p.getContentBounds(); if (b.width !== under.width || b.height !== under.height) p.setContentBounds({ x: PARK_AT, y: PARK_AT, width: under.width, height: under.height }); } } catch {}
         v.setBounds(under);
@@ -1388,6 +1468,15 @@ app.whenReady().then(() => {
     live.set(r.session.id, r.session);
     return { ok: true, id: r.session.id, title: r.session.title, text: r.text, images: r.images };
   });
+  // An attached file, shown in its folder: never opened or run, only revealed.
+  ipcMain.handle('files:reveal', (_e, { path: p, workdir } = {}) => {
+    try {
+      const full = path.isAbsolute(String(p || '')) ? String(p) : path.resolve(String(workdir || ''), String(p || ''));
+      if (!p || !fs.existsSync(full)) return { ok: false, error: 'That file is not there any more: ' + full };
+      shell.showItemInFolder(full);
+      return { ok: true };
+    } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
+  });
   ipcMain.handle('sessions:open', async (_e, id) => {
     const sess = await getLive(id);
     // Fix 1: surface persisted usage ledger back to the UI
@@ -1647,7 +1736,7 @@ app.whenReady().then(() => {
     }
     // A model on this PC (as the model or as Team's coder) is loaded before the run starts. One at a time.
     const locals = [sess.model || s.openrouterModel, sess.coderModel || ''].filter(localEngineMod.isLocalModel);
-    if (locals.length && !LOCAL_SUPPORTED) throw new Error('Models on this PC run on Windows and Linux only. Pick a cloud model for this session.');
+    if (locals.length && !LOCAL_SUPPORTED) throw new Error('Models on this PC run on Windows, Linux and macOS only. Pick a cloud model for this session.');
     if (locals.length && new Set(locals).size > 1) throw new Error('Only one model on this PC can run at a time, and this session uses two. Pick a cloud model for one of them.');
     if (locals.length && !(s.localModelsDirs || []).length) throw new Error('Choose the folder your local models are in: Settings → Local models.');
     // Two sessions can share one model on this PC (their requests take turns), but not use two.
@@ -1671,7 +1760,8 @@ app.whenReady().then(() => {
       catch (e) { controllers.delete(runKey); throw e; }
       if (ctl.signal.aborted) { controllers.delete(runKey); throw new Error('Stopped while the model on this PC was loading.'); }
     }
-    if (!resume && sess.title === 'New session') sess.title = text.slice(0, 60);
+    // Named after what you wrote, not the line of attached files under it.
+    if (!resume && sess.title === 'New session') sess.title = (text.replace(/\n(@("[^"]+"|\S+)\s*)+$/, '').trim() || text).slice(0, 60);
     // @-mentioned files and folders go with the message (backend/mentions.js), read now.
     let mentionText = '';
     if (!resume && text && text.includes('@')) {
@@ -2202,7 +2292,7 @@ ipcMain.handle('local:models', () => {
 });
 ipcMain.handle('local:start', async (_e, file) => {
   const dirs = localModelDirs();
-  if (!LOCAL_SUPPORTED) return { ok: false, error: 'Models on this PC run on Windows and Linux only.' };
+  if (!LOCAL_SUPPORTED) return { ok: false, error: 'Models on this PC run on Windows, Linux and macOS only.' };
   if (!dirs.length) return { ok: false, error: 'Add the folder your models are in first.' };
   try { return { ok: true, state: await localEngine.start(dirs, String(file || '')) }; } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
 });
@@ -2232,7 +2322,7 @@ const hfErr = (e) => ({ ok: false, error: /fetch failed|ENOTFOUND|ECONN/i.test(S
 ipcMain.handle('local:hfSearch', async (_e, q) => { try { return { ok: true, models: await hf.search(q) }; } catch (e) { return hfErr(e); } });
 ipcMain.handle('local:hfFiles', async (_e, repo) => { try { return { ok: true, files: await hf.files(String(repo || '')) }; } catch (e) { return hfErr(e); } });
 ipcMain.handle('local:hfDownload', async (_e, arg) => {
-  if (!LOCAL_SUPPORTED) return { ok: false, error: 'Models on this PC run on Windows and Linux only.' };
+  if (!LOCAL_SUPPORTED) return { ok: false, error: 'Models on this PC run on Windows, Linux and macOS only.' };
   try { return { ok: true, state: await hfDl.start({ repo: String((arg && arg.repo) || ''), key: String((arg && arg.key) || ''), dir: localModelDirs()[0] }) }; } catch (e) { return hfErr(e); }
 });
 ipcMain.handle('local:hfCancel', () => hfDl.cancel());

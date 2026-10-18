@@ -11,8 +11,9 @@ const fs = require('fs');
 const path = require('path');
 
 const OUT = process.env.VOX_RELEASE_OUT || path.join(__dirname, '..', 'release');
-const BUILT = /\.(exe|blockmap|AppImage)$|-Linux\.sh$|^(latest|latest-linux|builder-debug|builder-effective-config)\.ya?ml$|^update(-linux)?\.json$/i;
-const DIRS = new Set(['win-unpacked', 'win-ia32-unpacked', 'win-arm64-unpacked', 'linux-unpacked']);
+// macOS too: its .dmg and .zip, latest-mac.yml and the .app folders (npm run dist:mac).
+const BUILT = /\.(exe|blockmap|AppImage|dmg)$|-mac-(arm64|x64)\.zip$|-Linux\.sh$|^(latest|latest-linux|latest-mac|builder-debug|builder-effective-config)\.ya?ml$|^update(-linux|-mac)?\.json$/i;
+const DIRS = new Set(['win-unpacked', 'win-ia32-unpacked', 'win-arm64-unpacked', 'linux-unpacked', 'mac', 'mac-arm64', 'mac-universal']);
 
 if (!fs.existsSync(OUT)) process.exit(0);
 let freed = 0, n = 0;

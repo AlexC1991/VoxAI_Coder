@@ -240,6 +240,10 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
   openDir: () => ipcRenderer.invoke('dialog:openDir'),
   openExternal: (url) => ipcRenderer.invoke('shell:openExternal', url),
   // A dropped or pasted file's path on disk, so it can go into the message.
+  // Show an attached file in its folder (relative paths are from the session's project).
+  revealFile: (p, workdir) => ipcRenderer.invoke('files:reveal', { path: p, workdir }),
+  // win32 | linux | darwin: the page lays itself out for it (title bar, shortcut labels).
+  platform: process.platform,
   pathForFile: (file) => { try { return (webUtils && webUtils.getPathForFile(file)) || ''; } catch { return ''; } },
   onMenu: (cb) => {
     const fn = (_e, ch) => cb(ch);

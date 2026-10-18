@@ -3,6 +3,8 @@
  * bar -- into resources/icon.png (256px) and resources/icon.ico (16-256px).
  *
  *   npx electron scripts/make-icon.js
+ *   npx electron scripts/make-icon.js --mac   resources/icon-1024.png only, for the macOS build
+ *                                             (electron-builder makes the .icns from 512px up)
  *
  * Run it with Electron so Chromium draws the SVG; no image libraries needed. An .ico
  * is a small header and directory followed by PNG images, so it is written by hand.
@@ -30,7 +32,7 @@ function svg(size) {
 let win = null;
 async function render(size) {
   if (!win) {
-    win = new BrowserWindow({ width: 256, height: 256, show: false, frame: false, transparent: true, webPreferences: { offscreen: true } });
+    win = new BrowserWindow({ width: 1024, height: 1024, show: false, frame: false, transparent: true, webPreferences: { offscreen: true } });
     await win.loadURL('about:blank');
   }
   await win.webContents.executeJavaScript(
@@ -60,6 +62,13 @@ function ico(pngs) {
 app.disableHardwareAcceleration();
 app.whenReady().then(async () => {
   fs.mkdirSync(OUT, { recursive: true });
+  if (process.argv.includes('--mac')) {
+    fs.writeFileSync(path.join(OUT, 'icon-1024.png'), await render(1024));
+    if (win) win.destroy();
+    console.log('wrote 1024 px to', path.join(OUT, 'icon-1024.png'));
+    app.quit();
+    return;
+  }
   const pngs = [];
   for (const size of SIZES) pngs.push({ size, data: await render(size) });
   fs.writeFileSync(path.join(OUT, 'icon.png'), pngs[pngs.length - 1].data);

@@ -136,9 +136,13 @@ function initUpdater({ app, send, log = () => {} }) {
   let st = { state: 'off', version: app.getVersion() };
   const set = (patch) => { st = { ...st, ...patch }; try { send(st); } catch {} };
 
-  if ((!app.isPackaged || portable || notAppImage) && !test) {
+  // macOS: Squirrel.Mac installs only a code-signed app, and there is no signed build or Mac
+  // manifest yet (docs/MACOS.md says what one needs). Off, and said, rather than failing.
+  const mac = process.platform === 'darwin';
+  if ((!app.isPackaged || portable || notAppImage || mac) && !test) {
     st.reason = portable ? 'The portable build does not update itself. Use the installer for updates.'
       : !app.isPackaged ? 'Updates run in the installed app.'
+      : mac ? 'This Mac build does not update itself yet: download new versions by hand.'
       : 'Only the AppImage updates itself on Linux.';
     return { state: () => st, check: async () => st, install: () => false, onFocus: () => {} };
   }

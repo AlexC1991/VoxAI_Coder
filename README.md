@@ -53,6 +53,8 @@ Electron): no external agent binary and no subscription, just your
 - **Linux:** from the [Releases tab on CodeRook](https://coderook.com/batty-251/voxai-coder).
   Installing, what differs on Linux, and fixes for common problems:
   **[the Linux guide](docs/LINUX.md)**.
+- **macOS:** no build yet. The code is ready for one; [the macOS notes](docs/MACOS.md) say
+  what is done and what a port still needs.
 
 The installed app keeps itself up to date. It checks for new versions when it opens,
 downloads them in the background and offers to restart when one is ready. Updates come from
@@ -164,7 +166,8 @@ npm test         # offline regression tests: no model calls, no credits
 npm run dist     # Windows installer and portable exe in voxai-coder/release
 ```
 
-The Linux build is `npm run dist:linux`; see [LINUX-BUILD.md](LINUX-BUILD.md). Working on
+The Linux build is `npm run dist:linux`; see [LINUX-BUILD.md](LINUX-BUILD.md). A Mac build is
+`npm run dist:mac` (untested; see [docs/MACOS.md](docs/MACOS.md)). Working on
 the code: [voxai-coder/README.md](voxai-coder/README.md).
 
 ---
@@ -183,6 +186,7 @@ VoxAI_Coder/
 │   ├── resources/          icons, built-in skills, the public update key
 │   └── test/               regression tests
 ├── docs/LINUX.md           using VoxAI Coder on Linux, and fixing it
+├── docs/MACOS.md           porting notes for macOS
 ├── docs/screenshots/       the pictures on this page
 ├── LINUX-BUILD.md          building on Linux and adding it to a release
 └── benchmark/              runs against other agents

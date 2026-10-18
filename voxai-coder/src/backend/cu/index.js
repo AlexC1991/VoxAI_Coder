@@ -17,7 +17,7 @@
  */
 
 const cdp = require('./cdp');
-const native = require('./native');
+const { native } = require('./platform');
 const desktop = require('./desktop');
 
 /**

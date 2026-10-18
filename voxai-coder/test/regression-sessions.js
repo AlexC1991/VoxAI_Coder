@@ -11,6 +11,9 @@
  *   [AU] computer.open infers what to do from what it was given
  *   [AV] web_fetch cannot search, so it must hand back links and stop guessing
  *   [AW] no control characters in source (escape corruption guard)
+ *   [BB] attachments: pictures and files, in the box and in the sent message
+ *   [BC] Linux desktop control and preview (from the Linux edition)
+ *   [BD] macOS groundwork
  *
  * Offline. Run: node test/regression-sessions.js
  */
@@ -300,9 +303,12 @@ function loadWith(file, stubs) {
   console.log('\n[AU] computer.open infers the surface from its arguments');
   {
     const seen = [];
+    const native = { launch: (p) => { seen.push('NATIVE ' + p); return { ok: true }; }, screenshot: () => ({}), listWindows: () => ({ windows: [] }) };
     const cu = loadWith(path.join(ROOT, 'src/backend/cu/index.js'), [
       [/\.\/cdp$/, { launch: async (u) => { seen.push(u); return { title: 't', url: u, elements: [], text: '' }; } }],
-      [/\.\/native$/, { launch: (p) => { seen.push('NATIVE ' + p); return { ok: true }; }, screenshot: () => ({}), listWindows: () => ({ windows: [] }) }],
+      // index.js gets native through platform.js, which picks the Windows or Linux module.
+      [/\.\/platform$/, { native, input: {}, UiaHelper: class {}, backend: 'windows' }],
+      [/\.\/native$/, native],
     ]);
     const t = cu.makeComputerUseTool({});
     // Drive-letter paths only mean something on Windows; elsewhere the same checks use a POSIX workdir.
@@ -671,6 +677,96 @@ function loadWith(file, stubs) {
   const H = fs.readFileSync(path.join(__dirname, '..', 'src', 'renderer', 'index.html'), 'utf8');
   check('each of your messages has a Fork button; the fork opens with the message back in the box', H.includes("const fk = el('button', 'u-fork',") && H.includes('r = await window.voxai.sessionsFork(v.id, nth, text);')
     && H.includes("const p = $('prompt'); p.value = r.text || '';") && fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8').includes("ipcMain.handle('sessions:fork'"), 'wiring');
+}
+
+// ------------------------------------------------------------------ [BB]
+console.log('\n[BB] attachments: pictures and files, in the box and in the sent message');
+{
+  const H = HTML;
+  const fn = (name, args) => { const m = new RegExp('function ' + name + '\\(' + args + '\\)\\{[\\s\\S]*?\\n\\}').exec(H); return m && m[0]; };
+  const splitSrc = fn('splitAttachedFiles', 'text');
+  const lineSrc = fn('attachedFileLine', 'v');
+  const kindSrc = /const attKind = [^\n]+/.exec(H);
+  check('the helpers are there', !!(splitSrc && lineSrc && kindSrc), { splitSrc: !!splitSrc, lineSrc: !!lineSrc, kindSrc: !!kindSrc });
+  if (splitSrc && lineSrc && kindSrc) {
+    const ctx = vm.createContext({ PENDING_ATTACH: [], viewDir: () => 'C:/proj', actView: () => ({}) });
+    vm.runInContext(kindSrc[0].replace(/^const /, 'var ') + '\n' + splitSrc + '\n' + lineSrc, ctx);
+    const split = (t) => JSON.stringify(vm.runInContext('splitAttachedFiles(' + JSON.stringify(t) + ')', ctx));
+    check('the last line of @-mentions comes off as files', split('What is wrong here?\n@src/a.js @"docs/my notes.md"') === JSON.stringify({ text: 'What is wrong here?', files: ['src/a.js', 'docs/my notes.md'] }), split('What is wrong here?\n@src/a.js @"docs/my notes.md"'));
+    check('a mention inside a sentence stays text', split('look at @src/a.js please') === JSON.stringify({ text: 'look at @src/a.js please', files: [] }), split('look at @src/a.js please'));
+    check('only files: no text left', split('@README.md') === JSON.stringify({ text: '', files: ['README.md'] }), split('@README.md'));
+    ctx.PENDING_ATTACH = [
+      { kind: 'image', dataUrl: 'data:image/png;base64,AA', name: 'shot.png' },
+      { kind: 'file', path: 'C:' + B + 'proj' + B + 'src' + B + 'game.js', name: 'game.js' },
+      { kind: 'file', path: 'D:/elsewhere/my notes.txt', name: 'my notes.txt' },
+      { dataUrl: 'data:image/png;base64,AA' }, // an older entry without a kind is a picture
+    ];
+    const line = vm.runInContext('attachedFileLine()', ctx);
+    check('files go as mentions, inside the project from its folder, a path with spaces quoted, pictures not', line === '@src/game.js @"D:/elsewhere/my notes.txt"', line);
+    // What the backend reads back from that line.
+    const { findMentions } = require(path.join(ROOT, 'src/backend/mentions.js'));
+    check('the backend reads the same paths back', JSON.stringify(findMentions('Fix it\n' + line)) === JSON.stringify(['src/game.js', 'D:/elsewhere/my notes.txt']), findMentions('Fix it\n' + line));
+  }
+  check('any file can be picked, dropped or pasted, not just pictures', H.includes('<input type="file" id="fileInput" multiple style="display:none">') && H.includes('drop-on') && /'dragenter'/.test(H), 'composer');
+  check('big pictures are shrunk before they go (1568 px, 1.5 MB)', /MAX_SIDE\s*=\s*1568/.test(H) && H.includes('MAX_BYTES = 1.5 * 1048576'), 'shrinkImage');
+  check('the sent message shows pictures as thumbnails that open full size, and files as chips', H.includes("el('div', 'u-imgs ' + (pics.length === 1 ? 'one' : 'many'))") && H.includes('openImageViewer(img.src') && H.includes('splitAttachedFiles(') && H.includes('window.voxai.revealFile('), 'addUser');
+  check('reopening a session leaves [VOX ...] blocks out of your bubble', H.includes("!/^\\[VOX [A-Z ]+\\]/.test(p.text||'')"), 'replay filter');
+  check('a file chip reveals the file in its folder, never opens or runs it', MAIN.includes("ipcMain.handle('files:reveal'") && MAIN.includes('shell.showItemInFolder(full)') && !/files:reveal[\s\S]{0,400}shell\.openPath/.test(MAIN), 'files:reveal');
+  check('the session title is the text, not the attached-file line', MAIN.includes("text.replace(/\\n(@(\"[^\"]+\"|\\S+)\\s*)+$/, '')"), 'title');
+}
+
+// ------------------------------------------------------------------ [BC]
+console.log('\n[BC] Linux desktop control and preview, from the Linux edition');
+{
+  const realPlatform = Object.getOwnPropertyDescriptor(process, 'platform');
+  const loadPlatform = (os) => {
+    Object.defineProperty(process, 'platform', { ...realPlatform, value: os });
+    try {
+      const f = path.join(ROOT, 'src/backend/cu/platform.js');
+      delete require.cache[require.resolve(f)];
+      return require(f);
+    } finally { Object.defineProperty(process, 'platform', realPlatform); delete require.cache[require.resolve(path.join(ROOT, 'src/backend/cu/platform.js'))]; }
+  };
+  const L = loadPlatform('linux');
+  check('on Linux the desktop backend is xdotool / xwininfo', L.backend === 'linux' && L.native === require(path.join(ROOT, 'src/backend/cu/linux-native.js')), L.backend);
+  check('keys parse the same on Linux (parseKeys borrowed from the Windows module)', typeof L.input.parseKeys === 'function' && typeof L.input.pressKeys === 'function', typeof L.input.parseKeys);
+  const W = loadPlatform('win32');
+  check('on Windows it is UI Automation, as before', W.backend === 'windows' && W.native === require(path.join(ROOT, 'src/backend/cu/native.js')), W.backend);
+  check('macOS has no backend yet, and says so', loadPlatform('darwin').backend === 'none', 'darwin');
+  const keysOf = (m) => Object.keys(require(path.join(ROOT, 'src/backend/cu', m)));
+  const missing = [['win-input', 'linux-input'], ['native', 'linux-native']]
+    .flatMap(([w, l]) => keysOf(w).filter((k) => k !== 'parseKeys' && !keysOf(l).includes(k)).map((k) => l + '.' + k));
+  check('the Linux modules have everything the Windows ones offer', missing.length === 0, missing);
+  const DESK = read('src/backend/cu/desktop.js') + read('src/backend/cu/index.js');
+  check('desktop.js and index.js take their modules from platform.js', /require\('\.\/platform'\)/.test(DESK) && !/require\('\.\/(win-input|native|uia)'\)/.test(DESK), 'requires');
+  check('a Linux preview is nudged a pixel after each load so the compositor repaints it', /function nudgeView\(v\)/.test(MAIN) && /function nudgeWindow\(\)/.test(MAIN) && /did-frame-finish-load/.test(MAIN), 'nudge');
+  check('on Linux parked previews stay under the chat in the window (Wayland has no hidden window)', MAIN.includes("const PARK_IN_WINDOW = process.platform === 'linux';") && MAIN.includes('rootV.addChildView(v, 0);'), 'park');
+  check('a preview shown again goes back in the window even if something took it out', MAIN.includes('inTree = kids.includes(v)') && MAIN.includes('if (v._onTop === onTop && inTree) return;'), 'inTree');
+}
+
+// ------------------------------------------------------------------ [BD]
+console.log('\n[BD] macOS groundwork');
+{
+  const LE = require(path.join(ROOT, 'src/main/local-engine.js'));
+  for (const arch of ['arm64', 'x64']) {
+    const e = LE.engineFor('darwin', arch);
+    check(`llama.cpp's macOS ${arch} build is pinned and checked`, !!e && /macos-/.test(e.file) && /^[0-9a-f]{64}$/.test(e.sha256) && e.kind === 'tgz', e);
+  }
+  const ENG = read('src/main/local-engine.js');
+  check('the engine finds its libraries and cores on a Mac', ENG.includes('DYLD_LIBRARY_PATH') && ENG.includes('hw.physicalcpu'), 'engine');
+  check('the window keeps the traffic lights and the Edit menu on a Mac', MAIN.includes("titleBarStyle: 'hiddenInset'") && MAIN.includes("role: 'appMenu'") && MAIN.includes("role: 'editMenu'"), 'window');
+  check("the page leaves room for the traffic lights and hides its own buttons there", HTML.includes('html[data-platform="darwin"] .titlebar') && HTML.includes('document.documentElement.dataset.platform'), 'titlebar');
+  check('shortcuts use Cmd on a Mac and show as ⌘', /const MOD = \(e\) => \(IS_MAC \? e\.metaKey : e\.ctrlKey\)/.test(HTML) && HTML.includes("'\\u2318'") && !/keys: \['Ctrl', '(N|K|O|L|V|,)'\]/.test(HTML), 'MOD');
+  const UPD = read('src/main/updater.js');
+  check('updates are off on a Mac, with a reason, until there is a signed build', UPD.includes("process.platform === 'darwin'") && UPD.includes('This Mac build does not update itself yet'), 'updater');
+  check('the Dock shows how many sessions wait for you', read('src/main/attention.js').includes('app.setBadgeCount('), 'badge');
+  const PKG = JSON.parse(read('package.json'));
+  const mac = PKG.build && PKG.build.mac;
+  check('npm run dist:mac makes a dmg and zip for both Mac chips', !!(PKG.scripts['dist:mac'] && mac && JSON.stringify(mac.target).includes('dmg') && JSON.stringify(mac.target).includes('arm64') && mac.entitlements && fs.existsSync(path.join(ROOT, mac.entitlements)) && fs.existsSync(path.join(ROOT, mac.icon))), mac);
+  const CLEAN = read('scripts/clean-release.js');
+  const BUILT = new RegExp(/const BUILT = \/(.*)\/i;/.exec(CLEAN)[1], 'i');
+  check('a new build clears the last Mac build too', ['VoxAI-Coder-0.2.87-mac-arm64.dmg', 'VoxAI-Coder-0.2.87-mac-x64.zip', 'latest-mac.yml'].every((n) => BUILT.test(n)) && !BUILT.test('notes.zip') && CLEAN.includes("'mac-arm64'"), 'clean-release');
+  check('the porting notes are there', fs.existsSync(path.join(ROOT, '..', 'docs', 'MACOS.md')), 'docs/MACOS.md');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

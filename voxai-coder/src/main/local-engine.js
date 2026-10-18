@@ -17,7 +17,9 @@
  *
  * Windows takes llama.cpp's Windows Vulkan build; Linux its Ubuntu Vulkan build (x64 or ARM64),
  * which runs on any glibc distribution with a Vulkan loader -- and on the CPU without one, since
- * its GPU backends load as libraries beside llama-server. Other systems have no build here.
+ * its GPU backends load as libraries beside llama-server; macOS its own build (Apple Silicon or
+ * Intel), which uses the GPU through Metal. The Linux and Mac archives share a layout (one
+ * llama-<build>/ folder, libraries beside the server), so they unpack and run the same way.
  */
 const fs = require('fs');
 const path = require('path');
@@ -31,6 +33,8 @@ const ENGINES = {
   'win32-x64': { file: `llama-${BUILD}-bin-win-vulkan-x64.zip`, sha256: 'b450e71cfb2204955db784590af51b3f81fbc3bde0c5687f7a85c89edc977fd4', bytes: 33062159, exe: 'llama-server.exe', kind: 'zip' },
   'linux-x64': { file: `llama-${BUILD}-bin-ubuntu-vulkan-x64.tar.gz`, sha256: 'd4505b5752a967e070fb418ec1d365d4448d692eccea1d7d4d0a6e75b7300025', bytes: 31348616, exe: 'llama-server', kind: 'tgz' },
   'linux-arm64': { file: `llama-${BUILD}-bin-ubuntu-vulkan-arm64.tar.gz`, sha256: '89b7f6c99289f2584b7584c266624e835357bc8b3b05e2bc4e94e5836e9a1a24', bytes: 24665814, exe: 'llama-server', kind: 'tgz' },
+  'darwin-arm64': { file: `llama-${BUILD}-bin-macos-arm64.tar.gz`, sha256: '5bacea12237283699a196194b7f62a0e613438bd5feed694359ed6050492bb3e', bytes: 11756895, exe: 'llama-server', kind: 'tgz' },
+  'darwin-x64': { file: `llama-${BUILD}-bin-macos-x64.tar.gz`, sha256: '20b0a6f67d384de5efa90ce95968ca5cd9d7d3a0d98b0873da07707d034f8234', bytes: 11310524, exe: 'llama-server', kind: 'tgz' },
 };
 /** The build for a system, or null when there is none for it. */
 function engineFor(platform = process.platform, arch = process.arch) {
@@ -151,9 +155,10 @@ function createLocalEngine({ baseDir, log = () => {}, onState = () => {} }) {
   const base = () => (typeof baseDir === 'function' ? baseDir() : baseDir);
   const dirOf = () => path.join(base(), ENGINE.build);
   const exeOf = () => path.join(dirOf(), ENGINE.exe);
-  // On Linux its libraries (the GPU backends among them) sit beside it.
+  // On Linux and macOS its libraries (the GPU backends among them) sit beside it.
+  const libVar = process.platform === 'darwin' ? 'DYLD_LIBRARY_PATH' : 'LD_LIBRARY_PATH';
   const envOf = () => (process.platform === 'win32' ? process.env
-    : { ...process.env, LD_LIBRARY_PATH: [dirOf(), process.env.LD_LIBRARY_PATH].filter(Boolean).join(':') });
+    : { ...process.env, [libVar]: [dirOf(), process.env[libVar]].filter(Boolean).join(':') });
   let proc = null, tail = [], cores = 0;
   let st = { state: fs.existsSync(exeOf()) ? 'stopped' : 'missing', model: '', port: 0, ctx: 0, how: '', device: '', error: '', percent: 0, build: ENGINE.build, tps: 0, pps: 0 };
   const set = (patch) => { st = { ...st, ...patch }; try { onState(st); } catch {} };
@@ -163,6 +168,7 @@ function createLocalEngine({ baseDir, log = () => {}, onState = () => {} }) {
   async function physicalCores() {
     if (cores) return cores;
     if (process.platform === 'linux') { try { cores = coresFromCpuinfo(fs.readFileSync('/proc/cpuinfo', 'utf8')); } catch { cores = 0; } }
+    else if (process.platform === 'darwin') cores = await new Promise((resolve) => execFile('sysctl', ['-n', 'hw.physicalcpu'], { timeout: 5000 }, (_e, out) => resolve(Number(String(out || '').trim()) || 0)));
     else cores = await new Promise((resolve) => execFile('powershell', ['-NoProfile', '-Command', '(Get-CimInstance Win32_Processor | Measure-Object -Property NumberOfCores -Sum).Sum'],
       { windowsHide: true, timeout: 15000 }, (_e, out) => resolve(Number(String(out || '').trim()) || 0)));
     if (!cores) cores = Math.max(1, Math.round(require('os').cpus().length / 2));

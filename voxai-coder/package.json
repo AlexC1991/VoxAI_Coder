@@ -17,7 +17,9 @@
     "release": "node scripts/release.js",
     "prestart": "node scripts/csp.js && node scripts/build-uia.js",
     "predev": "node scripts/csp.js && node scripts/build-uia.js",
-    "pretest": "node scripts/csp.js"
+    "pretest": "node scripts/csp.js",
+    "predist:mac": "node scripts/csp.js && node scripts/clean-release.js",
+    "dist:mac": "electron-builder --mac --publish never"
   },
   "author": "VoxAI",
   "homepage": "https://coderook.com",
@@ -73,7 +75,39 @@
       ],
       "artifactName": "VoxAI-Coder-${version}.${ext}"
     },
-    "npmRebuild": false
+    "npmRebuild": false,
+    "mac": {
+      "icon": "resources/icon-1024.png",
+      "category": "public.app-category.developer-tools",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        },
+        {
+          "target": "zip",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "resources/entitlements.mac.plist",
+      "entitlementsInherit": "resources/entitlements.mac.plist",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "VoxAI Coder uses the microphone only when you press the mic button to dictate a message.",
+        "NSAppleEventsUsageDescription": "VoxAI Coder controls other apps only when you ask it to, and asks before each action."
+      },
+      "artifactName": "VoxAI-Coder-${version}-mac-${arch}.${ext}"
+    },
+    "dmg": {
+      "artifactName": "VoxAI-Coder-${version}-mac-${arch}.${ext}"
+    }
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.135.0",
