@@ -245,7 +245,20 @@ async function facadeTests() {
   check('mcp is offered only with a server set up', !names.includes('mcp') && withMcp.includes('mcp') && !names.includes('sandbox_status'), { names, withMcp });
   check('members are gone from the surface', !names.some((n) => /^cu_|^browser_|^mcp_|^skills?_|^spawn_parallel$/.test(n)
     || ['stat', 'mkdir', 'move', 'remove'].includes(n)), names.filter((n) => /^cu_|^browser_/.test(n)));
-  check('surface is under 30 tools', names.length < 30, names.length);
+  // What the model is sent at the start: not the hidden duplicates, not the tools loaded on demand.
+  const offered = ALL.filter((t) => !t.hidden && !t.deferred).map((t) => t.def.function.name);
+  check('surface is under 30 tools, and a fresh session is offered under 20', names.length < 32 && offered.length < 20, { all: names.length, offered: offered.length });
+  // Rarely used tools wait for load_tools (Pi 1.0 cut prompt tokens ~40% this way); its line lists each.
+  const lt = ALL.find((t) => t.def.function.name === 'load_tools');
+  const deferredNames = ALL.filter((t) => t.deferred).map((t) => t.def.function.name);
+  const ltRes = lt ? await lt.run({ names: ['computer', 'nope'] }) : null;
+  check('rarely used tools load on demand: load_tools names each one, loads known ones, refuses others', !!lt && deferredNames.length >= 8 && deferredNames.includes('computer') && deferredNames.includes('spawn_agent')
+    && deferredNames.every((n) => lt.def.function.description.includes(n + ':')) && JSON.stringify(ltRes) === JSON.stringify({ loaded: ['computer'], note: 'Available from your next step.' })
+    && JSON.stringify(lt.def).length / 4 < 450 && !offered.includes('computer'), { deferredNames, ltRes });
+  const used = tools.deferredInUse([
+    { role: 'assistant', tool_calls: [{ function: { name: 'load_tools', arguments: '{"names":["snapshot"]}' } }, { function: { name: 'computer', arguments: '{}' } }, { function: { name: 'read', arguments: '{}' } }] },
+  ]);
+  check('a session keeps what it loaded or used (read from its own history, so a restart keeps it too)', [...used].sort().join() === 'computer,snapshot', [...used]);
 
   const fsT = byName('fs');
   check('fs advertises its actions', fsT.def.function.parameters.properties.action.enum.join(',') === 'stat,mkdir,move,remove',

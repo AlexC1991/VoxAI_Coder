@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-rfF5P+yC1BGhyPZbAt0u5vUnB7/h0JMslgg2IOsZbbU='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-X8vEDZoOgnx15vMmdjiWmArfn0GDjarGxBhEZmY5n2I='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -3714,6 +3714,8 @@ function rowLook(name, args, done){
     }
     case 'skill': return pick('tool', 'Used a skill', 'Using a skill');
     case 'mcp': return pick('tool', 'Called', 'Calling');
+    // The browser, sub-agents and other rarer tools are offered once a run loads them (tools/index.js).
+    case 'load_tools': return pick('tool', 'Loaded tools', 'Loading tools');
     // Its notes for the next session: what is done, what is left.
     case 'build_state': return (args && args.action === 'get') ? pick('list', 'Read progress notes', 'Reading progress notes') : pick('list', 'Saved progress notes', 'Saving progress notes');
     case 'fs': {
@@ -3739,7 +3741,7 @@ const BASE_VERB = {
   'Fetched': 'Fetch', 'Updated the plan': 'Update the plan', 'Asked': 'Ask', 'Delegated': 'Delegate',
   'Used the browser': 'Use the browser', 'Used the desktop': 'Use the desktop', 'Looked at a window': 'Look at a window', 'Deleted': 'Delete', 'Moved': 'Move', 'Created folder': 'Create folder',
   'Checked': 'Check', 'Saved progress notes': 'Save progress notes', 'Published': 'Publish', 'Used a skill': 'Use a skill',
-  'Called': 'Call', 'Checked sub-agents': 'Check sub-agents', 'Checked access': 'Check access',
+  'Called': 'Call', 'Checked sub-agents': 'Check sub-agents', 'Checked access': 'Check access', 'Loaded tools': 'Load tools',
 };
 const verbFor = (look, rec) => (rec && rec.ok === false ? (BASE_VERB[look.verb] || look.verb) : look.verb);
 /** A chip is a short label: a whole remembered fact or query ran across the row. All of it is on hover. */
@@ -3759,6 +3761,7 @@ function rowChipText(name, args){
   // The verb carries the action; the chip is the worktree's name, or nothing.
   if (name === 'worktree') return a.name ? { text: String(a.name), title: String(a.name) } : null;
   if (name === 'snapshot') return null;
+  if (name === 'load_tools') { const n = (Array.isArray(a.names) ? a.names : [a.names]).filter(Boolean).map(String); return n.length ? { text: n.join(', '), title: n.join(', ') } : null; }
   if (name === 'memory') {
     const facts = Array.isArray(a.facts) ? a.facts.map((f) => (f && typeof f === 'object' ? f.text || f.fact || '' : String(f))).filter(Boolean) : [];
     const t = a.action === 'search' ? String(a.query || '') : facts.length ? facts[0] + (facts.length > 1 ? ' \u2026' : '') : '';

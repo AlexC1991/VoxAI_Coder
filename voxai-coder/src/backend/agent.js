@@ -1106,6 +1106,14 @@ async function* runAgent(opts) {
       : builtTools
     ).filter((t) => webSearchOn || t.def.function.name !== 'web_search')
       .filter((t) => !localModel || LOCAL_TOOLS.includes(t.def.function.name));
+    const deferOff = Array.isArray(allowTools) && allowTools.length;
+    const offeredTools = (list) => {
+      if (deferOff) return list.filter((t) => !t.hidden && t.def.function.name !== 'load_tools');
+      const used = tools.deferredInUse(session.messages);
+      if (coderModel && !isSubAgent) used.add('spawn_agent');
+      const left = list.some((t) => t.deferred && !used.has(t.def.function.name));
+      return list.filter((t) => !t.hidden && (!t.deferred || used.has(t.def.function.name)) && (t.def.function.name !== 'load_tools' || left));
+    };
 
     // A turn boundary. Without it the UI had no signal that one inference ended and
     // the next began: a model that calls tools for six turns straight, emitting no
@@ -1128,7 +1136,9 @@ async function* runAgent(opts) {
           r = await chatCompletions({
             apiKey, host, model, messages,
             // Hidden tools (tools/index.js) still run when called by name; they are not offered.
-            tools: toolList.filter((t) => !t.hidden).map((t) => t.def),
+            // Deferred ones are offered once the session loads or uses them (load_tools); a role
+            // with its own tool list, and a Team planner (it delegates from the start), get theirs.
+            tools: offeredTools(toolList).map((t) => t.def),
             reasoningEffort: effortNext || reasoningEffort, reasoningSpec, maxTokens, signal, cacheTtl,
             sessionId: session.id,   // sticky routing — keeps the cache on one upstream
             // A Team coder on a starved local engine ends its request with the reason, so the

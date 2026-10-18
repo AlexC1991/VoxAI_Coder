@@ -775,14 +775,60 @@ function buildTools(opts) {
   // but not sent to the model: search is grep and glob in one, doc_rag is now part of rag. Every
   // definition rides on every request, and each near-duplicate is one more wrong choice to make.
   for (const t of ALL) if (HIDDEN_FROM_MODEL.has(t.def.function.name)) t.hidden = true;
+  // Tools few runs need are not sent until a run asks for them: load_tools names each in a line,
+  // and one call adds them for the rest of the session (agent.js, deferredInUse). About 2,400 of
+  // the 5,450 tokens of definitions went out on every request for tools most runs never touch.
+  // Pi 1.0 cut prompt tokens about 40% the same way. A deferred tool called by name still runs.
+  const deferred = ALL.filter((t) => DEFERRED_TOOLS.has(t.def.function.name));
+  for (const t of deferred) t.deferred = true;
+  if (deferred.length) {
+    const line = (t) => {
+      const d = String(t.def.function.description || '').replace(/\s+/g, ' ');
+      const first = (d.match(/^.*?[.!?](?=\s|$)/) || [d])[0];
+      return `${t.def.function.name}: ${first.length > 110 ? first.slice(0, 107) + '...' : first}`;
+    };
+    ALL.push({
+      def: { type: 'function', function: {
+        name: 'load_tools',
+        description: 'More tools, offered when you load them. Load one when the task needs it; it stays for the rest of this session. '
+          + deferred.map(line).join(' | '),
+        parameters: { type: 'object', properties: { names: { type: 'array', items: { type: 'string', enum: deferred.map((t) => t.def.function.name) }, description: 'The tools to load.' } }, required: ['names'] },
+      } },
+      run: async (args) => {
+        const want = (Array.isArray(args && args.names) ? args.names : [args && args.names]).map(String);
+        const known = want.filter((n) => DEFERRED_TOOLS.has(n));
+        if (!known.length) return { error: 'Name tools from the list: ' + [...DEFERRED_TOOLS].join(', ') };
+        return { loaded: known, note: 'Available from your next step.' };
+      },
+    });
+  }
   return { ALL, ctx };
 }
 
 // Tools left out of what the model is sent, though a call to them by name still runs.
 const HIDDEN_FROM_MODEL = new Set(['search', 'doc_rag']);
+// Tools sent only once a run loads them (load_tools) or calls them: the browser and desktop,
+// sub-agents and the rarer bookkeeping. The everyday ones (files, search, shell, plan, memory,
+// web, checks) are always there.
+const DEFERRED_TOOLS = new Set(['computer', 'spawn_agent', 'agents', 'build_state', 'worktree', 'rag', 'snapshot', 'node_repl', 'artifact_publish', 'terminal_state']);
+/** The deferred tools a session has already loaded or used: they stay offered, so the prompt stays the same. */
+function deferredInUse(messages) {
+  const used = new Set();
+  for (const m of messages || []) {
+    for (const tc of (m && m.role === 'assistant' && Array.isArray(m.tool_calls) ? m.tool_calls : [])) {
+      const name = tc && tc.function && tc.function.name;
+      if (DEFERRED_TOOLS.has(name)) used.add(name);
+      if (name === 'load_tools') {
+        let a = null; try { a = JSON.parse(tc.function.arguments || '{}'); } catch { /* malformed */ }
+        for (const n of (a && Array.isArray(a.names) ? a.names : [])) if (DEFERRED_TOOLS.has(String(n))) used.add(String(n));
+      }
+    }
+  }
+  return used;
+}
 
 module.exports = {
-  HIDDEN_FROM_MODEL,
+  HIDDEN_FROM_MODEL, DEFERRED_TOOLS, deferredInUse,
   buildTools, askRequest, askResult, confirmResult,
   definitions: (opts = {}) => {
     const stubCtx = {
@@ -794,6 +840,7 @@ module.exports = {
       userData: opts.userData,
       live: opts.live,
     };
-    return buildTools(stubCtx).ALL.filter((t) => !t.hidden).map((t) => t.def);
+    // What a fresh session is offered (opts.all: every tool, deferred ones too).
+    return buildTools(stubCtx).ALL.filter((t) => !t.hidden && (opts.all || !t.deferred)).map((t) => t.def);
   },
 };
