@@ -5,12 +5,18 @@
  *
  * 1. Signs update.json (version, installer name, size, SHA-512, notes) with the
  *    release key made by `npm run release-key`.
- * 2. Saves a version to the public CodeRook project voxai-coder-releases (README and
- *    CHANGELOG only -- the code is in the voxai-coder project and on GitHub), names it
- *    v<version>, and attaches the installer and update.json to it.
+ * 2. Saves the repository to the CodeRook project voxai-coder (with CHANGELOG.md),
+ *    attaches the installer and update.json to that save, and names it v<version> with
+ *    its downloads public: the installers and the update feed are served to anybody while
+ *    the source keeps its own visibility. One project holds the code and ships the app.
  * 3. Reads the public update feed back to confirm installed copies can see it.
  *
  * --dry-run does step 1 and prints the rest.
+ *
+ * --bridge also publishes the release to voxai-coder-releases, the second project the
+ * installers went to up to 0.2.85. Copies installed before the move still read that feed;
+ * the first release on the new one is put there too so they update onto it, and from then
+ * on they read the new one. Needed once (0.2.86), not for later releases.
  *
  *   npm run release -- --linux [--dry-run]
  *
@@ -26,7 +32,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { execFileSync, execSync } = require('child_process');
-const { signManifest, verifyManifest, FEED, PROJECT } = require('../src/main/updater.js');
+const { signManifest, verifyManifest, FEED, PROJECT, OWNER } = require('../src/main/updater.js');
 
 const ROOT = path.join(__dirname, '..');
 const pkg = require(path.join(ROOT, 'package.json'));
@@ -35,8 +41,14 @@ const flag = (n) => argv.includes(n);
 const opt = (n) => { const i = argv.indexOf(n); return i >= 0 ? argv[i + 1] : undefined; };
 const DRY = flag('--dry-run');
 const LINUX = flag('--linux');
+const BRIDGE = flag('--bridge');
+// The project the installers went to up to 0.2.85 (see --bridge).
+const LEGACY_PROJECT = 'voxai-coder-releases';
+const LEGACY_FEED = FEED.replace('/' + PROJECT + '/', '/' + LEGACY_PROJECT + '/');
+// The repository root: the folder linked to the voxai-coder project.
+const MAIN_DIR = path.join(ROOT, '..');
 let notes = String(opt('--notes') || '').trim();
-const RELEASES_DIR = process.env.VOX_RELEASES_DIR || path.join(ROOT, '..', '..', PROJECT);
+const RELEASES_DIR = process.env.VOX_RELEASES_DIR || path.join(ROOT, '..', '..', LEGACY_PROJECT);
 const PRIV = process.env.VOX_RELEASE_KEY
   || path.join(process.env.APPDATA || path.join(os.homedir(), '.config'), 'voxai-coder-release', 'update-key.pem');
 
@@ -125,102 +137,92 @@ if (LINUX) {
     for (const s of steps) console.log('  cbx ' + s.join(' '));
     process.exit(0);
   }
-  const entry = cbxEntry();
+  const linuxEntry = cbxEntry();
   for (const s of steps) {
     console.log('> cbx attach ' + path.basename(s[1]));
     for (let t = 1; ; t++) {
-      try { execFileSync(process.execPath, [entry, ...s], { stdio: 'inherit' }); break; }
+      try { execFileSync(process.execPath, [linuxEntry, ...s], { stdio: 'inherit' }); break; }
       catch (e) { if (t >= 3) throw e; console.log(`  that failed; trying again (${t + 1} of 3)`); }
     }
   }
 }
 
-// ---- 2. the public releases project
-if (!LINUX) {
-fs.mkdirSync(RELEASES_DIR, { recursive: true });
-// The project page has no releases list, so the installer is linked from here: its public
-// address, which needs no sign-in (checked on a fresh download). The name alone left a
-// visitor on another PC with nothing to click.
-const dl = `${FEED}/${encodeURIComponent(file)}`;
-const mb = (fs.statSync(installer).size / 1048576).toFixed(0);
-// The Linux files join this same release from the Linux build (npm run release -- --linux),
-// so their links are written now and start working when that build lands.
-const shName = `VoxAI-Coder-${version}-Linux.sh`;
-const shDl = `${FEED}/${encodeURIComponent(shName)}`;
-const readme = `# VoxAI Coder
-
-Releases of VoxAI Coder, a desktop coding agent for Windows and Linux.
-
-## Windows
-
-**[Download VoxAI Coder ${version} for Windows](${dl})** (${file}, ${mb} MB) and run it.
-
-Direct link: ${dl}
-
-## Linux
-
-**[Download the installer for VoxAI Coder ${version}](${shDl})** (${shName}), then run:
-
-    bash ${shName}
-
-It downloads the AppImage for this version, checks it, installs it for you alone under
-~/.local (no sudo), adds VoxAI Coder to your applications menu and starts it. The
-AppImage itself is attached to the release too (VoxAI-Coder-${version}.AppImage) if you
-would rather run it directly.
-
-The Linux build is made on Linux after the Windows one, so for a while after a release
-these links may not work yet.
-
-Help for Linux (what you need, what differs from Windows, fixes for common problems):
-https://github.com/AlexC1991/VoxAI_Coder/blob/main/docs/LINUX.md
-
-## Updates
-
-After the first install the app keeps itself up to date: it checks here, downloads new
-versions in the background and offers to restart when one is ready. Every release carries
-\`update.json\` (Windows) and \`update-linux.json\` (Linux), signed with the project's
-release key; the app installs only updates whose signature and checksum match.
-
-The source code is on GitHub: https://github.com/AlexC1991/VoxAI_Coder
-`;
-fs.writeFileSync(path.join(RELEASES_DIR, 'README.md'), readme);
-const logPath = path.join(RELEASES_DIR, 'CHANGELOG.md');
-const prev = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').replace(/^# Changes\s*/, '') : '';
-if (!prev.includes(`## ${version} `)) {
-  fs.writeFileSync(logPath, `# Changes\n\n## ${version} (${m.releasedAt.slice(0, 10)})\n\n${notes}\n\n${prev}`.replace(/\n{3,}/g, '\n\n'));
-}
-
-// Attach first, name last. A download on a save nobody can see stays hidden until
-// the save is named, so the feed switches to the new release with its installer and
-// its signed manifest already in place. Named first, the feed briefly offered a
-// release whose files were not there yet.
-const steps = [
-  ['submit', '--name', PROJECT, '-m', `${version}: ${notes}`.slice(0, 240)],
-  ['attach', installer],
-  ['attach', manifestPath],
-  ['release', `v${version}`, '--notes', notes],
-];
-if (DRY) {
-  console.log(`dry run -- would run in ${RELEASES_DIR}:`);
-  for (const s of steps) console.log('  cbx ' + s.map((a) => (/\s/.test(a) ? JSON.stringify(a) : a)).join(' '));
-  process.exit(0);
-}
-const entry = cbxEntry();
-for (const s of steps) {
-  console.log('> cbx ' + s[0] + ' ' + (s[1] || ''));
-  // The 110 MB installer upload timed out part-way twice running (0.2.53, 0.2.54), after
-  // the save had gone through, and the release had to be finished by hand. An attach is
-  // safe to repeat, so it gets two more tries; the save and the naming run once.
-  const tries = s[0] === 'attach' ? 3 : 1;
+// ---- 2. the release, on the project that holds the code
+// Every cbx call runs with node directly. An attach is safe to repeat and the 110 MB
+// installer upload has timed out part-way (0.2.53, 0.2.54), so it gets two more tries;
+// a save and a naming run once.
+const entry = DRY ? '' : cbxEntry();
+function cbxRun(args, cwd) {
+  console.log('> cbx ' + args.map((x) => (/\s/.test(x) ? JSON.stringify(x) : x)).join(' ').slice(0, 160));
+  const tries = args[0] === 'attach' ? 3 : 1;
   for (let t = 1; ; t++) {
-    try { execFileSync(process.execPath, [entry, ...s], { cwd: RELEASES_DIR, stdio: 'inherit' }); break; }
+    try { return execFileSync(process.execPath, [entry, ...args], { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] }); }
     catch (e) {
       if (t >= tries) throw e;
       console.log(`  that failed; trying again (${t + 1} of ${tries})`);
     }
   }
 }
+const say = (out) => { const t = String(out || '').replace(/\x1b\[[0-9;]*m/g, '').trim(); if (t) console.log(t.split(/\r?\n/).slice(-3).map((l) => '  ' + l).join('\n')); };
+
+const title = `${version}: ${notes}`.slice(0, 240);
+if (!LINUX) {
+  // The changelog travels with the code; each release's notes also go on the release.
+  const logPath = path.join(MAIN_DIR, 'CHANGELOG.md');
+  const prev = fs.existsSync(logPath) ? fs.readFileSync(logPath, 'utf8').replace(/^# Changes\s*/, '') : '';
+  const log = prev.includes(`## ${version} `) ? null
+    : `# Changes\n\n## ${version} (${m.releasedAt.slice(0, 10)})\n\n${notes}\n\n${prev}`.replace(/\n{3,}/g, '\n\n');
+  // Attach first, name last: a download on a save nobody can see stays hidden until the save
+  // is named, so the feed switches to the new release with its installer and signed manifest
+  // already in place. Named first, the feed briefly offered a release without its files.
+  if (DRY) {
+    console.log(`dry run -- would ${log ? 'add ' + version + ' to CHANGELOG.md and ' : ''}run in ${MAIN_DIR}:`);
+    console.log(`  cbx submit -m ${JSON.stringify(title)}`);
+    console.log(`  cbx attach ${file} <that save> --project ${PROJECT}`);
+    console.log(`  cbx attach ${manifestName} <that save> --project ${PROJECT}`);
+    console.log(`  cbx release v${version} --version <that save> --notes ... --downloads public`);
+  } else {
+    if (log) fs.writeFileSync(logPath, log);
+    say(cbxRun(['submit', '-m', title], MAIN_DIR));
+    const newest = cbxRun(['versions', '--limit', '1'], MAIN_DIR).replace(/\x1b\[[0-9;]*m/g, '');
+    const n = (/^\s*v(\d+)\s/m.exec(newest) || [])[1];
+    if (!n) die('could not tell which save was just made:\n' + newest);
+    say(cbxRun(['attach', installer, n, '--project', PROJECT], MAIN_DIR));
+    say(cbxRun(['attach', manifestPath, n, '--project', PROJECT], MAIN_DIR));
+    say(cbxRun(['release', `v${version}`, '--version', n, '--notes', notes, '--downloads', 'public'], MAIN_DIR));
+  }
 }
+
+// ---- 2b. the old releases project, once (--bridge)
+if (BRIDGE && !LINUX) {
+  fs.mkdirSync(RELEASES_DIR, { recursive: true });
+  const home = `https://coderook.com/${OWNER}/${PROJECT}`;
+  const dl = `${FEED}/${encodeURIComponent(file)}`;
+  fs.writeFileSync(path.join(RELEASES_DIR, 'README.md'), `# VoxAI Coder releases have moved
+
+From ${version}, VoxAI Coder is released from its main project: ${home}
+
+**[Download VoxAI Coder ${version} for Windows](${dl})**
+
+Copies installed from here update by themselves: ${version} is published here as well, and
+from it on they check the main project.
+
+Linux, building from source and help: https://github.com/AlexC1991/VoxAI_Coder
+`);
+  const steps = [
+    ['submit', '--name', LEGACY_PROJECT, '-m', title],
+    ['attach', installer],
+    ['attach', manifestPath],
+    ['release', `v${version}`, '--notes', notes],
+  ];
+  if (DRY) {
+    console.log(`dry run -- and, for copies still on the old feed, in ${RELEASES_DIR}:`);
+    for (const st of steps) console.log('  cbx ' + st.map((x) => (/\s/.test(x) ? JSON.stringify(x) : x)).join(' ').slice(0, 160));
+  } else {
+    for (const st of steps) say(cbxRun(st, RELEASES_DIR));
+  }
+}
+if (DRY) process.exit(0);
 
 // ---- 3. what installed copies will see
 // Read the feed back the way an installed copy does -- anonymously, uncached -- and run
@@ -234,13 +236,14 @@ const FEEDS = [
   const { matchesFeed } = require('../src/main/updater.js');
   const pub = fs.readFileSync(path.join(ROOT, 'resources', 'update-key.pem'), 'utf8');
   try {
+    for (const [base, proj] of [[FEED, PROJECT], ...(BRIDGE && !LINUX ? [[LEGACY_FEED, LEGACY_PROJECT]] : [])])
     for (const f of FEEDS) {
-      const res = await fetch(`${FEED}/${f.yml}?t=${Date.now()}`, { cache: 'no-store' });
+      const res = await fetch(`${base}/${f.yml}?t=${Date.now()}`, { cache: 'no-store' });
       const text = await res.text();
-      if (res.status === 404) die(`the feed answers 404: ${PROJECT} is private. Make it public on coderook.com.`);
+      if (res.status === 404) die(`${proj}'s feed answers 404. Updaters have no account: the project has to be public (cbx visibility public), with the release's downloads public (cbx release --downloads public). The source can stay private.`);
       const files = [...text.matchAll(/- url: '?([^'\n]+?)'?\s+sha512: '?([^'\n]+?)'?\s+size: (\d+)/g)].map((x) => ({ url: x[1], sha512: x[2], size: Number(x[3]) }));
       const fv = (/^version: '?([^'\n]+?)'?$/m.exec(text) || [])[1];
-      const mres = await fetch(`${FEED}/${f.manifest}?t=${Date.now()}`, { cache: 'no-store', redirect: 'follow' });
+      const mres = await fetch(`${base}/${f.manifest}?t=${Date.now()}`, { cache: 'no-store', redirect: 'follow' });
       const pm = await mres.json();
       const ok = {
         version: fv === version,
@@ -250,8 +253,8 @@ const FEEDS = [
       // The installer just signed is this platform's; the other one was checked when it shipped.
       if (f.installer.test(file)) ok.installer = pm.sha512 === m.sha512 && pm.size === m.size;
       const bad = Object.keys(ok).filter((k) => !ok[k]);
-      if (bad.length) die(`${f.yml} does not check out (${bad.join(', ')}): installed copies would not take this release`);
-      console.log(`${f.yml} offers ${version}: signature, manifest and installer all check out.`);
+      if (bad.length) die(`${proj} ${f.yml} does not check out (${bad.join(', ')}): installed copies would not take this release`);
+      console.log(`${proj} ${f.yml} offers ${version}: signature, manifest and installer all check out.`);
     }
   } catch (e) { die('could not read the feed back: ' + e.message); }
 })();

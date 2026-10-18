@@ -12,7 +12,7 @@
 **A desktop coding agent for Windows and Linux.**<br>
 Any model on OpenRouter, or one running on your own PC. You pay only for what you use.
 
-`[ v0.2.85 ]`  `[ Windows · Linux ]`  `[ MIT ]`
+`[ v0.2.86 ]`  `[ Windows · Linux ]`  `[ MIT ]`
 
 [Download](#-download) · [What it does](#-what-it-does) · [Build from source](#-build-from-source) · [Layout](#-layout)
 
@@ -40,17 +40,17 @@ Electron): no external agent binary and no subscription, just your
 
 ```
  ╔═══════════╦══════════════════════════════════════════════════════╗
- ║  Windows  ║  VoxAI-Coder-Setup-0.2.85.exe   (installer, 115 MB)  ║
- ║           ║  VoxAI-Coder-0.2.85-portable.exe   (no install)      ║
+ ║  Windows  ║  VoxAI-Coder-Setup-0.2.86.exe   (installer, 115 MB)  ║
+ ║           ║  VoxAI-Coder-0.2.86-portable.exe   (no install)      ║
  ╠═══════════╬══════════════════════════════════════════════════════╣
  ║  Linux    ║  installer script + AppImage, when the Linux build   ║
  ║           ║  for the current version is out                      ║
  ╚═══════════╩══════════════════════════════════════════════════════╝
 ```
 
-- **Windows:** [the installer from CodeRook](https://api.coderook.com/v1/public/projects/batty-251/voxai-coder-releases/updates/VoxAI-Coder-Setup-0.2.85.exe),
+- **Windows:** [the installer from CodeRook](https://api.coderook.com/v1/public/projects/batty-251/voxai-coder/updates/VoxAI-Coder-Setup-0.2.86.exe),
   or both files from [GitHub Releases](https://github.com/AlexC1991/VoxAI_Coder/releases).
-- **Linux:** from the [releases project on CodeRook](https://coderook.com/batty-251/voxai-coder-releases).
+- **Linux:** from the [Releases tab on CodeRook](https://coderook.com/batty-251/voxai-coder).
   Installing, what differs on Linux, and fixes for common problems:
   **[the Linux guide](docs/LINUX.md)**.
 

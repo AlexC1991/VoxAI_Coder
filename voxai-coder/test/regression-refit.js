@@ -1257,7 +1257,7 @@ async function drain(gen) {
     check('each platform reads its own manifest', U.MANIFEST === (process.platform === 'linux' ? 'update-linux.json' : 'update.json'), U.MANIFEST);
 
     const PKG = JSON.parse(read('package.json'));
-    check('the app reads the public releases feed', PKG.build.publish && PKG.build.publish[0].url === U.FEED && /\/voxai-coder-releases\/updates$/.test(U.FEED), PKG.build.publish);
+    check('the app reads the feed of the project that holds the code (one project ships the app)', PKG.build.publish && PKG.build.publish[0].url === U.FEED && /\/batty-251\/voxai-coder\/updates$/.test(U.FEED), PKG.build.publish);
     check('installers are named without spaces, as the feed lists them', PKG.build.nsis.artifactName === 'VoxAI-Coder-Setup-${version}.${ext}', PKG.build.nsis);
     check('electron-updater ships with the app', PKG.dependencies && PKG.dependencies['electron-updater'], PKG.dependencies);
     check('dist never publishes by itself', /--publish never/.test(PKG.scripts.dist), PKG.scripts.dist);
@@ -1339,8 +1339,11 @@ async function drain(gen) {
       MAIN2.includes("const f = path.join(userData(), 'update.log');") && UP.includes('log(`restart pressed (state ${st.state}')
       && read('src/renderer/index.html').includes("if (!ok) say('Could not restart into the update', 4000);"), 'update.log');
     const REL = read('scripts/release.js');
-    check('a release is named only after its files are attached', REL.indexOf("['attach', manifestPath]") < REL.indexOf("['release', `v${version}`"), 'named first');
-    check('the release script checks the feed like an installed copy', REL.includes("if (bad.length) die(`${f.yml} does not check out"), 'version string only');
+    check('a release is named only after its files are attached, with its downloads public and its source not', REL.indexOf("cbxRun(['attach', manifestPath, n, '--project', PROJECT], MAIN_DIR)") > 0
+      && REL.indexOf("cbxRun(['attach', manifestPath, n, '--project', PROJECT], MAIN_DIR)") < REL.indexOf("cbxRun(['release', `v${version}`, '--version', n, '--notes', notes, '--downloads', 'public'], MAIN_DIR)")
+      && REL.indexOf("['attach', manifestPath],") < REL.indexOf("['release', `v${version}`, '--notes', notes],"), 'named first');
+    check('the release script checks the feed like an installed copy, and the old feed too when it bridges', REL.includes("if (bad.length) die(`${proj} ${f.yml} does not check out")
+      && REL.includes("for (const [base, proj] of [[FEED, PROJECT], ...(BRIDGE && !LINUX ? [[LEGACY_FEED, LEGACY_PROJECT]] : [])])"), 'version string only');
     check('adding the Linux build re-checks the Windows feed too', /yml: 'latest\.yml'[\s\S]*yml: 'latest-linux\.yml'[\s\S]*LINUX \? true/.test(REL), 'Windows unchecked');
     // After installing, the download stayed in pending/ -- a second 110 MB copy.
     {
@@ -2827,14 +2830,14 @@ async function drain(gen) {
     const sh = fs.readFileSync(path.join(out, `VoxAI-Coder-${ver}-Linux.sh`), 'utf8');
     const sha = require('crypto').createHash('sha512').update(img).digest('hex');
     check('dist:linux writes VoxAI-Coder-<version>-Linux.sh: that version\'s AppImage from the public feed, checked by SHA-512, installed under ~/.local with a menu entry',
-      sh.startsWith('#!/usr/bin/env bash') && sh.includes(`SHA512='${sha}'`) && sh.includes(`/voxai-coder-releases/updates/VoxAI-Coder-${ver}.AppImage'`)
+      sh.startsWith('#!/usr/bin/env bash') && sh.includes(`SHA512='${sha}'`) && sh.includes(`/batty-251/voxai-coder/updates/VoxAI-Coder-${ver}.AppImage'`)
       && sh.includes('[ "$GOT" = "$SHA512" ] || fail') && sh.includes('Exec="$APP" %U') && !sh.includes('\r') && sh.includes('libfuse2'), sh.slice(0, 300));
     const P = require(path.join(ROOT, 'package.json'));
     check('npm run dist:linux builds the AppImage and then its .sh; clean-release clears old .sh files', P.scripts['dist:linux'] === 'electron-builder --linux --publish never && node scripts/linux-sh.js'
       && read('scripts/clean-release.js').includes('|-Linux\\.sh$|'), P.scripts);
     const RL = read('scripts/release.js');
-    check('release --linux attaches the .sh too, only when it names this exact AppImage; the README links both downloads',
-      RL.includes("['attach', sh, releaseNumber, '--project', PROJECT],") && RL.includes('was made for a different AppImage') && RL.includes('## Linux') && RL.includes('## Windows'), 'release');
+    check('release --linux attaches the .sh too, only when it names this exact AppImage, to the release on the main project',
+      RL.includes("['attach', sh, releaseNumber, '--project', PROJECT],") && RL.includes('was made for a different AppImage') && RL.includes("[cbxEntry(), 'releases', PROJECT]"), 'release');
   }
 
   // ------------------------------------------------------------------ [VF]

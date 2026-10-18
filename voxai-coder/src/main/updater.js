@@ -1,8 +1,11 @@
 /**
  * Updates from CodeRook.
  *
- * Releases are published to the public project batty-251/voxai-coder-releases (the
- * code is in voxai-coder, and on GitHub). CodeRook serves an electron-updater feed for
+ * Releases come from the CodeRook project batty-251/voxai-coder, the one that holds the
+ * code: each is a named version whose downloads are public on their own, so the installers
+ * and this feed are served while the source keeps its own visibility. Up to 0.2.85 they went
+ * to a second project, voxai-coder-releases, which carries 0.2.86 too so copies installed
+ * from it move over (scripts/release.js --bridge). CodeRook serves an electron-updater feed for
  * it -- latest.yml with each file's size and SHA-512 -- so electron-updater does the
  * checking, downloading and installing.
  *
@@ -18,7 +21,7 @@ const fs = require('fs');
 const path = require('path');
 
 const OWNER = 'batty-251';
-const PROJECT = 'voxai-coder-releases';
+const PROJECT = 'voxai-coder';
 const FEED = `https://api.coderook.com/v1/public/projects/${OWNER}/${PROJECT}/updates`;
 const APP = 'voxai-coder';
 const FIRST_CHECK_MS = 15 * 1000;

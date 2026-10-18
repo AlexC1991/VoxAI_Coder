@@ -125,7 +125,7 @@ npm run release -- --linux
 
 This signs the AppImage into `update-linux.json`, then attaches the AppImage, the `.sh` and
 the manifest (in that order, so Linux copies never see a manifest before its file) to the
-existing **v\<version\>** release on `voxai-coder-releases`, and reads both update feeds back
+existing **v\<version\>** release on the `voxai-coder` project, and reads both update feeds back
 the way an installed copy does. It has to end with both lines:
 
 ```

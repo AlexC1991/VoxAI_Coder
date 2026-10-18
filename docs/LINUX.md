@@ -36,18 +36,18 @@ have everything but FUSE 2.
 ### ── With the installer script (recommended)
 
 Download `VoxAI-Coder-<version>-Linux.sh` from the
-[releases project on CodeRook](https://coderook.com/batty-251/voxai-coder-releases), then:
+[Releases tab of the project on CodeRook](https://coderook.com/batty-251/voxai-coder), then:
 
 ```bash
-bash VoxAI-Coder-0.2.85-Linux.sh
+bash VoxAI-Coder-0.2.86-Linux.sh
 ```
 
 It downloads the AppImage for that version, checks its SHA-512, installs it, adds VoxAI Coder
 to your applications menu and starts it. Other options:
 
 ```bash
-bash VoxAI-Coder-0.2.85-Linux.sh --no-start    # install, do not start
-bash VoxAI-Coder-0.2.85-Linux.sh --uninstall   # remove the app (your data stays)
+bash VoxAI-Coder-0.2.86-Linux.sh --no-start    # install, do not start
+bash VoxAI-Coder-0.2.86-Linux.sh --uninstall   # remove the app (your data stays)
 ```
 
 The script tells you if FUSE 2 is missing, and if `~/.local/bin` is not on your `PATH`.
@@ -59,8 +59,8 @@ version, which then updates itself.
 ### ── Or run the AppImage directly
 
 ```bash
-chmod +x VoxAI-Coder-0.2.85.AppImage
-./VoxAI-Coder-0.2.85.AppImage
+chmod +x VoxAI-Coder-0.2.86.AppImage
+./VoxAI-Coder-0.2.86.AppImage
 ```
 
 It runs from wherever you put it, without a menu entry. It still updates itself.
@@ -142,7 +142,7 @@ itself on Linux.* in Settings ▸ Account.
 ## ▓▒░ Uninstall
 
 ```bash
-bash VoxAI-Coder-0.2.85-Linux.sh --uninstall   # any version's script will do
+bash VoxAI-Coder-0.2.86-Linux.sh --uninstall   # any version's script will do
 ```
 
 That removes the app, its menu entry and the `voxai-coder` command. Your sessions and
@@ -244,7 +244,7 @@ The download was cut short or changed on the way. Run the script again. If it ke
 happening, download the AppImage directly from the releases project and compare:
 
 ```bash
-sha512sum VoxAI-Coder-0.2.85.AppImage
+sha512sum VoxAI-Coder-0.2.86.AppImage
 ```
 
 with the `SHA512=` line near the top of the `.sh` script.
