@@ -1941,7 +1941,14 @@ app.whenReady().then(() => {
     // Abort only. The run's own finally removes it once it has really ended; removed here, the
     // session read as idle while the stopped run was still writing its last messages, and a
     // new run could start on the same session underneath it.
-    if (ctl) { ctl.abort(); return true; }
+    if (ctl) {
+      ctl.abort();
+      // Stop while an approval or a question is waiting: nothing else ends that wait, so the run
+      // sat "running" for good and the messages queued behind it never went. It is answered no.
+      for (const [k, p] of pendingPerms) if (p.runKey === runKey) { pendingPerms.delete(k); try { p.resolve(false, false); } catch {} allRenderers().send('agent:perm-done', { permId: k, allowed: false }); }
+      for (const [k, p] of pendingInputs) if (p.runKey === runKey) { pendingInputs.delete(k); try { p.resolve({ answer: null, cancelled: true }); } catch {} allRenderers().send('agent:input-done', { inputId: k }); }
+      return true;
+    }
     return false;
   });
   ipcMain.handle('agent:permission', (_e, { permId, allowed, always }) => {

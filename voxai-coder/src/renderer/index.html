@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-hPtnZAfi1hAuixzxVaQCWnoMfAoLifY6zL7Eo+DO6fM='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-rfF5P+yC1BGhyPZbAt0u5vUnB7/h0JMslgg2IOsZbbU='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -5577,6 +5577,11 @@ async function newSession(dir){
   const created = await window.voxai.sessionsCreate({ title: 'New session', workdir: workdir, model: S.openrouterModel });
   if (!created || created.ok === false) throw new Error((created && created.error) || 'Could not start a session.');
   const v = viewOf(created.id);
+  // This page draws the new session from its first message, so the view is whole. Unmarked, it
+  // was taken for one that live events had started (openSession) and redrawn from the saved
+  // session on every switch back: a step under way at that moment was not saved yet, so it and
+  // its cost were lost, and a run left going in one project looked stalled from another.
+  v.opened = true;
   v.busy = false; v.queue = []; v.cost = 0; v.tokens = 0; v.rate = 0; v.inTokens = 0; v.outTokens = 0;
   v.cacheReadTokens = 0; v.cacheWriteTokens = 0;
   // A new session MUST carry its own workdir. Leaving it unset made the context bar
@@ -5639,6 +5644,9 @@ async function openSession(id){
   if (!v) {
     v = viewOf(id);
     full = await window.voxai.sessionsOpen(id);
+    // Redrawn from the saved session while a run is still going: the step under way is not saved
+    // yet, so it would be missing for good. Drawn again from the whole save when the run ends.
+    window.voxai.agentLive(id).then((l) => { if (l && (l.runKeys || []).length) v.redrawAtEnd = true; }).catch(() => {});
     v.root.innerHTML = '';
     v._title = full.title; v._workdir = full.workdir;
     v.workdir = full.workdir;   // the context bar needs the real path, not just the label
@@ -5781,20 +5789,26 @@ async function openSession(id){
     if (keepPerm) { v.perm = keepPerm.perm; v.permQueue = keepPerm.permQueue; }
     T = prevT;
   }
-  // ---- self-heal on EVERY open (stuck-state fix) ----
+  // ---- self-heal on open (stuck-state fix) ----
   // Re-opening a session means the user chose to look at it: any stale busy/run-key
   // state from a died process or a missed terminal event would otherwise show
-  // "thinking…" forever. We clear the UI busy state (the backend run, if somehow
-  // still alive, is orphaned from this UI anyway). Keeping the stop button clickable
-  // after open lets the user cancel any genuinely-live run too.
-  v.busy = false;
-  v.runKeys = new Set();
-  clearTimeout(v.statusTimer);
-  if (v.statusEl) { try { v.statusEl.remove(); } catch {} v.statusEl = null; }
-  if (v.curStream) { try { v.curStream.classList.remove('live'); } catch {} v.curStream = null; }
-  if (v.curRun) { v.curRun = null; }
-  v.latestTool = null;
-  foldTurns(v);   // finished turns read as your message, a few steps and the answer
+  // "thinking…" forever, so it is cleared -- but only when nothing is running there.
+  // It ran on every open: going back to a project whose run was still going wiped that
+  // run's place in the thread (the step it was on, the command running, the text being
+  // written), so the command read "Running" for good, later steps started a new list and
+  // the session looked idle -- one project at a time was all that seemed to work.
+  let liveNow = null;
+  try { liveNow = await window.voxai.agentLive(id); } catch { /* treat as not running */ }
+  if (!(liveNow && liveNow.runKeys && liveNow.runKeys.length)) {
+    v.busy = false;
+    v.runKeys = new Set();
+    clearTimeout(v.statusTimer);
+    if (v.statusEl) { try { v.statusEl.remove(); } catch {} v.statusEl = null; }
+    if (v.curStream) { try { v.curStream.classList.remove('live'); } catch {} v.curStream = null; }
+    if (v.curRun) { v.curRun = null; }
+    v.latestTool = null;
+    foldTurns(v);   // finished turns read as your message, a few steps and the answer
+  }
   const prevView = actView();
   if (prevView && prevView !== v) stashDraft(prevView);
   activeId = id; tellMainSession();
@@ -6044,9 +6058,21 @@ $('q').addEventListener('input', () => {
 $('q').addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.target.value = ''; renderSessionList(); } });
 
 // ---- agent events: route to the owning session view (any may be active) ----
+/** A view redrawn mid-run (see openSession): once the run's last events are in, draw it from the whole save. */
+function redrawWhenSettled(v, sid){
+  clearTimeout(v.redrawTimer);
+  v.redrawTimer = setTimeout(() => {
+    if (viewStore.get(sid) !== v || v.busy) return;
+    v.redrawAtEnd = false;
+    v.opened = false;            // the next open reads it from the save
+    if (!PANE && sid === activeId) openSession(sid);
+    else if (PANE && sid === PANE) location.reload();
+  }, 800);
+}
 function onAgentEvt({ sessionId: sid, runKey, event }){
   if (typeof DELETED_SIDS !== 'undefined' && DELETED_SIDS.has(sid)) return;   // deleted: its stopped run's last words
   const v = viewOf(sid);        // register session even if we haven't opened it yet
+  if (v.redrawAtEnd && ['done', 'error', 'cancelled', 'limit_reached', 'budget_reached', 'run_summary'].includes(event.type)) redrawWhenSettled(v, sid);
   T = v;
   // A run started in another page (a split pane) is still running here: this page only set
   // busy when it sent the message itself, so the list and the page called it done.

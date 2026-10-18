@@ -2291,6 +2291,16 @@ async function drain(gen) {
         { before, ticked, lag, caught, spendShown, topUp, rechecks });
       check('every session\'s steps count, on the first page only; Settings says it counts down', HTMLs.includes('    balanceSpend(step);') && HTMLs.includes('  if (PANE || !(usd > 0) || BAL.avail == null) return;')
         && HTMLs.includes('Counts down as runs spend, and is checked with OpenRouter after each run.'), 'wiring');
+      // Several projects at once, in one window: going back to a project whose run was still
+      // going wiped the run's place in the thread (the command read "Running" for good, later steps
+      // began a new list, the session looked idle). Found with two runs and a switch every second.
+      const heal = HTMLs.slice(HTMLs.indexOf('  // ---- self-heal on open (stuck-state fix) ----')).slice(0, 2000);
+      check('opening a session clears stale run state only when nothing is running there', heal.includes('  try { liveNow = await window.voxai.agentLive(id); } catch { /* treat as not running */ }')
+        && heal.includes('  if (!(liveNow && liveNow.runKeys && liveNow.runKeys.length)) {') && heal.indexOf('    v.latestTool = null;') > heal.indexOf('if (!(liveNow'), 'heal');
+      check('a new session view is whole (not redrawn from the save on every switch back); one redrawn mid-run is drawn again when it ends',
+        /const v = viewOf\(created\.id\);\r?\n(?:  \/\/[^\n]*\n)+  v\.opened = true;/.test(HTMLs) && HTMLs.includes("if (l && (l.runKeys || []).length) v.redrawAtEnd = true;")
+        && HTMLs.includes("if (v.redrawAtEnd && ['done', 'error', 'cancelled', 'limit_reached', 'budget_reached', 'run_summary'].includes(event.type)) redrawWhenSettled(v, sid);"), 'views');
+      check('Stop ends a run that is waiting on an approval or a question (it waited for good)', MAIN.includes("for (const [k, p] of pendingInputs) if (p.runKey === runKey) { pendingInputs.delete(k); try { p.resolve({ answer: null, cancelled: true }); } catch {} allRenderers().send('agent:input-done', { inputId: k }); }"), 'stop');
       check('a second session cannot start another model on this PC under a run still using one', MAIN.includes('const localRuns = new Map();') && MAIN.includes('if (localWant && f !== localWant) throw new Error('), 'local');
     }
 
@@ -2864,7 +2874,7 @@ async function drain(gen) {
     check('a queued message goes to its own session, not the one on screen', HA.includes('let sid = v && v.id && viewStore.get(v.id) === v ? v.id : null;') && HA.includes('const r = await window.voxai.agentSend(sid, text, parts);'), 'doSend');
     check('a run is registered before its local model loads, Stop reaches it then, and loads go one at a time', MA.indexOf('controllers.set(runKey, ctl);\n    if (localWant) localRuns.set(runKey, localWant);\n    let localCtx = 0;') > 0
       && MA.includes("throw new Error('Stopped while the model on this PC was loading.')") && HA.includes('window.voxai.agentLive(v.id).then((l) =>') && LE2.includes('if (starting && starting.file === file) return starting.p;'), 'lock');
-    check('Stop only aborts: the run itself is forgotten when it has really ended', MA.includes('if (ctl) { ctl.abort(); return true; }') && !MA.includes('if (ctl) { ctl.abort(); controllers.delete(runKey); return true; }'), 'cancel');
+    check('Stop only aborts: the run itself is forgotten when it has really ended', MA.includes('    if (ctl) {') && MA.includes('      ctl.abort();') && MA.includes("for (const [k, p] of pendingPerms) if (p.runKey === runKey) { pendingPerms.delete(k); try { p.resolve(false, false); } catch {} allRenderers().send('agent:perm-done', { permId: k, allowed: false }); }") && !MA.includes('if (ctl) { ctl.abort(); controllers.delete(runKey); return true; }'), 'cancel');
     check('the chat view is sandboxed, the app page is matched exactly, and a file: link that is not a page is shown, not run',
       MA.includes('contextIsolation: true, nodeIntegration: false, sandbox: true,\n  };') && MA.includes("return require('url').fileURLToPath(u).replace(/\\\\/g, '/').toLowerCase() === APP_PAGE;")
       && MA.includes("if (!/\\.html?$/i.test(p)) { shell.showItemInFolder(p); return { ok: true, shown: true }; }"), 'shell');
