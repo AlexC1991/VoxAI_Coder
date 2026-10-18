@@ -150,6 +150,58 @@ async function verifyFile(fullPath) {
 }
 
 /**
+ * Type errors in a TypeScript file just edited, the way OpenCode feeds its language servers'
+ * diagnostics back after an edit. The project-wide checker is left out above because it is slow
+ * and reports other files; here it is the project's own TypeScript, run incrementally (a later
+ * edit re-checks only what changed), and only this file's errors come back, with a count of the
+ * rest. Only when the project has a tsconfig.json and TypeScript installed in node_modules --
+ * nothing is downloaded. Best-effort like the rest: anything missing or slow is skipped.
+ */
+const TYPES_TIMEOUT_MS = (() => { const n = Number(process.env.VOX_TYPES_TIMEOUT_MS); return Number.isFinite(n) && n > 0 ? n : 45000; })();
+const TS_EXT = /\.(ts|tsx|mts|cts)$/i;
+/** The nearest file named `name` from `dir` up to `root` (inclusive), or ''. */
+function findUp(dir, root, name) {
+  const top = path.resolve(root);
+  for (let d = path.resolve(dir); ; d = path.dirname(d)) {
+    const f = path.join(d, name);
+    if (require('fs').existsSync(f)) return f;
+    if (d === top || path.dirname(d) === d || !d.startsWith(top)) return '';
+  }
+}
+async function typeErrors(fullPath, workdir) {
+  if (!workdir || !TS_EXT.test(String(fullPath || '')) || process.env.VOX_DISABLE_TYPES) return null;
+  const tsconfig = findUp(path.dirname(fullPath), workdir, 'tsconfig.json');
+  if (!tsconfig) return null;
+  const tsc = findUp(path.dirname(tsconfig), workdir, path.join('node_modules', 'typescript', 'lib', 'tsc.js'));
+  if (!tsc) return null;
+  // The incremental record lives with the app's other project files, one per tsconfig.
+  const key = require('crypto').createHash('sha1').update(tsconfig.toLowerCase()).digest('hex').slice(0, 12);
+  const info = path.join(workdir, '.voxai', 'tsc', key + '.tsbuildinfo');
+  try { await fsp.mkdir(path.dirname(info), { recursive: true }); } catch { return null; }
+  const out = await new Promise((resolve) => {
+    // Electron's own Node runs it: the project need not have Node on PATH.
+    execFile(process.execPath, [tsc, '--noEmit', '-p', tsconfig, '--incremental', '--tsBuildInfoFile', info, '--pretty', 'false', '--listFiles'],
+      { timeout: TYPES_TIMEOUT_MS, windowsHide: true, maxBuffer: 8 * 1024 * 1024, cwd: path.dirname(tsconfig), env: { ...process.env, ELECTRON_RUN_AS_NODE: '1' } },
+      (err, stdout, stderr) => resolve(err && err.killed ? null : String(stdout || '') + String(stderr || '')));
+  });
+  if (out == null) return { skipped: `tsc took longer than ${Math.round(TYPES_TIMEOUT_MS / 1000)}s` };
+  const here = path.resolve(fullPath).toLowerCase();
+  const mine = [], others = new Set();
+  let otherCount = 0, inProgram = false;
+  for (const line of out.split(/\r?\n/)) {
+    // --listFiles: the files the project compiles. One it leaves out was not checked at all.
+    if (!inProgram && path.isAbsolute(line.trim()) && path.resolve(line.trim()).toLowerCase() === here) inProgram = true;
+    const m = /^(.+?)\((\d+),(\d+)\): error (TS\d+): (.*)$/.exec(line);
+    if (!m) continue;
+    const file = path.resolve(path.dirname(tsconfig), m[1]).toLowerCase();
+    if (file === here) mine.push(`line ${m[2]}:${m[3]} ${m[4]} ${m[5]}`);
+    else { otherCount++; others.add(path.relative(workdir, path.resolve(path.dirname(tsconfig), m[1]))); }
+  }
+  if (!inProgram && !mine.length) return null;   // not part of this tsconfig: nothing to say about it
+  return { errors: mine.slice(0, 20), more: Math.max(0, mine.length - 20), otherCount, otherFiles: [...others].slice(0, 5) };
+}
+
+/**
  * Attach verification to a write/edit/patch result.
  *
  * A failed check is surfaced as a THROWN error so the agent loop records it as a
@@ -158,7 +210,7 @@ async function verifyFile(fullPath) {
  * either way — the message says so explicitly, so the model does not re-apply an
  * edit that already landed.
  */
-async function withVerification(result, fullPath, relPath) {
+async function withVerification(result, fullPath, relPath, workdir) {
   const v = await verifyFile(fullPath);
   if (v.verified === 'failed') {
     const err = new Error(
@@ -168,7 +220,26 @@ async function withVerification(result, fullPath, relPath) {
     err.verification = v;
     throw err;
   }
-  return Object.assign({}, result, { verification: v });
+  // Type errors are reported, not failed: a change made over several edits is broken in between
+  // by design. Said plainly, in the result the model reads next.
+  let types = null;
+  try { types = await typeErrors(fullPath, workdir); } catch { types = null; }
+  // A syntax error (TS1xxx) fails the edit, the way a JavaScript one does above.
+  const syntax = types && types.errors ? types.errors.filter((e) => /\bTS1\d{3}\b/.test(e)) : [];
+  if (syntax.length) {
+    const err = new Error(`${relPath || fullPath} was written, but it does not parse — fix it in your next edit.\ntsc:\n${syntax.join('\n')}`);
+    err.verification = { verified: 'failed', checker: 'tsc', diagnostics: syntax.join('\n') };
+    throw err;
+  }
+  const out = Object.assign({}, result, { verification: v });
+  if (types && types.errors && types.errors.length) {
+    out.typeErrors = types.errors;
+    out.typeNote = `tsc reports ${types.errors.length + types.more} type error${types.errors.length + types.more === 1 ? '' : 's'} in this file: fix them unless a later edit in this change will.`
+      + (types.otherCount ? ` (${types.otherCount} more in other files: ${types.otherFiles.join(', ')}.)` : '');
+  } else if (types && types.errors) {
+    out.types = types.otherCount ? `no type errors in this file (tsc: ${types.otherCount} in other files: ${types.otherFiles.join(', ')})` : 'no type errors (tsc)';
+  }
+  return out;
 }
 
-module.exports = { verifyFile, withVerification, CHECKERS };
+module.exports = { verifyFile, withVerification, typeErrors, CHECKERS };

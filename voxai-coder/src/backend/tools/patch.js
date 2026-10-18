@@ -84,7 +84,7 @@ function makePatchTool({ resolveIn, checkPermission }) {
       if (text === original) return { path: args.path, edits: 0, message: 'no change (identical text)' };
       await fsp.writeFile(full, text, 'utf8');
       markSeen(full, text);
-      return withVerification({ path: args.path, edits: applied.length, oldBytes: Buffer.byteLength(original), newBytes: Buffer.byteLength(text), diffBytes: Buffer.byteLength(text) - Buffer.byteLength(original) }, full, args.path);
+      return withVerification({ path: args.path, edits: applied.length, oldBytes: Buffer.byteLength(original), newBytes: Buffer.byteLength(text), diffBytes: Buffer.byteLength(text) - Buffer.byteLength(original) }, full, args.path, ctx && ctx.workdir);
     },
   };
 }

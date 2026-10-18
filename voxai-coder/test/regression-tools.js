@@ -496,6 +496,42 @@ async function subAgentReceiptTests() {
   check('resuming a missing worker fails clearly', missing.ok === false && /no such session/i.test(missing.error), missing);
 }
 
+// Type errors after an edit (OpenCode feeds its language servers' diagnostics back): the project's
+// own TypeScript, incremental, this file's errors only; a file the project leaves out says nothing;
+// a syntax error fails the edit. Skipped when node_modules has no TypeScript.
+async function typeTests() {
+  console.log('\n[TY] TypeScript errors in the file just edited');
+  const ts = path.join(__dirname, '..', 'node_modules', 'typescript');
+  if (!fs.existsSync(path.join(ts, 'lib', 'tsc.js'))) { console.log('  (skipped: no TypeScript in node_modules)'); return; }
+  const P = fs.mkdtempSync(path.join(os.tmpdir(), 'vox-types-'));
+  const link = path.join(P, 'node_modules', 'typescript');
+  try {
+    fs.mkdirSync(path.join(P, 'src'));
+    fs.mkdirSync(path.join(P, 'node_modules'));
+    fs.symlinkSync(ts, link, 'junction');
+    fs.writeFileSync(path.join(P, 'tsconfig.json'), JSON.stringify({ compilerOptions: { strict: true, target: 'es2020', noEmit: true }, include: ['src'] }));
+    fs.writeFileSync(path.join(P, 'src', 'other.ts'), 'export const n: number = "x";\n');
+    const c = { workdir: P, checkPermission: async () => {}, session: { id: 't', messages: [] } };
+    const { ALL } = tools.buildTools({ ...c, emit: () => {}, resolveIn: (wd, p) => path.resolve(wd, p), getSettings: () => ({}), getAccess: () => 'full' });
+    const write = ALL.find((t) => t.def.function.name === 'write'), edit = ALL.find((t) => t.def.function.name === 'edit');
+    const r1 = await write.run({ path: 'src/a.ts', content: 'const x: string = 1 + 2;\nexport {};\n' }, c);
+    check('a type error in the edited file comes back with the edit, others counted, not listed', Array.isArray(r1.typeErrors) && /line 1:7 TS2322/.test(r1.typeErrors[0])
+      && /1 type error in this file/.test(r1.typeNote) && /1 more in other files: src.other\.ts/.test(r1.typeNote), r1);
+    const r2 = await edit.run({ path: 'src/a.ts', before: 'const x: string', after: 'const x: number' }, c);
+    check('fixed, it says so (and the check is incremental)', !r2.typeErrors && /no type errors in this file/.test(r2.types) && fs.readdirSync(path.join(P, '.voxai', 'tsc')).length === 1, r2);
+    const r3 = await write.run({ path: 'loose.ts', content: 'let y: number = "x";\n' }, c);
+    check('a file the tsconfig leaves out was not checked, so nothing is said about it', !r3.typeErrors && !r3.types, r3);
+    let thrown = '';
+    try { await write.run({ path: 'src/b.ts', content: 'export const z = (;\n' }, c); } catch (e) { thrown = e.message; }
+    check('a TypeScript syntax error fails the edit like a JavaScript one', /does not parse/.test(thrown) && /TS1\d{3}/.test(thrown), thrown);
+  } finally {
+    // The link first: a recursive delete follows a junction and empties what it points at.
+    try { fs.unlinkSync(link); } catch {}
+    if (fs.existsSync(path.join(ts, 'lib', 'tsc.js'))) { try { fs.rmSync(P, { recursive: true, force: true }); } catch {} }
+  }
+  check('the real TypeScript is untouched afterwards', fs.existsSync(path.join(ts, 'lib', 'tsc.js')), ts);
+}
+
 async function verifyTests() {
   console.log('\n[P] verification in the tool result');
   const { byName, ctx } = toolset();
@@ -792,6 +828,7 @@ async function subAgentStreamingTests() {
   await subAgentReceiptTests();
   await backgroundTests();
   await subAgentStreamingTests();
+  await typeTests();
   try { fs.rmSync(WD, { recursive: true, force: true }); } catch {}
   console.log(`\n${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);

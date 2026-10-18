@@ -160,7 +160,7 @@ const write = tool('write', 'Create or overwrite a file (creates parent dirs).',
   await fsp.writeFile(full, content, 'utf8');
   markSeen(full, content);
   // Syntax-check what we just wrote and hand the diagnostics straight back.
-  return withVerification({ path: full, bytes: Buffer.byteLength(content) }, full, p);
+  return withVerification({ path: full, bytes: Buffer.byteLength(content) }, full, p, ctx.workdir);
 });
 
 /**
@@ -268,7 +268,7 @@ const edit = tool('edit', 'Replace `before` with `after` in a file. `before` mus
   for (const h of hits.slice().reverse()) next = next.slice(0, h.start) + toEol(after, eol) + next.slice(h.end);
   await fsp.writeFile(full, next, 'utf8');
   markSeen(full, next);
-  return withVerification({ path: full, replaced: hit.end - hit.start, match: hit.how, ...(hits.length > 1 ? { places: hits.length } : {}) }, full, p);
+  return withVerification({ path: full, replaced: hit.end - hit.start, match: hit.how, ...(hits.length > 1 ? { places: hits.length } : {}) }, full, p, ctx.workdir);
 });
 
 const glob = tool('glob', 'List files matching a glob-ish pattern (supports * and **).', {
