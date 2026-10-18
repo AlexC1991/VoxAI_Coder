@@ -1,5 +1,9 @@
 # Changes
 
+## 0.2.86 (2026-10-18)
+
+Several projects at once in one window: going back to a project whose run is still going no longer breaks it, and Stop ends a run waiting on an approval. The balance counts down as runs spend. Side by side, the session list opens into the pane you are working in. Releases now come from the main VoxAI Coder project.
+
 ## 0.2.85 (2026-10-17)
 
 Spends less on every model: one fixed prompt per session so the provider cache keeps hitting, only the memory facts that matter, the thinking level shown with its cost, long requests kept under GPT and Grok price jumps, stale reads and old screenshots left out, and a stop when the model goes in circles. Edits that match more than one place are refused. The model picker shows what a message costs you. Updates download with progress in Settings > Account.
