@@ -13,7 +13,11 @@
  * Without a sidecar llama-server sizes the load itself (--fit).
  *
  * The engine is downloaded once, pinned to one build and checked against its published
- * SHA-256, into %LOCALAPPDATA%\voxai-coder-engine\<build>. Model ids are "local/<file name>".
+ * SHA-256, beside the models (or in the app's data) under <build>. Model ids are "local/<file name>".
+ *
+ * Windows takes llama.cpp's Windows Vulkan build; Linux its Ubuntu Vulkan build (x64 or ARM64),
+ * which runs on any glibc distribution with a Vulkan loader -- and on the CPU without one, since
+ * its GPU backends load as libraries beside llama-server. Other systems have no build here.
  */
 const fs = require('fs');
 const path = require('path');
@@ -21,13 +25,33 @@ const net = require('net');
 const crypto = require('crypto');
 const { spawn, execFile } = require('child_process');
 
-const ENGINE = {
-  build: 'b11223',
-  file: 'llama-b11223-bin-win-vulkan-x64.zip',
-  sha256: 'b450e71cfb2204955db784590af51b3f81fbc3bde0c5687f7a85c89edc977fd4',
-  bytes: 33062159,
+// One pinned build per system, with the size and SHA-256 its release publishes.
+const BUILD = 'b11223';
+const ENGINES = {
+  'win32-x64': { file: `llama-${BUILD}-bin-win-vulkan-x64.zip`, sha256: 'b450e71cfb2204955db784590af51b3f81fbc3bde0c5687f7a85c89edc977fd4', bytes: 33062159, exe: 'llama-server.exe', kind: 'zip' },
+  'linux-x64': { file: `llama-${BUILD}-bin-ubuntu-vulkan-x64.tar.gz`, sha256: 'd4505b5752a967e070fb418ec1d365d4448d692eccea1d7d4d0a6e75b7300025', bytes: 31348616, exe: 'llama-server', kind: 'tgz' },
+  'linux-arm64': { file: `llama-${BUILD}-bin-ubuntu-vulkan-arm64.tar.gz`, sha256: '89b7f6c99289f2584b7584c266624e835357bc8b3b05e2bc4e94e5836e9a1a24', bytes: 24665814, exe: 'llama-server', kind: 'tgz' },
 };
-ENGINE.url = `https://github.com/ggml-org/llama.cpp/releases/download/${ENGINE.build}/${ENGINE.file}`;
+/** The build for a system, or null when there is none for it. */
+function engineFor(platform = process.platform, arch = process.arch) {
+  const e = ENGINES[`${platform}-${arch}`];
+  return e ? { build: BUILD, ...e, url: `https://github.com/ggml-org/llama.cpp/releases/download/${BUILD}/${e.file}` } : null;
+}
+// This system's. The rest of the file reads its fields; with none, nothing here is offered (main.js).
+const ENGINE = engineFor() || { build: BUILD, file: '', sha256: '', bytes: 1, exe: 'llama-server', kind: '', url: '' };
+
+/** Physical cores from /proc/cpuinfo: one per (physical id, core id); 0 when it cannot tell. */
+function coresFromCpuinfo(text) {
+  const seen = new Set();
+  let phys = '0';
+  for (const line of String(text || '').split(/\r?\n/)) {
+    const m = /^(physical id|core id)\s*:\s*(\d+)/.exec(line);
+    if (!m) continue;
+    if (m[1] === 'physical id') phys = m[2];
+    else seen.add(phys + ':' + m[2]);
+  }
+  return seen.size;
+}
 
 // An agent's prompt and tools alone are ~8k tokens: below 16k a local model has no room to work.
 const MIN_CTX = 16384, WANT_CTX = 32768;
@@ -126,16 +150,20 @@ function createLocalEngine({ baseDir, log = () => {}, onState = () => {} }) {
   // Where the engine lives can change with the settings (beside the models folder), so it is looked up each time.
   const base = () => (typeof baseDir === 'function' ? baseDir() : baseDir);
   const dirOf = () => path.join(base(), ENGINE.build);
-  const exeOf = () => path.join(dirOf(), 'llama-server.exe');
+  const exeOf = () => path.join(dirOf(), ENGINE.exe);
+  // On Linux its libraries (the GPU backends among them) sit beside it.
+  const envOf = () => (process.platform === 'win32' ? process.env
+    : { ...process.env, LD_LIBRARY_PATH: [dirOf(), process.env.LD_LIBRARY_PATH].filter(Boolean).join(':') });
   let proc = null, tail = [], cores = 0;
   let st = { state: fs.existsSync(exeOf()) ? 'stopped' : 'missing', model: '', port: 0, ctx: 0, how: '', device: '', error: '', percent: 0, build: ENGINE.build, tps: 0, pps: 0 };
   const set = (patch) => { st = { ...st, ...patch }; try { onState(st); } catch {} };
 
-  const run = (args, ms = 30000) => new Promise((resolve) => execFile(exeOf(), args, { cwd: dirOf(), windowsHide: true, timeout: ms }, (_e, out, err) => resolve(String(out || '') + String(err || ''))));
+  const run = (args, ms = 30000) => new Promise((resolve) => execFile(exeOf(), args, { cwd: dirOf(), env: envOf(), windowsHide: true, timeout: ms }, (_e, out, err) => resolve(String(out || '') + String(err || ''))));
 
   async function physicalCores() {
     if (cores) return cores;
-    cores = await new Promise((resolve) => execFile('powershell', ['-NoProfile', '-Command', '(Get-CimInstance Win32_Processor | Measure-Object -Property NumberOfCores -Sum).Sum'],
+    if (process.platform === 'linux') { try { cores = coresFromCpuinfo(fs.readFileSync('/proc/cpuinfo', 'utf8')); } catch { cores = 0; } }
+    else cores = await new Promise((resolve) => execFile('powershell', ['-NoProfile', '-Command', '(Get-CimInstance Win32_Processor | Measure-Object -Property NumberOfCores -Sum).Sum'],
       { windowsHide: true, timeout: 15000 }, (_e, out) => resolve(Number(String(out || '').trim()) || 0)));
     if (!cores) cores = Math.max(1, Math.round(require('os').cpus().length / 2));
     return cores;
@@ -144,6 +172,7 @@ function createLocalEngine({ baseDir, log = () => {}, onState = () => {} }) {
   /** Download the pinned build, check it, unpack it. Progress goes out as state.percent. */
   async function install() {
     if (fs.existsSync(exeOf())) { set({ state: proc ? st.state : 'stopped' }); return true; }
+    if (!ENGINE.file) { set({ state: 'missing', error: 'there is no llama.cpp build for this system here' }); return false; }
     set({ state: 'installing', percent: 0, error: '' });
     fs.mkdirSync(dirOf(), { recursive: true });
     try {
@@ -165,10 +194,14 @@ function createLocalEngine({ baseDir, log = () => {}, onState = () => {} }) {
       }
       await new Promise((r) => out.end(r));
       if (hash.digest('hex') !== ENGINE.sha256) throw new Error('the download did not match its published checksum');
-      await new Promise((resolve, reject) => execFile(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe'), ['-xf', zip, '-C', dirOf()],
-        { windowsHide: true, timeout: 120000 }, (e) => (e ? reject(e) : resolve())));
+      // Windows' own tar reads the zip; on Linux the archive holds one folder (llama-<build>/), dropped.
+      const [tarExe, tarArgs] = ENGINE.kind === 'zip'
+        ? [path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe'), ['-xf', zip, '-C', dirOf()]]
+        : ['tar', ['-xzf', zip, '-C', dirOf(), '--strip-components=1']];
+      await new Promise((resolve, reject) => execFile(tarExe, tarArgs, { windowsHide: true, timeout: 120000 }, (e) => (e ? reject(e) : resolve())));
       try { fs.rmSync(zip, { force: true }); } catch {}
-      if (!fs.existsSync(exeOf())) throw new Error('llama-server.exe was not in the download');
+      if (!fs.existsSync(exeOf())) throw new Error(`${ENGINE.exe} was not in the download`);
+      if (process.platform !== 'win32') { try { fs.chmodSync(exeOf(), 0o755); } catch { /* tar kept its mode */ } }
       log(`engine ${ENGINE.build} installed`);
       set({ state: 'stopped', percent: 100 });
       return true;
@@ -231,7 +264,7 @@ function createLocalEngine({ baseDir, log = () => {}, onState = () => {} }) {
   async function trial(model, ngl, ctx, threads, cmoe = 0) {
     const port = await freePort();
     const p = spawn(exeOf(), ['-m', model, '--host', '127.0.0.1', '--port', String(port), '-np', '1', '--no-webui', '--fit', 'off',
-      '-ngl', String(ngl), '-c', String(ctx), ...(threads ? ['-t', String(threads)] : []), ...moeArgs(cmoe)], { cwd: dirOf(), windowsHide: true, stdio: 'ignore' });
+      '-ngl', String(ngl), '-c', String(ctx), ...(threads ? ['-t', String(threads)] : []), ...moeArgs(cmoe)], { cwd: dirOf(), env: envOf(), windowsHide: true, stdio: 'ignore' });
     try {
       const t0 = Date.now();
       let up = false;
@@ -333,7 +366,7 @@ function createLocalEngine({ baseDir, log = () => {}, onState = () => {} }) {
     log(`starting ${file}: ${plan.how}${dev ? ' on ' + dev.name : ' on the CPU'}`);
     // The speeds measured when tuning (0 when unknown): a request far below them means the PC is busy.
     set({ state: 'loading', model: file, port, ctx: plan.ctx, how: plan.how, device: dev ? dev.name : 'CPU', error: '', tps: plan.tps || 0, pps: plan.pps || 0 });
-    proc = spawn(exeOf(), args, { cwd: dirOf(), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    proc = spawn(exeOf(), args, { cwd: dirOf(), env: envOf(), windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     const keep = (b) => { for (const l of String(b).split(/\r?\n/)) if (l.trim()) { tail.push(l); if (tail.length > 40) tail.shift(); } };
     proc.stdout.on('data', keep); proc.stderr.on('data', keep);
     const mine = proc;
@@ -392,4 +425,4 @@ function createLocalEngine({ baseDir, log = () => {}, onState = () => {} }) {
   };
 }
 
-module.exports = { createLocalEngine, planLoad, parseDevices, labelOf, ggufLayers, ggufInfo, moeArgs, isLocalModel, fileOf, ENGINE, MIN_CTX, WANT_CTX };
+module.exports = { createLocalEngine, planLoad, parseDevices, labelOf, ggufLayers, ggufInfo, moeArgs, isLocalModel, fileOf, ENGINE, MIN_CTX, WANT_CTX, engineFor, coresFromCpuinfo, ENGINES };

@@ -2635,7 +2635,7 @@ async function drain(gen) {
     check('with no plan it tunes once on this PC: from all layers down at the real context, fastest turn kept (the RX 6600 spilled at all 28, ran best at 26)',
       LS.includes('const tries = experts > 0 ? [] : [999, n - 2, n - 4, n - 6, n - 10, n - 14]') && LS.includes('else if (best && r && r.turn > best.turn * 1.25) break;') && LS.includes("const tuneFile = () => path.join(base(), 'tune.json');")
       && LS.includes("let plan = m && m.sidecar ? planLoad(m.sidecar, dev, threads) : null;"), 'tune');
-    check('the engine lives beside your first models folder (not C:), checks free space first, and unpacks with Windows tar', LS.includes("const exeOf = () => path.join(dirOf(), 'llama-server.exe');") && LS.includes("'System32', 'tar.exe')") && !LS.includes('.exeOf()') && LS.includes('if (free < ENGINE.bytes * 5)') && read('src/main/main.js').includes("path.join(localModelDirs()[0], '.voxai-engine')"), 'engine dir');
+    check('on Windows the engine lives beside your first models folder (not C:), checks free space first, and unpacks with Windows tar', LS.includes("const exeOf = () => path.join(dirOf(), ENGINE.exe);") && LS.includes("exe: 'llama-server.exe', kind: 'zip'") && LS.includes("'System32', 'tar.exe')") && !LS.includes('.exeOf()') && LS.includes('if (free < ENGINE.bytes * 5)') && read('src/main/main.js').includes("path.join(localModelDirs()[0], '.voxai-engine')"), 'engine dir');
     const ORl = require(path.join(ROOT, 'src/backend/providers/openrouter.js'));
     const tools = [{ type: 'function', function: { name: 'write' } }];
     const rec = ORl.recoverToolCalls({ content: '```xml\n{{"name": "write", "arguments": {"path": "hello.txt", "content": "hi"}}}\n```', toolCalls: [] }, tools);
@@ -2884,7 +2884,7 @@ async function drain(gen) {
     check('each model gets its own longest answer from the catalogue (16,384 for all was refused by some providers)', MA.includes('return mc >= 1024 ? Math.min(16384, mc) : 16384;') && read('src/backend/tools/spawn.js').includes("agentOpts.maxTokensOf(task.model || sub.model"), 'max tokens');
     check('settings are read again only when the file changes, keys decrypted once; the session list re-reads only changed files',
       MA.includes("if (stamp !== settingsStamp || settingsText === null)") && MA.includes('const hit = decrypted.get(') && read('src/backend/sessions.js').includes('if (!row || row.stamp !== stamp) {'), 'cache');
-    check('models on this PC are offered on Windows only (the engine is the Windows build)', MA.includes("const LOCAL_SUPPORTED = process.platform === 'win32';") && MA.includes('if (!dirs.length || !LOCAL_SUPPORTED) return [];')
+    check('models on this PC are offered where there is an engine build (Windows, Linux)', MA.includes("const LOCAL_SUPPORTED = !!localEngineMod.engineFor();") && MA.includes('if (!dirs.length || !LOCAL_SUPPORTED) return [];')
       && LE2.indexOf("if (!m) throw new Error('Model not found in your local models folders: ' + file);") < LE2.indexOf("if (!fs.existsSync(exeOf()) && !(await install()))"), 'local');
     check('the half-built Sub-agents panel IPC is gone (it ran in whichever session loaded first, and nothing could stop it)', !MA.includes("'subagents:spawn'") && !read('src/preload/preload.js').includes('subagents:') && !HA.includes('async function spawnSub('), 'subagents');
     check('a key read before the keychain is ready is not cached (the cache kept a garbled key: every request failed as "could not reach OpenRouter")',

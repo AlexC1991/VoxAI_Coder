@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-U09n9pZ5zaDweEVsWV2ETnWl/LUkjQ0m9QJJKsFOMAw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-/LAejZJJP9fQYhHQlrWYJREYF9U5KyJmKx4TI12HLVQ='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -7409,7 +7409,7 @@ function paintLocalEngine(){
   const st = LOCAL_ST || {}, t = $('localEngineTxt'), lbl = $('localEngineLbl'), dot = $('lmDot'), b = $('btnLocalInstall'), stop = $('btnLocalStop'), bar = $('lmEngineBar');
   if (!t) return;
   if (st.supported === false) {
-    lbl.textContent = 'Not available here'; t.textContent = 'Models on this PC run on Windows only for now: the engine is the Windows build of llama.cpp.';
+    lbl.textContent = 'Not available here'; t.textContent = 'Models on this PC run on Windows and Linux: llama.cpp has no build for this system here.';
     dot.className = 'lm-dot off'; b.hidden = true; stop.hidden = true; bar.hidden = true; return;
   }
   const heads = { missing: 'Get the engine to run models', installing: 'Getting the engine', stopped: 'Ready', tuning: 'Loading for the first time', loading: 'Loading', ready: 'Running', stopping: 'Stopping' };

@@ -111,7 +111,8 @@ It should open. Worth a look on Linux:
 - **@** in the message box lists the project's files;
 - a command with `sudo` goes to the terminal panel, where you type the password.
 
-Models on this PC and desktop computer use are Windows-only for now and say so. Close the
+Desktop computer use is Windows-only for now and says so. Models on this PC work on Linux:
+Settings ▸ Local models downloads the Linux engine (~31 MB) and lists the card it found. Close the
 app before releasing.
 
 ## ▓▒░ 5. Add the Linux build to the release
@@ -158,8 +159,10 @@ voxai-coder/
 │                             AppImage ($APPIMAGE set) updates itself
 ├── src/main/terminal.js      the terminal panel: $SHELL as a login shell
 ├── src/main/interactive.js   sudo and other prompts run on a pty in the terminal panel
-├── src/main/main.js          keys through safeStorage (libsecret on Linux); local models
-│                             switched off off Windows (LOCAL_SUPPORTED)
+├── src/main/main.js          keys through safeStorage (libsecret on Linux); the engine's
+│                             folder (~/.local/share on Linux)
+├── src/main/local-engine.js  llama.cpp per system: the Linux Vulkan build, unpacked with tar,
+│                             its libraries found beside it; cores from /proc/cpuinfo
 ├── src/backend/agent.js      tells the model the platform and shell (PLATFORM_LINE)
 ├── src/backend/tools/
 │   ├── index.js              the shell tool: /bin/sh -c on Linux

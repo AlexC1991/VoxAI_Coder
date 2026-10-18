@@ -87,6 +87,9 @@ OpenRouter.
   decides what needs asking) and *Full access*. Work stays inside the project folder.
 - **Plan mode**, a running task list, and **Review changes**, then commit or open a pull
   request.
+- **Fork** a session from any of your messages to try another way, keeping the first.
+- **TypeScript errors** in a file come back with each edit (the project's own compiler,
+  incremental), so the agent fixes them as it goes.
 
 ```
  /goal    keep working until a separate check agrees it is done
@@ -101,6 +104,8 @@ OpenRouter.
 <img src="docs/screenshots/model-picker.png" alt="The model picker, browsed by company, with prices per million tokens" width="340">
 
 - Every model on OpenRouter, browsed by company, with prices shown before you pick one.
+- Optional **Anthropic and OpenAI keys**: Claude and OpenAI's own models then go straight to
+  their maker, billed to that key, with Anthropic's own caching and thinking.
 - **Team mode:** a stronger model plans and reviews, and a cheaper one writes the code.
 - **Sub-agents** for side tasks, each with its own model.
 
@@ -108,7 +113,7 @@ OpenRouter.
 
 <img src="docs/screenshots/local-models.png" alt="Local models: search Hugging Face and download a GGUF model" width="640">
 
-- Local models on Windows through llama.cpp (Vulkan). The engine downloads once and is
+- Local models on Windows and Linux through llama.cpp (Vulkan). The engine downloads once and is
   checked against its published SHA-256.
 - Search Hugging Face and download GGUF models inside the app; the downloads resume and are
   checked when they finish.

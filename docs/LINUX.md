@@ -94,6 +94,7 @@ Start it from the applications menu, or with `voxai-coder` in a terminal.
 └── checkpoints/                                   file snapshots for /rewind
 
 ~/.cache/voxai-coder-updater/                      update downloads
+~/.local/share/voxai-coder-engine/                 the engine for models on this PC (llama.cpp)
 
 <your project>/.voxai/                             project memory, project skills, notes
 <your project>/AGENTS.md                           what /init writes; every session reads it
@@ -111,7 +112,7 @@ when they are set. Skills in `~/.claude/skills` and `~/.codex/skills` are picked
 | **The agent's shell** | `cmd.exe` | `/bin/sh` |
 | **The terminal panel** (`>_`) | PowerShell | your `$SHELL`, as a login shell |
 | **`sudo` and password prompts** | n/a | refused in the agent's shell; it runs them in the terminal panel, where you type the password |
-| **Models on this PC** | yes (llama.cpp, Vulkan) | not yet: the engine is the Windows build. Settings ▸ Local models says so |
+| **Models on this PC** | yes (llama.cpp, Vulkan) | yes (llama.cpp's Linux Vulkan build, x64 or ARM64); on the GPU with a Vulkan driver, on the CPU without |
 | **Computer use: desktop apps** | yes | not yet (Windows UI Automation) |
 | **Computer use: the browser** | Chrome or Edge | Chrome, Chromium, Edge or Brave, found in `/usr/bin` or `/snap/bin` |
 | **The preview pane** | yes | yes |
@@ -232,6 +233,20 @@ Computer use drives a real Chrome-family browser. Install one of Google Chrome, 
 Microsoft Edge or Brave in the usual place (`/usr/bin/google-chrome`, `/usr/bin/chromium`,
 `/snap/bin/chromium`, ...). A Flatpak-only browser is not found. The preview pane needs
 nothing extra.
+
+### Models on this PC run on the CPU, not the graphics card
+
+The engine uses the card through Vulkan. Settings ▸ Local models shows the card it found;
+none means Vulkan is missing. Install the loader and your card's driver, then restart the app:
+
+```bash
+sudo apt install libvulkan1 mesa-vulkan-drivers   # Debian / Ubuntu (AMD and Intel)
+sudo dnf install vulkan-loader mesa-vulkan-drivers  # Fedora
+sudo pacman -S vulkan-icd-loader vulkan-radeon      # Arch (vulkan-intel for Intel)
+```
+
+NVIDIA cards use the Vulkan support in NVIDIA's own driver. `vulkaninfo --summary` (package
+`vulkan-tools`) shows what Vulkan sees.
 
 ### No tray icon
 

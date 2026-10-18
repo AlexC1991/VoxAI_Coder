@@ -546,7 +546,12 @@ const localEngineMod = require('./local-engine');
 const localModelDirs = () => getSettings(false).localModelsDirs || [];
 const localEngine = localEngineMod.createLocalEngine({
   // Beside your models (the first folder), not on C: -- that drive was nearly full. Nowhere else to go: app data.
-  baseDir: () => (localModelDirs()[0] ? path.join(localModelDirs()[0], '.voxai-engine') : path.join(process.env.LOCALAPPDATA || require('os').tmpdir(), 'voxai-coder-engine')),
+  // Linux: always the XDG data folder (~/.local/share). Beside the models it could land on a shared
+  // NTFS drive (a dual-boot PC), where the build's library symlinks cannot be made and llama-server
+  // then cannot find its libraries.
+  baseDir: () => (process.platform !== 'win32'
+    ? path.join(process.env.XDG_DATA_HOME || path.join(require('os').homedir(), '.local', 'share'), 'voxai-coder-engine')
+    : localModelDirs()[0] ? path.join(localModelDirs()[0], '.voxai-engine') : path.join(process.env.LOCALAPPDATA || require('os').tmpdir(), 'voxai-coder-engine')),
   log: (m) => { try { console.log('[local] ' + m); } catch {} },
   onState: (st) => { try { const c = allRenderers(); c && c.send('local:state', st); } catch {} },
 });
@@ -560,8 +565,9 @@ require('../backend/providers/openrouter').localEndpoint.expected = () => { cons
 require('../backend/providers/openrouter').localEndpoint.onSlow = (info) => { try { const c = allRenderers(); c && c.send('local:slow', info); } catch {} };
 /** Catalogue entries for the models in the local folder: free, tool-calling, no image input. */
 // The engine is llama.cpp's Windows (Vulkan) build, unpacked with Windows tar, sized with PowerShell: on
-// Linux (the AppImage) every step of it can only fail, so models on this PC are offered on Windows only.
-const LOCAL_SUPPORTED = process.platform === 'win32';
+// Windows and Linux (x64, ARM64) each have a llama.cpp build pinned in local-engine.js; elsewhere
+// (macOS) there is none, and models on this PC are not offered.
+const LOCAL_SUPPORTED = !!localEngineMod.engineFor();
 function localCatalog() {
   const dirs = localModelDirs();
   if (!dirs.length || !LOCAL_SUPPORTED) return [];
@@ -1641,7 +1647,7 @@ app.whenReady().then(() => {
     }
     // A model on this PC (as the model or as Team's coder) is loaded before the run starts. One at a time.
     const locals = [sess.model || s.openrouterModel, sess.coderModel || ''].filter(localEngineMod.isLocalModel);
-    if (locals.length && !LOCAL_SUPPORTED) throw new Error('Models on this PC run on Windows only for now. Pick a cloud model for this session.');
+    if (locals.length && !LOCAL_SUPPORTED) throw new Error('Models on this PC run on Windows and Linux only. Pick a cloud model for this session.');
     if (locals.length && new Set(locals).size > 1) throw new Error('Only one model on this PC can run at a time, and this session uses two. Pick a cloud model for one of them.');
     if (locals.length && !(s.localModelsDirs || []).length) throw new Error('Choose the folder your local models are in: Settings → Local models.');
     // Two sessions can share one model on this PC (their requests take turns), but not use two.
@@ -2196,7 +2202,7 @@ ipcMain.handle('local:models', () => {
 });
 ipcMain.handle('local:start', async (_e, file) => {
   const dirs = localModelDirs();
-  if (!LOCAL_SUPPORTED) return { ok: false, error: 'Models on this PC run on Windows only for now.' };
+  if (!LOCAL_SUPPORTED) return { ok: false, error: 'Models on this PC run on Windows and Linux only.' };
   if (!dirs.length) return { ok: false, error: 'Add the folder your models are in first.' };
   try { return { ok: true, state: await localEngine.start(dirs, String(file || '')) }; } catch (e) { return { ok: false, error: String((e && e.message) || e) }; }
 });
@@ -2226,7 +2232,7 @@ const hfErr = (e) => ({ ok: false, error: /fetch failed|ENOTFOUND|ECONN/i.test(S
 ipcMain.handle('local:hfSearch', async (_e, q) => { try { return { ok: true, models: await hf.search(q) }; } catch (e) { return hfErr(e); } });
 ipcMain.handle('local:hfFiles', async (_e, repo) => { try { return { ok: true, files: await hf.files(String(repo || '')) }; } catch (e) { return hfErr(e); } });
 ipcMain.handle('local:hfDownload', async (_e, arg) => {
-  if (!LOCAL_SUPPORTED) return { ok: false, error: 'Models on this PC run on Windows only for now.' };
+  if (!LOCAL_SUPPORTED) return { ok: false, error: 'Models on this PC run on Windows and Linux only.' };
   try { return { ok: true, state: await hfDl.start({ repo: String((arg && arg.repo) || ''), key: String((arg && arg.key) || ''), dir: localModelDirs()[0] }) }; } catch (e) { return hfErr(e); }
 });
 ipcMain.handle('local:hfCancel', () => hfDl.cancel());

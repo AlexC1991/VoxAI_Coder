@@ -101,6 +101,25 @@ const server = http.createServer((req, res) => {
   const big = ms.find((m) => /f16/i.test(m.file));
   check('the folder lists a split model once, with its full size and a clean name', ms.length === 3 && big && big.file === 'tiny-coder-f16-00001-of-00002.gguf' && big.bytes === 8000 && big.name === 'Tiny Coder (F16)', ms.map((m) => [m.file, m.bytes, m.name]));
 
+  // ---- Models on this PC on Linux too: llama.cpp's Linux Vulkan build ----
+  {
+    const LE = require(path.join(__dirname, '..', 'src', 'main', 'local-engine.js'));
+    const win = LE.engineFor('win32', 'x64'), lx = LE.engineFor('linux', 'x64'), la = LE.engineFor('linux', 'arm64');
+    check('Windows keeps its build; Linux x64 and ARM64 get theirs, from the same pinned release', win.file === 'llama-b11223-bin-win-vulkan-x64.zip' && win.exe === 'llama-server.exe'
+      && lx.file === 'llama-b11223-bin-ubuntu-vulkan-x64.tar.gz' && lx.exe === 'llama-server' && lx.kind === 'tgz' && la.file === 'llama-b11223-bin-ubuntu-vulkan-arm64.tar.gz'
+      && /\/releases\/download\/b11223\/llama-b11223-bin-ubuntu-vulkan-x64\.tar\.gz$/.test(lx.url));
+    check('each build is checked against the SHA-256 its release publishes', /^[0-9a-f]{64}$/.test(lx.sha256) && /^[0-9a-f]{64}$/.test(la.sha256) && lx.sha256 === 'd4505b5752a967e070fb418ec1d365d4448d692eccea1d7d4d0a6e75b7300025' && lx.bytes === 31348616);
+    check('no build for macOS (or other systems): nothing is offered there', LE.engineFor('darwin', 'arm64') === null && LE.engineFor('linux', 'ia32') === null);
+    const cpuinfo = ['processor : 0', 'physical id : 0', 'core id : 0', 'processor : 1', 'physical id : 0', 'core id : 0', 'processor : 2', 'physical id : 0', 'core id : 1', 'processor : 3', 'physical id : 1', 'core id : 0'].map((l) => l.replace(' : ', '\t: ')).join('\n');
+    check('physical cores on Linux, from /proc/cpuinfo (threads of one core count once)', LE.coresFromCpuinfo(cpuinfo) === 3 && LE.coresFromCpuinfo('') === 0, LE.coresFromCpuinfo(cpuinfo));
+    const SRC = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'local-engine.js'), 'utf8');
+    const MAIN = fs.readFileSync(path.join(__dirname, '..', 'src', 'main', 'main.js'), 'utf8');
+    check('Linux unpacks with tar (dropping the archive\'s folder), marks it runnable, and finds its libraries beside it', SRC.includes("['tar', ['-xzf', zip, '-C', dirOf(), '--strip-components=1']]")
+      && SRC.includes('fs.chmodSync(exeOf(), 0o755)') && SRC.includes("LD_LIBRARY_PATH: [dirOf(), process.env.LD_LIBRARY_PATH].filter(Boolean).join(':')") && (SRC.match(/env: envOf\(\)/g) || []).length === 3);
+    check('offered wherever there is a build; on Linux the engine lives on its own disk (~/.local/share), not beside the models', MAIN.includes('const LOCAL_SUPPORTED = !!localEngineMod.engineFor();')
+      && MAIN.includes("path.join(process.env.XDG_DATA_HOME || path.join(require('os').homedir(), '.local', 'share'), 'voxai-coder-engine')") && !MAIN.includes('Windows only for now'));
+  }
+
   server.close();
   fs.rmSync(DIR, { recursive: true, force: true });
   console.log(`\n${pass} passed, ${fail} failed`);
