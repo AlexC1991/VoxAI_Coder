@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-G4sjw/JP1ZS4SejtYsiM3ANdVILUjoFSqAPanJs5wpU='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-hPtnZAfi1hAuixzxVaQCWnoMfAoLifY6zL7Eo+DO6fM='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -1505,7 +1505,9 @@ html[data-split] .composer-keys,.pane-mode .composer-keys{display:none}
 .pane-mode .pane-x{display:inline-flex}
 .pane-x:hover{background:var(--panel2);color:var(--ink)}
 /* The pane with the keyboard: a gold line under its header. */
-html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-shadow:inset 0 -2px 0 var(--gold)}
+/* The active pane: where the session list opens what you pick (split.js). It was the pane with the
+   keyboard, but clicking the list gives the keyboard to the first page, so the mark always moved there. */
+html[data-split].pane-on .work .workhead,.pane-mode.pane-on .workhead{box-shadow:inset 0 -2px 0 var(--gold)}
 .pane-flash .workhead{animation:paneFlash .7s ease}
 @keyframes paneFlash{0%,100%{background:transparent}30%{background:rgba(200,169,97,.16)}}
 .work{position:relative}
@@ -1768,7 +1770,7 @@ html[data-split].has-focus .work .workhead,.pane-mode.has-focus .workhead{box-sh
           <div class="set-actions"><span class="set-hint" id="keyHint">Nothing to save.</span><button class="btn" id="btnSave" type="button" disabled>Save keys</button></div>
         </div>
         <div class="set-group">
-          <div class="set-row"><div class="set-txt"><div class="set-lbl">Balance</div><div class="set-desc">Read from OpenRouter when the app starts and after each run.</div></div><div class="set-ctl"><div class="bal"><b id="acctBalance">—</b></div></div></div>
+          <div class="set-row"><div class="set-txt"><div class="set-lbl">Balance</div><div class="set-desc">Counts down as runs spend, and is checked with OpenRouter after each run.</div></div><div class="set-ctl"><div class="bal"><b id="acctBalance">—</b></div></div></div>
           <div class="set-row"><div class="set-txt"><div class="set-lbl">Usage history</div><div class="set-desc">What each model has cost on this key in the last 30 days.</div></div><div class="set-ctl"><button class="btn ghost" id="btnUsage" type="button">Open usage</button></div></div>
           <div class="set-row"><div class="set-txt"><div class="set-lbl">Keys on this account</div><div class="set-desc">What each key has spent, to spot spending that is not VoxAI’s. Needs the management key.</div></div><div class="set-ctl"><button class="btn ghost" id="btnKeys" type="button" aria-expanded="false" aria-controls="acctKeys">Show keys</button></div></div>
           <div class="acct-keys" id="acctKeys" hidden></div>
@@ -1920,7 +1922,9 @@ const $ = (id) => document.getElementById(id);
 // A split pane (main/split.js) is this page with ?pane=<session id>: that session only.
 const PANE = new URLSearchParams(location.search).get('pane') || '';
 if (PANE) document.documentElement.classList.add('pane-mode');
-let SPLIT = { panes: [], max: 4 };   // the sessions open in panes beside the first
+let SPLIT = { panes: [], max: 4, active: '' };   // the sessions open in panes beside the first; active: the pane the list opens into ('' = this first page)
+/** Side by side with another pane active: its index among the panes, else -1. */
+const paneTarget = () => (!PANE && SPLIT.active ? SPLIT.panes.indexOf(SPLIT.active) : -1);
 const splitOn = () => !!PANE || SPLIT.panes.length > 0;
 // Access levels: short names for the chip, one plain sentence each for the menu.
 const ACCESS = ['ask','edit','test','auto','full'];
@@ -5558,6 +5562,17 @@ async function ensureSession(){
 }
 async function newSession(dir){
   if (PANE) return;
+  // Side by side with another pane active, the new session opens there (see openFromList).
+  const at = paneTarget();
+  if (at >= 0) {
+    const pdir = dir || paneDir(SPLIT.active) || (S && S.workingDir) || '';
+    const made = await window.voxai.sessionsCreate({ title: 'New session', workdir: pdir, model: S.openrouterModel });
+    if (!made || made.ok === false) throw new Error((made && made.error) || 'Could not start a session.');
+    const r = await window.voxai.split.swap(at, made.id);
+    if (!r || !r.ok) throw new Error('Could not open it there: ' + ((r && r.error) || 'unknown') + '.');
+    refreshSessionList();
+    return made.id;
+  }
   const workdir = dir || (S && S.workingDir) || '';
   const created = await window.voxai.sessionsCreate({ title: 'New session', workdir: workdir, model: S.openrouterModel });
   if (!created || created.ok === false) throw new Error((created && created.error) || 'Could not start a session.');
@@ -5593,6 +5608,21 @@ async function newSession(dir){
   v.ppHistory = ppHistory; v.ppIdx = ppIdx;
   try { clearAttachments(); } catch {}
   return created.id;
+}
+/**
+ * A session picked in the list. Side by side, it opens in the active pane -- the one you were
+ * working in -- like Claude Code. It always replaced the first pane's session, so the others
+ * could never change project.
+ */
+async function openFromList(id){
+  const at = paneTarget();
+  if (at < 0) return openSession(id);
+  if (id === SPLIT.active) return;
+  if (SPLIT.panes.includes(id)) { window.voxai.split.focus(id); return; }
+  // Already in the first pane: that one becomes the active pane rather than open twice.
+  if (id === activeId) { window.voxai.split.setActive(''); return; }
+  const r = await window.voxai.split.swap(at, id);
+  if (!r || !r.ok) toast('Could not open it there: ' + ((r && r.error) || 'unknown') + '.');
 }
 async function openSession(id){
   if (!PANE && SPLIT.panes.includes(id)) { window.voxai.split.focus(id); return; }
@@ -5980,7 +6010,7 @@ function renderSessionList(){
         if (e.ctrlKey || e.metaKey) { toggleSel(s.id); return; }
         if (e.shiftKey && SEL_ANCHOR) { selectRange(SEL_ANCHOR, s.id); return; }
         if (SELECTING()) { toggleSel(s.id); return; }
-        openSession(s.id);
+        openFromList(s.id);
       };
       b.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); showSessMenu(e, s); };
       inner.appendChild(b);
@@ -6140,13 +6170,15 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
     // so the header's cost sat at $0.00 for every run while "run spend" (which the
     // backend computes from `cost`) was right. Read either, once — never both.
     const billed = Number(u.total_cost) || Number(u.cost) || 0;
+    const step = billed > 0 ? billed : (Number(u.prompt_cost) || 0) + (Number(u.completion_cost) || 0);
     if (billed > 0) {
       v.cost = (v.cost || 0) + billed;
       v.rate = v.tokens ? (v.cost / v.tokens) * 1000000 : null;
     } else if (u.prompt_cost != null || u.completion_cost != null) {
-      v.cost = (v.cost || 0) + (Number(u.prompt_cost)||0) + (Number(u.completion_cost)||0);
+      v.cost = (v.cost || 0) + step;
       v.rate = v.tokens ? (v.cost / v.tokens) * 1000000 : null;
     }
+    balanceSpend(step);
     // Only the session on screen: another one's usage (a pane, a run in the background) painted this header.
     if (v.tokens && v === actView()) updateSessStats(v);
   } else if (event.type === 'done') {
@@ -6504,7 +6536,8 @@ function placeSplit(){
 if (window.voxai.split) {
   const applySplit = (st) => {
     const before = SPLIT.panes;
-    SPLIT = st && Array.isArray(st.panes) ? st : { panes: [], max: 4 };
+    SPLIT = st && Array.isArray(st.panes) ? st : { panes: [], max: 4, active: '' };
+    document.documentElement.classList.toggle('pane-on', PANE ? SPLIT.active === PANE : !SPLIT.active);
     // Back from a pane: what this page kept of it is out of date (what was typed and
     // answered there was drawn there), so it opens fresh from its file next time.
     if (!PANE) for (const sid of before) if (!SPLIT.panes.includes(sid) && sid !== activeId) viewStore.delete(sid);
@@ -6523,9 +6556,19 @@ if (window.voxai.split) {
     $('btnPaneClose').onclick = () => window.voxai.split.remove(PANE);
     window.voxai.split.onFlash(() => { document.body.classList.remove('pane-flash'); void document.body.offsetWidth; document.body.classList.add('pane-flash'); });
   }
-  // Which pane has the keyboard.
-  const focusMark = () => document.documentElement.classList.toggle('has-focus', document.hasFocus());
-  window.addEventListener('focus', focusMark); window.addEventListener('blur', focusMark); focusMark();
+  // Clicking or typing in this page's own chat makes it the active pane again (a pane says so
+  // itself, from the main process). Clicks in the session list do not count: that is where you
+  // pick what the active pane shows.
+  if (!PANE) {
+    const mine = () => { if (SPLIT.panes.length && SPLIT.active) window.voxai.split.setActive(''); };
+    $('screen-work').addEventListener('pointerdown', mine, true);
+    $('screen-work').addEventListener('focusin', mine, true);
+  } else {
+    // A pane says so too (the main process also hears its window take focus).
+    const mine = () => { if (SPLIT.active !== PANE) window.voxai.split.setActive(PANE); };
+    document.addEventListener('pointerdown', mine, true);
+    document.addEventListener('focusin', mine, true);
+  }
   // Dragging a session from the list: the panes step aside and a map of the layout covers
   // them. Drop on the spot it should go (the others fill the rest), on this pane to open it
   // here, or -- with four open -- on a pane to swap it. It used to be one box on the right of
@@ -7150,9 +7193,12 @@ $('btnSave').onclick = () => { if (keysDirty()) saveSettingsNow(true); };
 })();
 
 // ---- new-session modal (pick project directory) ----
+/** The project folder of a session in the list (a pane's, for a new session beside it). */
+function paneDir(sid){ const it = SESS_ITEMS.find((x) => x.id === sid); return (it && it.workdir) || ''; }
 function openNewSess(){
   const inp = $('newSessDir');
-  if (inp) { inp.value = (S && S.workingDir) || ''; setTimeout(()=>inp.focus(), 0); }
+  // Side by side, the folder of the pane it will open in.
+  if (inp) { inp.value = (paneTarget() >= 0 && paneDir(SPLIT.active)) || (S && S.workingDir) || ''; setTimeout(()=>inp.focus(), 0); }
   const hn = $('newSessHint'); if (hn) hn.textContent = '';
   $('newSessModalBg').classList.add('show');
 }
@@ -8806,10 +8852,44 @@ function paintFree(f){
 }
 function fmtUsd(cents){ if(cents==null) return '—'; return (cents/100).toLocaleString('en-US',{style:'currency',currency:'USD'}); }
 function fmtUsdD(v){ if(v==null) return '—'; return Number(v).toLocaleString('en-US',{style:'currency',currency:'USD'}); } // dollars already (OpenRouter credits API returns $)
+/**
+ * The balance between readings from OpenRouter. It was read only when a run ended, so it sat
+ * still while the session's cost ticked up step by step. Now each step's cost comes off as it is
+ * reported, in every session (this first page hears them all; a pane does not show a balance).
+ * The next reading replaces the estimate -- unless OpenRouter has not caught up yet: its total
+ * lags the spend by up to a minute or so, and taking it then would put spent money back. While
+ * it lags, the estimate stands and the balance is read again a minute later.
+ */
+const BAL = { avail: null, total: null, spent: 0, lastSpendAt: 0, suffix: '', recheck: 0 };
+function balanceSpend(usd){
+  if (PANE || !(usd > 0) || BAL.avail == null) return;
+  BAL.spent += usd; BAL.lastSpendAt = Date.now();
+  paintBalance();
+}
+/** A reading from OpenRouter: what to show, given what has been spent since the last one. */
+function balanceSettle(read, total, suffix){
+  let avail = Number(read);
+  const est = BAL.avail != null ? BAL.avail - BAL.spent : null;
+  // The same purchases (credits added would change the total) and a spend in the last two minutes.
+  if (est != null && est < avail && BAL.total === total && Date.now() - BAL.lastSpendAt < 120000) {
+    avail = est;
+    clearTimeout(BAL.recheck); BAL.recheck = setTimeout(refreshUsage, 60000);
+  }
+  BAL.avail = avail; BAL.total = total; BAL.spent = 0; BAL.suffix = suffix || '';
+  return avail;
+}
+function paintBalance(){
+  const cr = $('creditsTxt'); if (!cr || BAL.avail == null) return;
+  const now = BAL.avail - BAL.spent;
+  cr.textContent = fmtUsdD(now) + BAL.suffix;
+  cr.style.color = now < 1 ? 'var(--del)' : now < 5 ? 'var(--gold)' : '';
+  for (const id of ['acctBalance', 'spendBalance']) { const e = $(id); if (e) e.textContent = cr.textContent; }
+}
 async function refreshUsage(){
   const bar = $('usageBar') || { style: {}, title: '' }, cr = $('creditsTxt');
   if(!S.hasOpenRouterKey){ cr.textContent='key not set'; bar.title = 'open ⚙ Settings to add one'; bar.style.width='0%'; return; }
-  cr.textContent='checking…'; bar.title = '';
+  if (BAL.avail == null) cr.textContent = 'checking…';   // a balance already showing stays while it is read again
+  bar.title = '';
   let u=null;
   try{ u = await window.voxai.openrouterUsage(); }catch(e){ u={ok:false,error:String(e&&e.message||e)}; }
   paintFree(u && u.ok ? u.free : null);
@@ -8823,7 +8903,7 @@ async function refreshUsage(){
   const acctTotal = acct.total, acctLeft = acct.left, acctUsed = acct.usage;
   if (acctTotal != null) {
     // The account "available" = remaining (total purchased − used), like the dashboard.
-    const shownAvail = acctLeft != null ? acctLeft : acctTotal;
+    const shownAvail = balanceSettle(acctLeft != null ? acctLeft : acctTotal, acctTotal, '');
     cr.textContent = fmtUsdD(shownAvail);
     // low-balance warning (goose prints an insufficient-credits notice too)
     if (shownAvail != null && Number(shownAvail) < 1) {
@@ -8855,7 +8935,7 @@ async function refreshUsage(){
   }
   // fallback: key quota (this is what a normal key can see)
   if (key.left != null) {
-    cr.textContent = fmtUsdD(key.left) + ' left (key)';
+    cr.textContent = fmtUsdD(balanceSettle(key.left, key.limit, ' left (key)')) + ' left (key)';
     bar.title = (key.limit != null ? ('of ' + fmtUsdD(key.limit)) : '') + (key.usage != null ? (' · ' + fmtUsdD(key.usage)+' used') : '') + (key.label?' · '+key.label:'');
     if (!u.hasMgmtKey || acctTotal == null) bar.title += ' · add mgmt key for account balance';
     const denom = (key.limit != null && key.limit > 0) ? key.limit : ((key.usage!=null?key.usage:0)+(key.left!=null?key.left:0));

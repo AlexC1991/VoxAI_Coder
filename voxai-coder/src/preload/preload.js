@@ -97,6 +97,7 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
     remove: (sid) => ipcRenderer.invoke('split:remove', sid),
     state: () => ipcRenderer.invoke('split:state'),
     focus: (sid) => ipcRenderer.invoke('split:focus', sid),
+    setActive: (sid) => ipcRenderer.send('split:active', sid || ''),
     place: (rects) => ipcRenderer.send('split:place', rects),
     onState: (cb) => { const fn = (_e, st) => cb(st); ipcRenderer.on('split:state', fn); return () => ipcRenderer.removeListener('split:state', fn); },
     onFlash: (cb) => { const fn = () => cb(); ipcRenderer.on('split:flash', fn); return () => ipcRenderer.removeListener('split:flash', fn); },

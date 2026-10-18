@@ -10,6 +10,11 @@
  *
  * While panes are open the preview stays shut: the agent's pages still load, where
  * its browser tools can use them, but nothing opens over the panes.
+ *
+ * One pane is the active one: the last you clicked or typed in (the first page's chat
+ * counts; its session list does not). A session picked in the list, or a new one, opens
+ * there -- like Claude Code, where the list acts on the pane you are working in. Only
+ * the first page reopened sessions before, so the others could never change project.
  */
 const MAX_PANES = 3;   // beside the first: four in all
 
@@ -18,12 +23,13 @@ function createSplit({ rootV, WebContentsView, prefs, pageFile, guard, first, on
   let mainSid = '';   // what the window's own page shows: never also in a pane
   let held = false;   // a session is being dragged: the panes step aside for the map
   let lastRects = null;
+  let activeSid = '';  // the pane the session list acts on; '' is the first page
 
   const find = (sid) => panes.find((p) => p.sid === sid);
   const sids = () => panes.map((p) => p.sid);
   const active = () => panes.length > 0;
 
-  function state() { return { panes: sids(), max: MAX_PANES + 1 }; }
+  function state() { return { panes: sids(), max: MAX_PANES + 1, active: find(activeSid) ? activeSid : '' }; }
   function changed() {
     for (const c of [first(), ...contents()]) { try { c && c.send('split:state', state()); } catch { /* closing */ } }
     try { onChange && onChange(state()); } catch { /* not fatal */ }
@@ -42,6 +48,8 @@ function createSplit({ rootV, WebContentsView, prefs, pageFile, guard, first, on
     rootV.addChildView(view);
     guard(view.webContents);
     view.webContents.loadFile(pageFile, { query: { pane: sid } });
+    // Clicking or typing in a pane makes it the one the session list opens into.
+    view.webContents.on('focus', () => setActive(sid));
     const i = Number.isInteger(at) && at >= 0 && at < panes.length ? at : panes.length;
     panes.splice(i, 0, { sid, view });
     changed();
@@ -54,9 +62,11 @@ function createSplit({ rootV, WebContentsView, prefs, pageFile, guard, first, on
     if (!p) return { ok: false, error: 'no such pane' };
     if (find(sid) || String(sid) === mainSid) return { ok: false, error: 'already open' };
     const old = p.sid;
+    const wasActive = activeSid === old;
     remove(old);
     const r = add(sid, at);
     if (!r.ok) add(old, at);
+    if (wasActive) setActive(r.ok ? sid : old);
     return r;
   }
 
@@ -66,11 +76,19 @@ function createSplit({ rootV, WebContentsView, prefs, pageFile, guard, first, on
     else place(lastRects);
   }
   function setMain(sid) { mainSid = String(sid || ''); }
+  /** The pane the session list acts on: a pane's session, or '' for the first page. */
+  function setActive(sid) {
+    const next = find(String(sid || '')) ? String(sid) : '';
+    if (next === activeSid) return;
+    activeSid = next;
+    changed();
+  }
 
   function remove(sid) {
     const i = panes.findIndex((p) => p.sid === sid);
     if (i < 0) return false;
     const [p] = panes.splice(i, 1);
+    if (activeSid === sid) activeSid = '';
     try { rootV.removeChildView(p.view); } catch { /* gone */ }
     try { p.view.webContents.close(); } catch { /* gone */ }
     changed();
@@ -102,7 +120,7 @@ function createSplit({ rootV, WebContentsView, prefs, pageFile, guard, first, on
 
   /** The panes on screen now, with where they are (for a snapshot while a dialog is open). */
   function shown() { return panes.filter((p) => { try { return p.view.getVisible(); } catch { return false; } }).map((p) => ({ view: p.view, rect: p.view.getBounds() })); }
-  return { add, swap, remove, place, hold, shown, setMain, mainSession: () => mainSid, focus, state, sids, active, paneOf, contents, MAX_PANES };
+  return { add, swap, remove, place, hold, shown, setMain, setActive, mainSession: () => mainSid, focus, state, sids, active, paneOf, contents, MAX_PANES };
 }
 
 module.exports = { createSplit, MAX_PANES };

@@ -217,6 +217,9 @@ function saveSettings(patch) {
 // ------------------------------------------------------------- live sessions --
 const live = new Map(); // id → session object
 const controllers = new Map(); // runKey → AbortController
+// The model on this PC each running run uses (runKey → file). The engine holds one model at a
+// time: a second session starting another one stopped the engine under the first session's run.
+const localRuns = new Map();
 // ------------------------------------------------------------------ steering ---
 // A message the user sends while a run is going, for THAT run.
 //
@@ -1179,6 +1182,12 @@ app.whenReady().then(() => {
   ipcMain.handle('split:remove', (e, sid) => !!(split && split.remove(sid || split.paneOf(e.sender))));
   ipcMain.handle('split:state', () => (split ? split.state() : { panes: [], max: 4 }));
   ipcMain.handle('split:focus', (_e, sid) => !!(split && split.focus(sid)));
+  // The active pane (split.js): a pane names itself; the first page can only hand it back to itself.
+  ipcMain.on('split:active', (e, sid) => {
+    if (!split) return;
+    const pane = split.paneOf(e.sender);
+    if (pane) split.setActive(pane); else if (e.sender === chatWebContents()) split.setActive(sid);
+  });
   ipcMain.on('split:place', (e, rects) => { if (split && e.sender === chatWebContents()) split.place(rects); });
   ipcMain.on('preview:back', () => { try { browserV && browserV.webContents.goBack(); } catch {} });
   ipcMain.on('preview:forward', () => { try { browserV && browserV.webContents.goForward(); } catch {} });
@@ -1605,6 +1614,12 @@ app.whenReady().then(() => {
     if (locals.length && !LOCAL_SUPPORTED) throw new Error('Models on this PC run on Windows only for now. Pick a cloud model for this session.');
     if (locals.length && new Set(locals).size > 1) throw new Error('Only one model on this PC can run at a time, and this session uses two. Pick a cloud model for one of them.');
     if (locals.length && !(s.localModelsDirs || []).length) throw new Error('Choose the folder your local models are in: Settings → Local models.');
+    // Two sessions can share one model on this PC (their requests take turns), but not use two.
+    const localWant = locals.length ? localEngineMod.fileOf(locals[0]) : '';
+    for (const [k, f] of localRuns) {
+      if (!controllers.has(k)) { localRuns.delete(k); continue; }
+      if (localWant && f !== localWant) throw new Error(`Another session is running ${localEngineMod.labelOf(f)} on this PC, and only one model on this PC can run at a time. Wait for that run to finish, or pick a cloud model for this session.`);
+    }
     // The run is registered BEFORE a local model loads, which can take minutes (install, tune).
     // Registered after, Stop found nothing to stop, and the queue's watchdog took the session
     // for idle and started a second run -- and a second engine load beside the first.
@@ -1612,6 +1627,7 @@ app.whenReady().then(() => {
     const runT0 = Date.now();   // for "Worked for ..." when it ends
     const ctl = new AbortController();
     controllers.set(runKey, ctl);
+    if (localWant) localRuns.set(runKey, localWant);
     let localCtx = 0;
     if (locals.length) {
       const c1 = allRenderers(); c1 && c1.send('agent:event', { sessionId, runKey: 'local', event: { type: 'warning', code: 'local-loading', message: 'Loading ' + localEngineMod.labelOf(localEngineMod.fileOf(locals[0])) + ' on this PC…' } });

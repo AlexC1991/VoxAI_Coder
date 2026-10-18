@@ -2234,7 +2234,7 @@ async function drain(gen) {
   {
     const { createSplit } = require(path.join(ROOT, 'src/main/split.js'));
     const sent = [];
-    const mkWc = (name) => ({ name, destroyed: false, isDestroyed() { return this.destroyed; }, send: (ch, d) => sent.push([name, ch, d]), loadFile() {}, focus() {}, close() { this.destroyed = true; } });
+    const mkWc = (name) => ({ name, destroyed: false, isDestroyed() { return this.destroyed; }, send: (ch, d) => sent.push([name, ch, d]), loadFile() {}, focus() {}, close() { this.destroyed = true; }, on(ev, fn) { (this.handlers || (this.handlers = {}))[ev] = fn; } });
     class FakeView { constructor() { this.webContents = mkWc('pane' + (FakeView.n = (FakeView.n || 0) + 1)); this.visible = true; } setVisible(v) { this.visible = v; } setBounds(b) { this.bounds = b; } setBackgroundColor() {} }
     const children = [];
     const rootV = { addChildView: (v) => children.push(v), removeChildView: (v) => children.splice(children.indexOf(v), 1) };
@@ -2267,6 +2267,33 @@ async function drain(gen) {
       && HTMLs.includes("  if (!PANE && SPLIT.panes.includes(id)) { window.voxai.split.focus(id); return; }") && HTMLs.includes("async function newSession(dir){\n  if (PANE) return;"), 'page');
     check('another session\'s usage does not paint this header', HTMLs.includes('if (v.tokens && v === actView()) updateSessStats(v);'), 'stats');
 
+    // The balance counts down as each step reports its cost, in every session, and a reading from
+    // OpenRouter that has not caught up yet does not put spent money back. It sat still until a run ended.
+    {
+      const src = HTMLs.slice(HTMLs.indexOf('const BAL = { avail: null'), HTMLs.indexOf('async function refreshUsage(){'));
+      const els = { creditsTxt: { textContent: '', style: {} }, acctBalance: { textContent: '' }, spendBalance: { textContent: '' } };
+      let rechecks = 0;
+      const fn = new Function('PANE', '$', 'fmtUsdD', 'refreshUsage', 'setTimeout', 'clearTimeout', src + '; return { BAL, balanceSpend, balanceSettle, paintBalance };');
+      const B = fn('', (id) => els[id], (v) => '$' + Number(v).toFixed(2), () => {}, () => { rechecks++; return 1; }, () => {});
+      const shown = () => els.creditsTxt.textContent;
+      B.balanceSpend(0.5);
+      const before = shown();
+      B.balanceSettle(20, 20, ''); B.paintBalance();
+      B.balanceSpend(0.01); B.balanceSpend(0.01); B.balanceSpend(0.01);
+      const ticked = shown();
+      const lag = B.balanceSettle(19.99, 20, '');    // OpenRouter has counted one of the three
+      const caught = B.balanceSettle(19.97, 20, ''); // and now all three
+      B.balanceSpend(0.02);
+      const spendShown = els.spendBalance.textContent;
+      const topUp = B.balanceSettle(29.95, 30, '');  // credits added: the reading wins
+      check('the balance ticks down with each step, and a lagging reading does not put money back', before === '' && ticked === '$19.97'
+        && Math.abs(lag - 19.97) < 1e-9 && rechecks === 1 && Math.abs(caught - 19.97) < 1e-9 && spendShown === '$19.95' && topUp === 29.95,
+        { before, ticked, lag, caught, spendShown, topUp, rechecks });
+      check('every session\'s steps count, on the first page only; Settings says it counts down', HTMLs.includes('    balanceSpend(step);') && HTMLs.includes('  if (PANE || !(usd > 0) || BAL.avail == null) return;')
+        && HTMLs.includes('Counts down as runs spend, and is checked with OpenRouter after each run.'), 'wiring');
+      check('a second session cannot start another model on this PC under a run still using one', MAIN.includes('const localRuns = new Map();') && MAIN.includes('if (localWant && f !== localWant) throw new Error('), 'local');
+    }
+
     // Dropping where you want it; the main pane's session never repeats in a pane.
     children.length = 0;
     const S2 = createSplit({ rootV, WebContentsView: FakeView, prefs: {}, pageFile: 'index.html', guard() {}, first: () => first });
@@ -2286,6 +2313,23 @@ async function drain(gen) {
     const stillHidden = children.every((v) => v.visible === false);
     S2.hold(false);
     check('while a session is dragged the panes step aside, and come back where they were', hidden && stillHidden && children.every((v) => v.visible === true), children.map((v) => v.visible));
+    // The active pane: the session list opens into the pane you were working in, not always the first.
+    const focusOf = (sid) => children.find((v) => S2.paneOf(v.webContents) === sid).webContents.handlers.focus();
+    check('nothing picked yet: the list acts on the first page', S2.state().active === '', S2.state());
+    focusOf('d');
+    check('clicking or typing in a pane makes it the active one, and every page hears', S2.state().active === 'd' && sent.some(([n, ch, st]) => n === 'first' && ch === 'split:state' && st.active === 'd'), S2.state());
+    S2.setActive('');
+    check('the first page can take it back', S2.state().active === '', S2.state());
+    focusOf('d');
+    const sw2 = S2.swap(1, 'f');
+    check('a session opened in the active pane keeps it active', sw2.ok && S2.sids().join() === 'c,f,e' && S2.state().active === 'f', { sw2, st: S2.state() });
+    S2.remove('f');
+    check('closing the active pane hands it back to the first page', S2.state().active === '', S2.state());
+    check("the list, New session and + open into the active pane; the first page's chat and a pane's own clicks set it", HTMLs.includes('        openFromList(s.id);')
+      && HTMLs.includes('  const r = await window.voxai.split.swap(at, id);') && HTMLs.includes('    const r = await window.voxai.split.swap(at, made.id);')
+      && HTMLs.includes("    $('screen-work').addEventListener('pointerdown', mine, true);") && HTMLs.includes('    const mine = () => { if (SPLIT.active !== PANE) window.voxai.split.setActive(PANE); };')
+      && MAIN.includes('    if (pane) split.setActive(pane); else if (e.sender === chatWebContents()) split.setActive(sid);')
+      && HTMLs.includes("html[data-split].pane-on .work .workhead,.pane-mode.pane-on .workhead{box-shadow:inset 0 -2px 0 var(--gold)}"), 'wiring');
     check('the drag shows a map of the layout over the panes, with a spot per pane', HTMLs.includes("const SPOTS = { 2: [['1', '1 / 3'], ['2', '1 / 3']], 3: [['1', '1 / 3'], ['2', '1'], ['2', '2']], 4: [['1', '1'], ['2', '1'], ['1', '2'], ['2', '2']] };")
       && HTMLs.includes('window.voxai.split.hold(true);') && HTMLs.includes("m === 'swap' ? await window.voxai.split.swap(k - 1, sid) : await window.voxai.split.add(sid, k - 1)")
       && !HTMLs.includes('split-drop') && HTMLs.includes('function tellMainSession(){'), 'map');
@@ -2818,7 +2862,7 @@ async function drain(gen) {
     check('overlapping saves never leave a broken file, and a damaged line costs that line only', whole && back.messages.length === 2 && !fs.readdirSync(path.join(ud, 'sessions')).some((x) => x.endsWith('.tmp')), { whole, n: back.messages.length });
     const MA = read('src/main/main.js'), HA = read('src/renderer/index.html'), LE2 = read('src/main/local-engine.js');
     check('a queued message goes to its own session, not the one on screen', HA.includes('let sid = v && v.id && viewStore.get(v.id) === v ? v.id : null;') && HA.includes('const r = await window.voxai.agentSend(sid, text, parts);'), 'doSend');
-    check('a run is registered before its local model loads, Stop reaches it then, and loads go one at a time', MA.indexOf('controllers.set(runKey, ctl);\n    let localCtx = 0;') > 0
+    check('a run is registered before its local model loads, Stop reaches it then, and loads go one at a time', MA.indexOf('controllers.set(runKey, ctl);\n    if (localWant) localRuns.set(runKey, localWant);\n    let localCtx = 0;') > 0
       && MA.includes("throw new Error('Stopped while the model on this PC was loading.')") && HA.includes('window.voxai.agentLive(v.id).then((l) =>') && LE2.includes('if (starting && starting.file === file) return starting.p;'), 'lock');
     check('Stop only aborts: the run itself is forgotten when it has really ended', MA.includes('if (ctl) { ctl.abort(); return true; }') && !MA.includes('if (ctl) { ctl.abort(); controllers.delete(runKey); return true; }'), 'cancel');
     check('the chat view is sandboxed, the app page is matched exactly, and a file: link that is not a page is shown, not run',
