@@ -2067,7 +2067,7 @@ async function drain(gen) {
       && bodies.length === 3 && ev.some((e) => e.code === 'plan-close'), { bodies: bodies.length, note: note && note.content, last: ev[ev.length - 1] });
     const HTMLr = read('src/renderer/index.html');
     check('the reminder is quiet in the thread and on reopening', HTMLr.includes("} else if (event.type === 'warning' && event.code === 'plan-close') {") && HTMLr.includes("if (/^\\[VOX PLAN\\]/.test(first)) { finalizeRunCard(); continue; }"), 'noisy');
-    check('the file or command on an action line is toned like inline code', HTMLr.includes('.tr-chip{font:12.5px "Sometype Mono",monospace;color:#cbc7c1;background:rgba(255,255,255,.045);border:0;'), 'chip');
+    check('the file or command on an action line is toned like inline code', HTMLr.includes('.tr-chip{font:12.5px "Sometype Mono",monospace;color:var(--chip-ink);background:var(--wash);border:0;') && HTMLr.includes('--chip-ink:#cbc7c1; --wash:rgba(255,255,255,.045);'), 'chip');
   }
 
   // ------------------------------------------------------------------ [AB]
@@ -2534,7 +2534,7 @@ async function drain(gen) {
     const SPw = read('src/backend/tools/spawn.js');
     check('the coder can use the session\'s browser and is told to try what it built like a person would (it had no browser, so Team\'s "the coder tests it" could not happen)',
       SPw.includes("const WRITE_TOOLS = READ_TOOLS.concat(['write', 'edit', 'patch', 'shell', 'node_repl', 'memory', 'computer']);")
-      && SPw.includes('onAttachAtlas: agentOpts.onAttachAtlas || null,') && A.includes('priceIn, priceOut, modelVision, visionOf, maxTokensOf, maxTokens, webSearch, onOpenUrl, onAttachAtlas, localContext },')
+      && SPw.includes('onAttachAtlas: agentOpts.onAttachAtlas || null,') && A.includes('priceIn, priceOut, modelVision, visionOf, maxTokensOf, maxTokens, webSearch, computerUse, onOpenUrl, onAttachAtlas, localContext },')
       && /open it with the computer tool and use it the way a/.test(SPw) && SPw.includes('browser_checks: browserChecks,'), 'coder browser');
     check('visual work the coder never opened is flagged to the planner, to send it back', A.includes("else if (subs.some((s) => s && s.ok !== false && !s.browser_checks && visual(s))) result.team_note =") && A.includes('/\\.(html?|css|jsx?|tsx?|vue|svelte)$/i.test('), 'unseen');
     const blind = { coderFails: 0, written: 0, looks: 0, blindCoder: true }; const bl = [...Array(9)].map(() => T.teamGuard('computer', {}, blind));
@@ -2546,7 +2546,7 @@ async function drain(gen) {
       H.includes('if (v && !v.opened) { keepPerm = v.perm ?') && H.includes('if (keepPerm) { v.perm = keepPerm.perm; v.permQueue = keepPerm.permQueue; }'), 'history');
     check('a worker on another model is asked about its own eyes (Muse Spark got its screenshots as V4.1 descriptions)',
       SPw.includes("(typeof agentOpts.visionOf === 'function' ? (() => { try { const v = agentOpts.visionOf(task.model || sub.model || agentOpts.defaultSubModel);")
-      && A.includes('priceIn, priceOut, modelVision, visionOf, maxTokensOf, maxTokens, webSearch, onOpenUrl, onAttachAtlas, localContext },') && read('src/main/main.js').includes('visionOf: (id) => modelVision(id),'), 'visionOf');
+      && A.includes('priceIn, priceOut, modelVision, visionOf, maxTokensOf, maxTokens, webSearch, computerUse, onOpenUrl, onAttachAtlas, localContext },') && read('src/main/main.js').includes('visionOf: (id) => modelVision(id),'), 'visionOf');
     {
       // A provider that hangs: OpenRouter's ": PROCESSING" keep-alives kept the request open for ever.
       const ORs = require(path.join(ROOT, 'src/backend/providers/openrouter.js'));

@@ -24,4 +24,33 @@ const native = require(linux ? './linux-native' : './native');
 const { UiaHelper } = linux ? require('./linux-uia') : require('./uia');
 const backend = linux ? 'linux' : process.platform === 'win32' ? 'windows' : 'none';
 
-module.exports = { input, native, UiaHelper, backend };
+/**
+ * What desktop control can do here, for Settings > Computer use. Only looks for the tools: it
+ * never takes a screenshot (on GNOME the portal would ask the user) or touches a window.
+ * { ok, system, how, missing: [what to install], screenshots: [tools found], note }
+ */
+function status() {
+  if (backend === 'windows') {
+    const ok = !!input.available();
+    return { backend, ok, system: 'Windows', how: 'Windows UI Automation', missing: [], screenshots: ok ? ['Windows'] : [],
+      note: ok ? '' : 'The input library did not load, so the agent cannot use the mouse and keyboard. Reinstalling VoxAI usually fixes it.' };
+  }
+  if (backend === 'linux') {
+    const { spawnSync } = require('child_process');
+    const have = (c) => { try { return spawnSync('sh', ['-c', 'command -v ' + c], { encoding: 'utf8', timeout: 5000 }).status === 0; } catch { return false; } };
+    const session = String(process.env.XDG_SESSION_TYPE || (process.env.WAYLAND_DISPLAY ? 'wayland' : 'x11')).toLowerCase();
+    const missing = ['xdotool', 'xwininfo'].filter((c) => !have(c));
+    const screenshots = ['cosmic-screenshot', 'import', 'grim'].filter(have);
+    const display = !!process.env.DISPLAY;
+    const ok = display && !missing.length;
+    const notes = [];
+    if (!display) notes.push('There is no X display (DISPLAY is not set), so no window can be reached.');
+    if (session === 'wayland') notes.push('On Wayland only XWayland windows can be reached (most X11 apps, and anything under Wine or Proton).');
+    if (!screenshots.length) notes.push('Nothing here can take a screenshot: install ImageMagick (import), or grim on Sway or Hyprland.');
+    return { backend, ok, system: 'Linux, ' + (session === 'wayland' ? 'Wayland' : 'X11'), how: 'xdotool and xwininfo', missing, screenshots, note: notes.join(' ') };
+  }
+  return { backend, ok: false, system: process.platform === 'darwin' ? 'macOS' : process.platform, how: '', missing: [], screenshots: [],
+    note: 'Using desktop apps is not available on this system yet (docs/MACOS.md says what it needs). The browser works.' };
+}
+
+module.exports = { input, native, UiaHelper, backend, status };

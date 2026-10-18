@@ -446,7 +446,20 @@ function localDate(d = new Date()) {
 const PLATFORM_LINE = process.platform === 'win32'
   ? 'Windows — the shell tool runs cmd.exe, not bash (see its description)'
   : (process.platform === 'darwin' ? 'macOS, /bin/sh' : 'Linux, /bin/sh');
-const SYSTEM = (workdir, access, planMode = false, durable = '', webSearchOn = true) =>
+// Computer use, as Settings > Computer use allows it and this system can do it (cu/platform.js).
+// Without a line here the model rarely knew it could: the computer tool waits behind load_tools.
+let desktopBackend = null;
+const desktopWorks = () => { if (desktopBackend === null) { try { desktopBackend = require('./cu/platform').backend; } catch { desktopBackend = 'none'; } } return desktopBackend !== 'none'; };
+const computerLine = (cu) => {
+  if (cu === 'none') return '';   // a model on this PC, which is not given the tool
+  const browser = !cu || cu.browser !== false, desktop = (!cu || cu.desktop !== false) && desktopWorks();
+  if (!browser && !desktop) return 'Computer use is turned off in Settings: you cannot open or drive a browser or desktop apps; if a task needs that, say so. ';
+  const what = browser && desktop ? "a browser (the preview the user sees) and the apps on the user's desktop" : browser ? 'a browser (the preview the user sees)' : "the apps on the user's desktop";
+  return `You can use ${what} with the computer tool (load it with load_tools): look at the screen, click, type, press keys and scroll`
+    + (browser ? ' -- use it to check a page or app you built, as the user would' : '') + '. '
+    + (desktop ? 'Load the computer-use skill before working in a desktop app. ' : (browser ? 'Desktop apps are not available to you. ' : ''));
+};
+const SYSTEM = (workdir, access, planMode = false, durable = '', webSearchOn = true, computerUse = null) =>
   `You are Vox, the coding agent inside VoxAI Coder, a desktop coding app. ` +
   `Workdir: ${workdir}. All file paths are relative to it; never escape it. ` +
   // Static per machine, so it does not disturb the cached prefix.
@@ -466,6 +479,7 @@ const SYSTEM = (workdir, access, planMode = false, durable = '', webSearchOn = t
     ? `For research outside the repo: web_search to find sources, web_fetch to read them. Never guess a URL, `
     : `Web search is turned off: use web_fetch only on URLs you already have (from the user or from a page's links). Never guess a URL, `) +
   `and only cite or describe pages you actually fetched — if a source could not be reached, say so. ` +
+  computerLine(computerUse) +
   // The index alone (below) was read as background: asked how to put a folder on
   // Cloudflare Pages, a model answered from memory with the wrangler skill listed.
   (/\[SKILLS\]/.test(durable)
@@ -653,6 +667,8 @@ async function* runAgent(opts) {
     coderVision = null,   // false: the coder cannot read images, so the planner does the looking
     // { enabled, engine, maxResults } from Settings. null = defaults (on, exa, 5).
     webSearch = null,
+    // { browser, desktop } from Settings > Computer use. null = both allowed.
+    computerUse = null,
     // Mid-run steering: called at the top of each turn. Returns anything the user typed
     // while this run was going, or null. Without it a steered message had nowhere to land
     // until the run FINISHED -- which is the whole point of steering, so the only way to
@@ -705,6 +721,8 @@ async function* runAgent(opts) {
     // desktop click without `backend` is not asked about as a click on the website in the preview.
     let surface = a.backend === 'native' ? 'native' : 'browser';
     if (name === 'computer') { try { surface = require('./cu').surfaceForAction(session.id, act, a); } catch { /* keep the guess */ } }
+    // Turned off in Settings > Computer use: nothing to approve, the tool refuses it (tools/index.js).
+    if (name === 'computer' && computerUse && (surface === 'native' ? computerUse.desktop === false : computerUse.browser === false)) return null;
     // The desktop: your real keyboard and mouse, in any app. Always yours to approve, naming the app
     // and the control; "Always for <app>" covers that app for the session (cu/desktop.js).
     if (name === 'computer' && surface === 'native' && (['click', 'type', 'press', 'scroll', 'focus'].includes(act)
@@ -867,11 +885,12 @@ async function* runAgent(opts) {
   // model to use it -- an instruction naming a missing tool invites made-up calls.
   const webSearchOn = !(webSearch && webSearch.enabled === false);
   const localModel = isLocal(model);
+  const cuPrompt = localModel ? 'none' : computerUse;
   const promptTail = goalPrompt(session.goal) + (isSubAgent ? '' : teamPrompt(coderModel, coderVision)) + (localModel ? LOCAL_RULES : '');
   // The prompt as it would be built now, and what it says apart from the project's own
   // block (memory, build state, notes, skills) -- the part whose change means a new prompt.
-  const freshPrompt = SYSTEM(session.workdir, access, planMode, durable, webSearchOn) + promptTail;
-  const promptArgs = { fresh: freshPrompt, head: SYSTEM(session.workdir, access, planMode, /\[SKILLS\]/.test(durable) ? '[SKILLS]' : '', webSearchOn) + promptTail, durable, date: localDate() };
+  const freshPrompt = SYSTEM(session.workdir, access, planMode, durable, webSearchOn, cuPrompt) + promptTail;
+  const promptArgs = { fresh: freshPrompt, head: SYSTEM(session.workdir, access, planMode, /\[SKILLS\]/.test(durable) ? '[SKILLS]' : '', webSearchOn, cuPrompt) + promptTail, durable, date: localDate() };
   // The session keeps one prompt, so the provider's cache of the conversation keeps hitting;
   // what changed in the project since is said in a [VOX CONTEXT] note instead (prefix.js).
   let { systemPrompt, note: contextNote, commit: commitNote } = prefix.stablePrompt(session, promptArgs);
@@ -1081,7 +1100,7 @@ async function* runAgent(opts) {
     const { ALL: builtTools } = tools.buildTools({
       workdir: session.workdir, session, emit: pushEvent, checkPermission: ctx.checkPermission,
       resolveIn, userData, live, userInput: userInput || (async () => ({ answer: null, cancelled: true })),
-      interactive,
+      interactive, computerUse,
       runner: (o) => runAgent(o),
       // askPermission: a worker's prompts come to the same place as this run's (spawn.js).
       agentOpts: { apiKey, host, model, reasoningEffort, reasoningSpec, access, sessionId: session.id, signal, isSubAgent, workdir: session.workdir, visionHelper, checkModel, checkReasoningSpec, cacheTtl, askPermission, checkpointSession: session,
@@ -1094,7 +1113,7 @@ async function* runAgent(opts) {
         defaultSubTimeoutMs: coderModel ? Math.max((isLocal(coderModel) ? 30 : 15) * 60 * 1000, Number(subagentTimeoutMs) || 0) : subagentTimeoutMs,
         // Sub-agents spend the PARENT's remaining allowance, never a fresh one.
         // Rebuilt each turn so a fan-out later in the run sees the depleted figure.
-        budgetRemaining: Math.max(0, budget - spent), priceIn, priceOut, modelVision, visionOf, maxTokensOf, maxTokens, webSearch, onOpenUrl, onAttachAtlas, localContext },
+        budgetRemaining: Math.max(0, budget - spent), priceIn, priceOut, modelVision, visionOf, maxTokensOf, maxTokens, webSearch, computerUse, onOpenUrl, onAttachAtlas, localContext },
       // mcpServers were never passed, so no configured MCP server could be seen.
       getSettings: () => ({ access, mcpServers: mcpServers || {} }),
       getAccess: () => access,

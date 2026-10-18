@@ -18,7 +18,7 @@
  */
 const MAX_PANES = 3;   // beside the first: four in all
 
-function createSplit({ rootV, WebContentsView, prefs, pageFile, guard, first, onChange }) {
+function createSplit({ rootV, WebContentsView, prefs, pageFile, guard, first, onChange, background }) {
   const panes = [];   // { sid, view }
   let mainSid = '';   // what the window's own page shows: never also in a pane
   let held = false;   // a session is being dragged: the panes step aside for the map
@@ -43,7 +43,8 @@ function createSplit({ rootV, WebContentsView, prefs, pageFile, guard, first, on
     if (sid === mainSid) return { ok: false, error: 'already open in the main pane' };
     if (panes.length >= MAX_PANES) return { ok: false, error: `up to ${MAX_PANES + 1} side by side` };
     const view = new WebContentsView({ webPreferences: prefs });
-    try { view.setBackgroundColor('#0e0e10'); } catch { /* older Electron */ }
+    // The theme's background (Settings > Appearance), so a pane does not flash dark on a light theme.
+    try { view.setBackgroundColor((typeof background === 'function' && background()) || '#0e0e10'); } catch { /* older Electron */ }
     view.setVisible(false);            // shown once the first page says where
     rootV.addChildView(view);
     guard(view.webContents);

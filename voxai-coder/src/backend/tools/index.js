@@ -513,12 +513,14 @@ const { makeReplTool } = require('./node_repl');
  * still decided per action (see policyKey in sandbox.js), so folding a read-only op
  * in with mutating ones does not escalate it.
  */
+// Which desktop the native backend drives (cu/platform.js): named in the computer tool's description.
+const DESKTOP_NAME = process.platform === 'win32' ? 'Windows' : process.platform === 'linux' ? 'Linux (X11 and XWayland windows)' : "user's";
 const FACADES = [
   {
     name: 'computer',
     describe: 'Drive the in-app browser: open a page, read its state, click, type, press keys, scroll, '
       + 'and capture screenshots. Every action operates on the SAME attached surface, so `state` after '
-      + '`open` shows the page you just opened. With backend "native" it works on the Windows desktop '
+      + '`open` shows the page you just opened. With backend "native" it works on the ' + DESKTOP_NAME + ' desktop '
       + 'instead: `list` shows the open windows; `state` with `window` (part of a title or an app name) gives that '
       + 'window\'s controls, numbered, and a picture; then `click` / `type` with `index`, `press`, `scroll`, `focus`. '
       + 'Prefer controls by number to x/y. `screenshot` with `window` captures one window even when covered. '
@@ -607,6 +609,7 @@ function makeFacade(spec, members) {
 
 function buildTools(opts) {
   const { workdir, session, emit, checkPermission, userData, live, resolveIn, userInput, showInApp, attachAtlas, interactive } = opts || {};
+  opts = opts || {};
   const ctx = {
     workdir,
     session,
@@ -770,6 +773,25 @@ function buildTools(opts) {
         run: (args, c) => ft.impl.run(ft.def.function.name, args, c),
       });
     }
+  }
+  // Settings > Computer use: the browser, the desktop, both or neither. Neither: the tool is not
+  // there at all. One: a call to the other says it is turned off, so the model can tell the user.
+  const cuOpt = opts.computerUse || {};
+  const cuBrowser = cuOpt.browser !== false, cuDesktop = cuOpt.desktop !== false;
+  const compAt = ALL.findIndex((t) => t.def.function.name === 'computer');
+  if (compAt >= 0 && !cuBrowser && !cuDesktop) ALL.splice(compAt, 1);
+  else if (compAt >= 0 && (!cuBrowser || !cuDesktop)) {
+    const comp = ALL[compAt], inner = comp.run;
+    comp.def = { ...comp.def, function: { ...comp.def.function, description: comp.def.function.description
+      + (cuDesktop ? ' The browser is turned off in Settings: only backend "native" works.' : ' Desktop apps are turned off in Settings: only the browser works.') } };
+    comp.run = (args, c) => {
+      const a = args || {};
+      let surface = a.backend === 'native' ? 'native' : 'browser';
+      try { surface = require('../cu').surfaceForAction((c && c.session && c.session.id) || (session && session.id), String(a.action || ''), a); } catch { /* keep the guess */ }
+      if (surface === 'native' && !cuDesktop) throw new Error('Using apps on the desktop is turned off (Settings > Computer use). Tell the user, or do it another way.');
+      if (surface !== 'native' && !cuBrowser) throw new Error('Using the browser is turned off (Settings > Computer use). Tell the user, or do it another way.');
+      return inner(args, c);
+    };
   }
   // Duplicates kept callable by name -- older sessions and models that learned them still work --
   // but not sent to the model: search is grep and glob in one, doc_rag is now part of rag. Every

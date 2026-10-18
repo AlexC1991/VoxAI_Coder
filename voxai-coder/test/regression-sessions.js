@@ -14,6 +14,8 @@
  *   [BB] attachments: pictures and files, in the box and in the sent message
  *   [BC] Linux desktop control and preview (from the Linux edition)
  *   [BD] macOS groundwork
+ *   [BE] Settings > Appearance
+ *   [BF] Settings > Computer use
  *
  * Offline. Run: node test/regression-sessions.js
  */
@@ -767,6 +769,90 @@ console.log('\n[BD] macOS groundwork');
   const BUILT = new RegExp(/const BUILT = \/(.*)\/i;/.exec(CLEAN)[1], 'i');
   check('a new build clears the last Mac build too', ['VoxAI-Coder-0.2.87-mac-arm64.dmg', 'VoxAI-Coder-0.2.87-mac-x64.zip', 'latest-mac.yml'].every((n) => BUILT.test(n)) && !BUILT.test('notes.zip') && CLEAN.includes("'mac-arm64'"), 'clean-release');
   check('the porting notes are there', fs.existsSync(path.join(ROOT, '..', 'docs', 'MACOS.md')), 'docs/MACOS.md');
+}
+
+// ------------------------------------------------------------------ [BE]
+console.log('\n[BE] Settings > Appearance: theme, accent, message text, reduced motion');
+{
+  const AJS = read('src/renderer/appearance.js');
+  // Run appearance.js against a fake page, as the <head> script it is.
+  const props = {}, classes = new Set(), head = { children: [], appendChild(n) { this.children.push(n); } };
+  const root = { dataset: {}, style: { setProperty: (k, v) => { props[k] = v; } }, classList: { toggle: (c, on) => (on ? classes.add(c) : classes.delete(c)) } };
+  let darkOS = true, reduceOS = false;
+  const win = {
+    voxai: { appearance: () => ({ theme: 'light', accent: 'blue', msgSize: 'l', reduceMotion: null }) },
+    matchMedia: (q) => ({ get matches() { return /dark/.test(q) ? darkOS : reduceOS; }, addEventListener() {} }),
+  };
+  const doc = { documentElement: root, head, getElementById: (id) => head.children.find((n) => n.id === id) || null, createElement: () => ({}) };
+  vm.runInNewContext(AJS, { window: win, document: doc, getComputedStyle: () => ({ getPropertyValue: (k) => (k === '--edge2' ? '#c9c2b5' : '') }) });
+  const VA = win.VoxAppearance;
+  check('it themes the page before it paints, from the saved settings', root.dataset.theme === 'light' && props['--gold'] === '#2f5fbf' && props['--msg-fs'] === '16.5px', { theme: root.dataset.theme, props });
+  check('the scrollbars are written for the theme (custom properties do not reach them)', head.children.some((n) => n.id === 'voxScrollbars' && /#c9c2b5/.test(n.textContent)), head.children.map((n) => n.id));
+  VA.apply({ theme: 'system' });
+  check('System follows the computer: dark', root.dataset.theme === 'dark', root.dataset.theme);
+  darkOS = false; VA.apply({ theme: 'system' });
+  check('and light', root.dataset.theme === 'light', root.dataset.theme);
+  VA.apply({ theme: 'nonsense', accent: 'nonsense' });
+  check('an unknown theme or accent falls back to dark and gold', root.dataset.theme === 'dark' && props['--gold'] === '#c8a961', props['--gold']);
+  // Every preset reads on every theme, and its text is readable on it.
+  const lum = (c) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16) / 255).map((v) => (v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4)).reduce((s, v, i) => s + v * [0.2126, 0.7152, 0.0722][i], 0);
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  const weak = [];
+  for (const t of ['dark', 'midnight', 'light']) for (const k of [...Object.keys(VA.ACCENTS), '#fff8e0', '#101010']) {
+    const c = VA.accentFor(k, t);
+    if (ratio(c.gold, VA.BG[t]) < 3 || ratio(c.gold, c.on) < 4.5) weak.push(`${k} on ${t}: ${ratio(c.gold, VA.BG[t]).toFixed(2)} / ${ratio(c.gold, c.on).toFixed(2)}`);
+  }
+  check('every accent, presets and odd colours of your own, reads on every theme (3:1) and under its own text (4.5:1)', weak.length === 0, weak);
+  reduceOS = true; VA.apply({ reduceMotion: null });
+  check('reduce motion follows the system unless you set it', classes.has('calm'), [...classes]);
+  VA.apply({ reduceMotion: false });
+  check('and you can turn it off anyway', !classes.has('calm'), [...classes]);
+
+  const css = HTML.slice(HTML.indexOf('<style>'), HTML.indexOf('</style>'));
+  const rules = css.replace(/:root\{[^}]*\}/, '');   // the tokens themselves are defined there
+  check('no gold literal is left in the stylesheet: the accent is a token', !/rgba\(200,169,97/.test(rules) && !/#d8bb74|#16130c/.test(rules) && (css.match(/color-mix\(in srgb,var\(--gold\)/g) || []).length >= 30, 'literals');
+  check('Midnight and Light redefine the surface and text tokens, and Light darkens the code colours', /html\[data-theme="midnight"\]\{[^}]*--bg:/.test(css) && /html\[data-theme="light"\]\{[^}]*--ink:[^}]*color-scheme:light/.test(css) && css.includes('html[data-theme="light"] .tk-kw'), 'themes');
+  check('appearance.js loads in <head>, from the app (the CSP allows it as \'self\')', /<script src="appearance\.js"><\/script>\s*<\/head>/.test(HTML), 'head');
+  check('message text size reaches the conversation', css.includes('.md{font-size:var(--msg-fs,15px);') && css.includes('font-size:calc(var(--msg-fs,15px) - .5px)'), 'msg-fs');
+  check('the page has the Appearance section: theme, accent, text size, motion, a preview and a reset', HTML.includes('data-set="look"') && ['apTheme', 'apAccent', 'apSize', 'apCalm', 'apReset'].every((id) => HTML.includes(`id="${id}"`)) && HTML.includes('class="ap-prev"'), 'markup');
+  check('a change is saved, shown in every pane, and behind the page as it loads', MAIN.includes("ipcMain.on('appearance:get'") && MAIN.includes("allRenderers().send('appearance', a)") && MAIN.includes('w.setBackgroundColor(appearanceBg(a))')
+    && read('src/main/split.js').includes('view.setBackgroundColor((typeof background === \'function\' && background()) || \'#0e0e10\')') && read('src/preload/preload.js').includes("ipcRenderer.sendSync('appearance:get')"), 'wiring');
+  check('stored values are checked: a hand-edited file cannot inject CSS through the accent', MAIN.includes("accent: typeof raw.accent === 'string' && (/^[a-z]{3,10}$/.test(raw.accent) || /^#[0-9a-f]{6}$/i.test(raw.accent)) ? raw.accent : 'gold'"), 'accent check');
+}
+
+// ------------------------------------------------------------------ [BF]
+console.log('\n[BF] Settings > Computer use: the browser and the desktop, each with its own switch');
+{
+  const T = require(path.join(ROOT, 'src/backend/tools'));
+  const build = (cu) => T.buildTools({ workdir: ROOT, session: { id: 'cu-test', messages: [] }, emit: () => {}, checkPermission: async () => {}, resolveIn: (a, b) => path.resolve(a, b), getSettings: () => ({}), getAccess: () => 'full', computerUse: cu }).ALL;
+  const comp = (cu) => build(cu).find((t) => t.def.function.name === 'computer');
+  const loader = (cu) => build(cu).find((t) => t.def.function.name === 'load_tools');
+  check('on by default: the computer tool is there, waiting behind load_tools', !!comp(null) && comp(null).deferred === true && /computer:/.test(loader(null).def.function.description), 'default');
+  check('both off: no computer tool at all, and load_tools does not offer it', !comp({ browser: false, desktop: false }) && !/computer:/.test(loader({ browser: false, desktop: false }).def.function.description), 'both off');
+  const refused = async (cu, args) => { try { await comp(cu).run(args, { session: { id: 'cu-test' } }); return ''; } catch (e) { return e.message; } };
+  check('desktop off: a desktop action says it is turned off, and where', /desktop is turned off \(Settings > Computer use\)/.test(await refused({ browser: true, desktop: false }, { action: 'list', backend: 'native' })), await refused({ browser: true, desktop: false }, { action: 'list', backend: 'native' }));
+  check('browser off: a browser action says so', /browser is turned off/.test(await refused({ browser: false, desktop: true }, { action: 'open', url: 'https://example.com' })), await refused({ browser: false, desktop: true }, { action: 'open', url: 'https://example.com' }));
+  check('the tool tells the model which half is off', /Desktop apps are turned off in Settings/.test(comp({ browser: true, desktop: false }).def.function.description), 'desc');
+  check('it names the desktop it drives, not always Windows', /DESKTOP_NAME = process\.platform === 'win32' \? 'Windows' : process\.platform === 'linux'/.test(read('src/backend/tools/index.js')), 'name');
+
+  const A = require(path.join(ROOT, 'src/backend/agent.js'));
+  const P = (cu) => A._systemPrompt('W', 'auto', false, '', true, cu);
+  check('the prompt says computer use is there (the tool waits behind load_tools, so models rarely knew)', /You can use a browser \(the preview the user sees\)/.test(P(null)) && /load it with load_tools/.test(P(null)), P(null).slice(0, 80));
+  check('and says when it is off, so it does not try', /Computer use is turned off in Settings/.test(P({ browser: false, desktop: false })) && !/You can use/.test(P({ browser: false, desktop: false })), 'off');
+  check('desktop off: only the browser is offered in words', /Desktop apps are not available to you/.test(P({ browser: true, desktop: false })), 'desktop off');
+  check('a model on this PC (not given the tool) is told nothing about it', !/computer tool|Computer use/.test(P('none')), 'local');
+  const AG = read('src/backend/agent.js');
+  check('a turned-off surface is not asked about first (the approval came, then the refusal)', AG.includes("if (name === 'computer' && computerUse && (surface === 'native' ? computerUse.desktop === false : computerUse.browser === false)) return null;"), 'gate');
+  check('sub-agents follow the switches too (Team\'s coder included)', AG.includes('maxTokensOf, maxTokens, webSearch, computerUse, onOpenUrl') && read('src/backend/tools/spawn.js').includes('computerUse: agentOpts.computerUse || null,'), 'agentOpts');
+  check('the run is given the switches from Settings', MAIN.includes('computerUse: { browser: s.cuBrowser, desktop: s.cuDesktop },') && MAIN.includes('cuBrowser: raw.cuBrowser !== false,') && MAIN.includes('cuDesktop: raw.cuDesktop !== false,'), 'settings');
+
+  const st = require(path.join(ROOT, 'src/backend/cu/platform.js')).status();
+  check('the status says what this system can do, without taking a screenshot', typeof st.ok === 'boolean' && typeof st.system === 'string' && Array.isArray(st.missing) && !/screenshot\(|captureSupported\(/.test(read('src/backend/cu/platform.js').slice(read('src/backend/cu/platform.js').indexOf('function status'))), st);
+  check('the Computer use page: two switches, the status, the skill, Try it', HTML.includes('data-set="cu"') && ['cuBrowserTog', 'cuDesktopTog', 'cuStatus', 'cuSkill', 'cuTry'].every((id) => HTML.includes(`id="${id}"`))
+    && HTML.includes("['cuBrowserTog', 'cuBrowser'], ['cuDesktopTog', 'cuDesktop']") && MAIN.includes("ipcMain.handle('cu:status'"), 'page');
+  check('the status rows escape what they show (el() sets innerHTML)', HTML.includes("tx.appendChild(el('div', 'set-lbl', esc(label)));") && HTML.includes("const d = el('div', 'set-desc', esc(desc));"), 'esc');
+  const SK = fs.readFileSync(path.join(ROOT, 'resources/skills/computer-use/SKILL.md'), 'utf8');
+  check('the skill covers Linux, says macOS is not there yet, and that a switch may be off', /Windows, or Linux on X11 and XWayland/.test(SK) && /\*\*Linux\*\*/.test(SK) && /\*\*macOS\*\*: not available yet/.test(SK) && /Settings > Computer use/.test(SK), 'skill');
 }
 
 console.log(`\n${pass} passed, ${fail} failed`);

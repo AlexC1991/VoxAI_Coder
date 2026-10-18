@@ -12,7 +12,7 @@
  * direct (tool-less) OpenRouter chat used for cheap turns / key test.
  */
 
-const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Menu, View, WebContentsView } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, shell, safeStorage, Menu, View, WebContentsView, nativeTheme } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const team = require('../backend/team');
@@ -161,6 +161,15 @@ function getSettings(redacted = true) {
     flexModels: raw.flexModels && typeof raw.flexModels === 'object' && !Array.isArray(raw.flexModels) ? raw.flexModels : {},
     splitLayout: raw.splitLayout && typeof raw.splitLayout === 'object' ? raw.splitLayout : null,
     trayHintShown: raw.trayHintShown === true,
+    // Settings > Appearance (renderer/appearance.js). An accent is a preset's name or a #rrggbb.
+    theme: ['dark', 'midnight', 'light', 'system'].includes(raw.theme) ? raw.theme : 'dark',
+    accent: typeof raw.accent === 'string' && (/^[a-z]{3,10}$/.test(raw.accent) || /^#[0-9a-f]{6}$/i.test(raw.accent)) ? raw.accent : 'gold',
+    msgSize: ['s', 'm', 'l', 'xl'].includes(raw.msgSize) ? raw.msgSize : 'm',
+    // true / false, or unset: follow the system's "reduce motion".
+    reduceMotion: typeof raw.reduceMotion === 'boolean' ? raw.reduceMotion : null,
+    // Settings > Computer use: the agent may drive the browser (the preview), apps on the desktop.
+    cuBrowser: raw.cuBrowser !== false,
+    cuDesktop: raw.cuDesktop !== false,
     // Per-project: has the user said "always show previews here"? Claude Code saves
     // the equivalent choice into .claude/launch.json; this is the same idea, kept in
     // settings so it survives without writing into the user's repo.
@@ -456,12 +465,21 @@ app.on('before-quit', () => { try { terminals.closeAll(); } catch { /* nothing o
 // their shortcuts (Ctrl+N, Ctrl+O) threw and did nothing. Found in a live test.
 function relay(ch) { const c = chatWebContents(); if (c) c.send('vox:menu', ch); }
 
+// Settings > Appearance: what the page needs to theme itself (renderer/appearance.js).
+const APPEARANCE_KEYS = ['theme', 'accent', 'msgSize', 'reduceMotion'];
+function appearanceOf(s) { return { theme: s.theme, accent: s.accent, msgSize: s.msgSize, reduceMotion: s.reduceMotion }; }
+/** The colour behind the page while it loads, the theme's own (appearance.js BG). */
+function appearanceBg(a) {
+  const t = a && a.theme === 'system' ? (nativeTheme.shouldUseDarkColors ? 'dark' : 'light') : a && a.theme;
+  return { light: '#f7f5f0', midnight: '#0b0f17' }[t] || '#0e0e10';
+}
+
 // ------------------------------------------------------------------- window ---
 function createWindow() {
   const w = mainWindow = new BrowserWindow({
     width: 1440, height: 900,
     minWidth: 1100, minHeight: 700,
-    backgroundColor: '#0e0e10',
+    backgroundColor: (() => { try { return appearanceBg(appearanceOf(getSettings(true))); } catch { return '#0e0e10'; } })(),
     title: 'VoxAI Coder',
     // The VoxAI mark in the taskbar and Alt-Tab, not Electron's. The installed app also
     // carries it in the .exe (build.win.icon in package.json).
@@ -734,6 +752,7 @@ function attachSplitViews(w) {
   // Split panes: more copies of this page, one session each, over the preview (which shuts).
   split = require('./split').createSplit({
     rootV, WebContentsView, prefs: chatPrefs, guard: guardTrustedView, first: () => chatWebContents(),
+    background: () => { try { return appearanceBg(appearanceOf(getSettings(true))); } catch { return '#0e0e10'; } },
     pageFile: path.join(__dirname, '..', 'renderer', 'index.html'),
     onChange: () => { if (split.active() && atlasOpen) atlasClose(); else layoutAtlas(); saveSplitLayout(); },
   });
@@ -1315,7 +1334,26 @@ app.whenReady().then(() => {
 
   // settings
   ipcMain.handle('settings:get', () => getSettings(true));
-  ipcMain.handle('settings:save', (_e, patch) => saveSettings(patch));
+  ipcMain.handle('settings:save', (_e, patch) => {
+    const out = saveSettings(patch);
+    // A change of look shows in every pane at once, and behind the page while it loads.
+    if (APPEARANCE_KEYS.some((k) => k in (patch || {}))) {
+      const a = appearanceOf(out);
+      allRenderers().send('appearance', a);
+      try { const w = win(); if (w && !w.isDestroyed()) w.setBackgroundColor(appearanceBg(a)); } catch { /* closing */ }
+    }
+    return out;
+  });
+  // Read synchronously by renderer/appearance.js, before the page paints.
+  ipcMain.on('appearance:get', (e) => { try { e.returnValue = appearanceOf(getSettings(true)); } catch { e.returnValue = null; } });
+  // Settings > Computer use: what desktop control can do on this system (backend/cu/platform.js).
+  ipcMain.handle('cu:status', () => {
+    let desktop;
+    try { desktop = require('../backend/cu/platform').status(); } catch (e) { desktop = { ok: false, system: process.platform, note: String((e && e.message) || e), missing: [] }; }
+    let chrome = null;
+    try { chrome = require('../backend/cu/cdp').findChrome(); } catch { chrome = null; }
+    return { desktop, chrome };
+  });
   ipcMain.handle('settings:keychain', () => ({ available: safeStorage.isEncryptionAvailable() }));
 
   // sessions
@@ -1842,6 +1880,7 @@ app.whenReady().then(() => {
           reasoningSpec: modelReasoning(sess.model || s.openrouterModel),
           subagentModel: s.subagentModel, subagentMaxTurns: s.subagentMaxTurns, subagentTimeoutMs: s.subagentTimeoutMs, mcpServers: readSettingsFile().mcpServers || {},
           webSearch: { enabled: s.webSearchEnabled, engine: s.webSearchEngine, maxResults: s.webSearchMaxResults },
+          computerUse: { browser: s.cuBrowser, desktop: s.cuDesktop },
           onLiveEvent: (le) => { const c = allRenderers(); c && c.send('agent:event', { sessionId, runKey, event: le }); },
           userData: userData(), live,
           onOpenUrl: (url) => { try { atlasOpenUrl(url, sess.workdir, sessionId); } catch {} },

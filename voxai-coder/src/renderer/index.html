@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-DkkHqluuTfgAKFG2VT35QrmUBsofZ8LFHJAroAm/SAw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-stR3w4vr25zKHYrJjFsgAcaiDvJ2tArUdrk8don+hE0='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -15,10 +15,43 @@
   /* small secondary text inside menus and the message box: readable, still quieter than --mut */
   --sub:#9d9891;
   --gold:#c8a961; --goldedge:#463f30; --add:#93b884; --del:#cf7a66;
+  /* the accent's hover shade and the text drawn on it (Settings > Appearance sets all three) */
+  --gold-hi:#d8bb74; --on-gold:#0e0e10;
+  --chip-ink:#cbc7c1; --wash:rgba(255,255,255,.045); --wash-lo:rgba(255,255,255,.018);
+  color-scheme:dark;
   --pp-ease-ms:240ms;
 }
+/* ---- themes (Settings > Appearance; appearance.js sets data-theme and the accent) ----
+   Each redefines the surface and text tokens; the accent tokens come from the accent picked. */
+html[data-theme="midnight"]{
+  --deep:#06080d; --bg:#0b0f17; --panel:#0f1420; --panel2:#141a28; --sel:#1b2334;
+  --edge:#1e2636; --edge2:#2a3448;
+  --ink:#e2e6ee; --mut:#a9b1c0; --dim:#7d8698; --faint:#626b7c; --sub:#949db0;
+  --add:#8fc29a; --del:#e0806e; --chip-ink:#c3cad6;
+}
+html[data-theme="light"]{
+  --deep:#e9e5dc; --bg:#f7f5f0; --panel:#f0ede6; --panel2:#e9e5dd; --sel:#dfdace;
+  --edge:#dcd6cb; --edge2:#c9c2b5;
+  --ink:#1e1c18; --mut:#48443d; --dim:#69645b; --faint:#8a8479; --sub:#5d5850;
+  --add:#3d7a35; --del:#b2472f; --chip-ink:#3d3a34;
+  --wash:rgba(0,0,0,.045); --wash-lo:rgba(0,0,0,.025);
+  color-scheme:light;
+}
+/* Code and diff colours were picked for a dark page: darker ones on a light page. */
+html[data-theme="light"] .tk-kw,html[data-theme="light"] .tk-tag{color:#a1306a}
+html[data-theme="light"] .tk-str{color:#2f7a2a}
+html[data-theme="light"] .tk-num{color:#9a6200}
+html[data-theme="light"] .tk-key{color:#2c5a9e}
+html[data-theme="light"] .tk-fn{color:#80540c}
+html[data-theme="light"] .tr-ln.bad,html[data-theme="light"] .tr-term .e,html[data-theme="light"] .tr-report.bad{color:#a8402c}
+html[data-theme="light"] .tr-diff .del{color:#8f2f1e}
+html[data-theme="light"] .tr-diff .add{color:#2b6524}
+html[data-theme="light"] .tr-icb{box-shadow:inset 0 0 0 1px rgba(0,0,0,.06)}
+html[data-theme="light"] .sh-goal{color:#2f5fbf}
+/* Reduce motion (Settings > Appearance), or the system's own setting. */
+html.calm *,html.calm *::before,html.calm *::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important;scroll-behavior:auto!important}
 *{box-sizing:border-box} html,body{height:100%;overflow:hidden} body{margin:0;background:var(--bg);color:var(--ink);font-family:Chivo,system-ui,sans-serif;-webkit-font-smoothing:antialiased} .app{height:100vh}
-button{font-family:inherit} ::selection{background:rgba(200,169,97,.26)}
+button{font-family:inherit} ::selection{background:color-mix(in srgb,var(--gold) 26%,transparent)}
 /* Scrollbars are part of the chrome. The default ones read as OS furniture
    sitting on top of the app, so they are themed everywhere the app draws --
    including inside the preview, where main injects this same rule set. */
@@ -64,8 +97,8 @@ html[data-platform="darwin"] .titlebar .window-buttons{display:none}
    model + balance card, and a backend debug line. The model lives in the composer,
    where it changes; what is left is one quiet row. */
 .side{width:264px;flex:none;border-right:1px solid var(--edge);background:var(--panel);display:flex;flex-direction:column;padding:12px 10px 8px;gap:8px}
-.newsess{display:flex;align-items:center;gap:8px;border:1px solid var(--goldedge);border-radius:8px;background:rgba(200,169,97,.06);cursor:pointer;padding:9px 12px;color:var(--gold);font-weight:600;font-size:13.5px;font-family:inherit}
-.newsess:hover{background:rgba(200,169,97,.12)} .newsess kbd{margin-left:auto;font-size:11.5px;color:var(--faint);font-family:"Sometype Mono",monospace}
+.newsess{display:flex;align-items:center;gap:8px;border:1px solid var(--goldedge);border-radius:8px;background:color-mix(in srgb,var(--gold) 6%,transparent);cursor:pointer;padding:9px 12px;color:var(--gold);font-weight:600;font-size:13.5px;font-family:inherit}
+.newsess:hover{background:color-mix(in srgb,var(--gold) 12%,transparent)} .newsess kbd{margin-left:auto;font-size:11.5px;color:var(--faint);font-family:"Sometype Mono",monospace}
 .search{display:flex;align-items:center;gap:8px;border-radius:8px;padding:7px 11px;background:var(--bg);color:var(--faint);font-size:13px}
 .search:focus-within{box-shadow:inset 0 0 0 1px var(--goldedge)}
 .search input{flex:1;min-width:0;background:transparent;border:0;outline:0;color:var(--ink);font-size:13px;font-family:inherit}
@@ -77,12 +110,12 @@ html[data-platform="darwin"] .titlebar .window-buttons{display:none}
 .sess-rename{flex:1;min-width:0;background:var(--bg);border:1px solid var(--goldedge);border-radius:5px;color:var(--ink);font-family:inherit;font-size:13px;padding:2px 6px;outline:0}
 .sess.has-snip{flex-wrap:wrap}
 .sess .s-snip{flex-basis:100%;font-size:11.5px;color:var(--faint);line-height:1.4;overflow:hidden;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;white-space:normal}
-.sess .s-snip mark{background:rgba(200,169,97,.18);color:var(--mut);border-radius:2px}
+.sess .s-snip mark{background:color-mix(in srgb,var(--gold) 18%,transparent);color:var(--mut);border-radius:2px}
 .sess time{flex:none;font-family:"Sometype Mono",monospace;font-size:11px;color:var(--faint)}
 .dot{width:6px;height:6px;border-radius:50%;background:var(--faint);flex:none}
 .dot.run{background:var(--add);animation:pulse 1.6s infinite} .dot.block{background:var(--gold)}
 /* busy: animated wheel */
-.dot.busy{width:10px;height:10px;border-radius:50%;background:conic-gradient(var(--gold) 0deg 90deg, rgba(200,169,97,.18) 90deg 360deg);-webkit-mask:radial-gradient(circle, transparent 52%, #000 54%);mask:radial-gradient(circle, transparent 52%, #000 54%);animation:spin 0.85s linear infinite;margin-left:2px;margin-right:0}
+.dot.busy{width:10px;height:10px;border-radius:50%;background:conic-gradient(var(--gold) 0deg 90deg, color-mix(in srgb,var(--gold) 18%,transparent) 90deg 360deg);-webkit-mask:radial-gradient(circle, transparent 52%, #000 54%);mask:radial-gradient(circle, transparent 52%, #000 54%);animation:spin 0.85s linear infinite;margin-left:2px;margin-right:0}
 @keyframes spin{to{transform:rotate(360deg)}}
 /* finished-ready: gold dot with soft glow */
 .dot.done{background:var(--gold);box-shadow:0 0 5px var(--goldedge)}
@@ -129,7 +162,7 @@ html[data-platform="darwin"] .titlebar .window-buttons{display:none}
 .wh-dir:has(.sub:empty){display:none}
 .workhead .pp-toggle,.workhead .dot{flex:none}
 .workhead .wh-sp{flex:1}
-.workhead .wh-branch{flex:none;font-family:"Sometype Mono",monospace;font-size:12px;color:var(--gold);background:rgba(200,169,97,.08);padding:2px 8px;border-radius:5px;white-space:nowrap}
+.workhead .wh-branch{flex:none;font-family:"Sometype Mono",monospace;font-size:12px;color:var(--gold);background:color-mix(in srgb,var(--gold) 8%,transparent);padding:2px 8px;border-radius:5px;white-space:nowrap}
 .workhead .wh-branch.none{color:var(--faint);background:var(--panel2)}
 .workhead .workstats{position:relative;display:flex;align-items:center;gap:10px;flex:none;padding:4px 11px;border-radius:999px;background:var(--panel2);cursor:default;outline:0}
 .workhead .workstats:focus-visible{box-shadow:0 0 0 2px var(--goldedge)}
@@ -148,9 +181,9 @@ html[data-platform="darwin"] .titlebar .window-buttons{display:none}
 .msg.mono{font-family:"Sometype Mono",monospace;font-size:13.5px;color:var(--mut);background:var(--deep);border:1px solid var(--edge);border-radius:8px;padding:9px 11px}
 /* A warning is advice, not a failure. Red is reserved for things that actually
    broke; a cost hint in an error-red box reads as "your run is broken". */
-.msg.warn{font-family:"Sometype Mono",monospace;font-size:12.5px;color:var(--gold);background:rgba(200,169,97,.06);border:1px solid var(--goldedge);border-radius:8px;padding:8px 11px}
+.msg.warn{font-family:"Sometype Mono",monospace;font-size:12.5px;color:var(--gold);background:color-mix(in srgb,var(--gold) 6%,transparent);border:1px solid var(--goldedge);border-radius:8px;padding:8px 11px}
 .msg.warn.severe{color:var(--del);background:rgba(207,122,102,.07);border-color:var(--del)}
-.msg.compact{font-family:"Sometype Mono",monospace;font-size:12.5px;line-height:1.6;color:var(--mut);background:rgba(200,169,97,.07);border:1px solid var(--goldedge);border-radius:8px;padding:8px 11px}
+.msg.compact{font-family:"Sometype Mono",monospace;font-size:12.5px;line-height:1.6;color:var(--mut);background:color-mix(in srgb,var(--gold) 7%,transparent);border:1px solid var(--goldedge);border-radius:8px;padding:8px 11px}
 .msg.compact.busy{color:var(--gold)}
 .msg.compact.busy::after{content:"…";animation:blink 1s step-end infinite}
 .msg.compact.subtle{color:var(--faint);background:transparent;border:1px solid var(--edge);border-radius:8px;padding:6px 10px}
@@ -159,14 +192,14 @@ html[data-platform="darwin"] .titlebar .window-buttons{display:none}
 .composer-zone{flex:none;display:flex;justify-content:center;padding:8px 24px 14px}
 .composer{width:100%;max-width:760px;display:flex;flex-direction:column;gap:6px}
 .btn{border:1px solid var(--gold);border-radius:6px;background:transparent;color:var(--gold);cursor:pointer;font-weight:700;font-size:14px;padding:5px 11px}
-.btn:hover{background:var(--gold);color:#0e0e10}
+.btn:hover{background:var(--gold);color:var(--on-gold)}
 .btn.ghost{border-color:var(--edge2);color:var(--dim)} .btn.ghost:hover{background:var(--sel);color:var(--ink)}
 /* ---- the message box ----
    Text on top, one row of controls, Send at the end of that row. The box grows with
    what you type (it was fixed at two lines, so long prompts scrolled inside it) and
    shows focus with its border instead of every piece carrying its own outline. */
 .box{border:1px solid var(--edge2);border-radius:14px;background:var(--panel);display:flex;flex-direction:column;transition:border-color .15s,box-shadow .15s}
-.box:focus-within{border-color:var(--goldedge);box-shadow:0 0 0 3px rgba(200,169,97,.05)}
+.box:focus-within{border-color:var(--goldedge);box-shadow:0 0 0 3px color-mix(in srgb,var(--gold) 5%,transparent)}
 .send:focus-visible{outline:2px solid var(--gold);outline-offset:2px}
 .box #prompt{display:block;width:100%;box-sizing:border-box;background:transparent;border:0;outline:0;resize:none;color:var(--ink);font-family:Chivo,sans-serif;font-size:15px;line-height:1.55;padding:13px 16px 4px;field-sizing:content;min-height:46px;max-height:40vh;overflow-y:auto}
 /* With the preview open the chat column gets narrow, and the chips were wrapping
@@ -180,11 +213,11 @@ tests"). Scroll the row instead of breaking words:
 .composer-row::-webkit-scrollbar{height:0}
 .composer-row .chip{flex:none;white-space:nowrap}
 .composer-row .cmpbtn{flex:none}
-.send{width:32px;height:32px;flex:none;border:1px solid var(--gold);border-radius:9px;background:var(--gold);cursor:pointer;display:flex;align-items:center;justify-content:center;color:#0e0e10;transition:background .12s,color .12s,border-color .12s,opacity .12s}
-.send:hover:not(:disabled){background:#d8bb74;border-color:#d8bb74}
+.send{width:32px;height:32px;flex:none;border:1px solid var(--gold);border-radius:9px;background:var(--gold);cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--on-gold);transition:background .12s,color .12s,border-color .12s,opacity .12s}
+.send:hover:not(:disabled){background:var(--gold-hi);border-color:var(--gold-hi)}
 .send:disabled{background:var(--panel2);border-color:var(--edge2);color:var(--faint);cursor:default}
 .send.stop{background:rgba(207,122,102,.12);border-color:var(--del);color:var(--del)}
-.send.stop:hover:not(:disabled){background:var(--del);color:#0e0e10;border-color:var(--del)}
+.send.stop:hover:not(:disabled){background:var(--del);color:var(--on-gold);border-color:var(--del)}
 .send .ico-stop{display:none}
 .send.stop .ico-send{display:none}
 .send.stop .ico-stop{display:block}
@@ -285,6 +318,33 @@ tests"). Scroll the row instead of breaking words:
 .set-actions{display:flex;align-items:center;gap:12px;padding:10px 16px 12px;border-top:1px solid var(--edge)}
 .set-hint{font-size:12px;color:var(--faint);margin-right:auto}
 .set-sub{margin:4px 0 -6px;font-size:11.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--faint)}
+/* Settings > Appearance */
+.ap-swatches{display:flex;flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.ap-sw{width:26px;height:26px;border-radius:50%;border:2px solid var(--bg);padding:0;cursor:pointer;box-shadow:0 0 0 1px var(--edge2);position:relative;flex:none}
+.ap-sw[aria-checked="true"]{box-shadow:0 0 0 2px var(--ink)}
+.ap-sw:focus-visible{outline:2px solid var(--gold);outline-offset:3px}
+.ap-sw.custom{background:conic-gradient(#e06c75,#e5c07b,#98c379,#56b6c2,#61afef,#c678dd,#e06c75)}
+.ap-sw.custom input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;border:0;padding:0}
+.ap-prev{flex:none;border:1px solid var(--edge);border-radius:12px;overflow:hidden;background:var(--bg)}
+.ap-bar{display:flex;align-items:center;gap:8px;height:30px;padding:0 12px;background:var(--deep);border-bottom:1px solid var(--edge);font-size:12.5px;color:var(--ink)}
+.ap-mark{width:10px;height:10px;border-radius:3px;background:var(--gold)}
+.ap-crumb{color:var(--dim)}
+.ap-body{display:flex;flex-direction:column;gap:10px;padding:14px 16px}
+.ap-user{align-self:flex-end;max-width:80%;background:var(--panel2);border-radius:12px 12px 4px 12px;padding:8px 12px;font-size:calc(var(--msg-fs,15px) - .5px);color:var(--ink)}
+.ap-ans{font-size:var(--msg-fs,15px);line-height:1.6;color:var(--ink)}
+.ap-ans code{font-family:"Sometype Mono",monospace;font-size:.9em;background:var(--wash);border-radius:4px;padding:.05em .35em;color:var(--gold)}
+.ap-acts{display:flex;align-items:center;gap:10px}
+.ap-tg{width:34px;height:19px;border-radius:999px;background:color-mix(in srgb,var(--gold) 35%,transparent);position:relative;flex:none}
+.ap-tg::after{content:"";position:absolute;top:3px;left:18px;width:13px;height:13px;border-radius:50%;background:var(--gold)}
+.ap-chip{font-size:12px;color:var(--gold);border:1px solid var(--goldedge);border-radius:999px;padding:3px 10px}
+.ap-go{margin-left:auto;font-size:12.5px;font-weight:700;background:var(--gold);color:var(--on-gold);border-radius:8px;padding:5px 14px}
+.ap-foot{flex:none;display:flex;align-items:center;gap:12px}
+/* Settings > Computer use */
+.cu-pill{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;border-radius:999px;padding:3px 10px;white-space:nowrap}
+.cu-pill.ok{color:var(--add);background:color-mix(in srgb,var(--add) 14%,transparent)}
+.cu-pill.bad{color:var(--del);background:color-mix(in srgb,var(--del) 14%,transparent)}
+.cu-pill.off{color:var(--dim);background:var(--panel2)}
+.cu-cmd{display:block;margin-top:6px;font:12px "Sometype Mono",monospace;background:var(--panel2);color:var(--ink);border-radius:6px;padding:6px 8px;user-select:text;white-space:pre-wrap;word-break:break-all}
 .set-note{margin:0;font-size:12px;color:var(--faint);line-height:1.6}
 .set-note code{font-family:"Sometype Mono",monospace;font-size:11.5px;color:var(--dim)}
 .set-status{position:absolute;right:24px;bottom:16px;z-index:3;pointer-events:none;font-size:12.5px}
@@ -315,7 +375,7 @@ tests"). Scroll the row instead of breaking words:
 .num-b:hover{color:var(--ink)}
 .tog{width:40px;height:22px;border-radius:999px;border:0;background:var(--edge2);position:relative;cursor:pointer;flex:none;transition:background .15s}
 .tog::after{content:"";position:absolute;top:3px;left:3px;width:16px;height:16px;border-radius:50%;background:var(--mut);transition:transform .15s,background .15s}
-.tog[aria-checked="true"]{background:rgba(200,169,97,.35)}
+.tog[aria-checked="true"]{background:color-mix(in srgb,var(--gold) 35%,transparent)}
 .tog[aria-checked="true"]::after{transform:translateX(18px);background:var(--gold)}
 .seg{display:inline-flex;background:var(--panel2);border-radius:8px;padding:3px;gap:2px}
 .seg button{border:0;background:none;border-radius:6px;padding:5px 12px;cursor:pointer;display:flex;flex-direction:column;align-items:center;font-family:Chivo,sans-serif;font-weight:600;font-size:12.5px;color:var(--dim)}
@@ -410,13 +470,13 @@ tests"). Scroll the row instead of breaking words:
 .toast[hidden]{display:none}
 .toast-t{line-height:1.45;overflow-wrap:anywhere}
 .toast-a{flex:none;border:1px solid var(--goldedge);background:transparent;color:var(--gold);cursor:pointer;padding:4px 10px;border-radius:6px;font:inherit;font-size:12.5px}
-.toast-a:hover{background:rgba(200,169,97,.08)}
+.toast-a:hover{background:color-mix(in srgb,var(--gold) 8%,transparent)}
 /* selecting sessions (several at once, or a whole project's) */
 .search .sel-btn{flex:none;border:1px solid transparent;border-radius:5px;background:transparent;color:var(--faint);font:inherit;font-size:11.5px;padding:2px 7px;cursor:pointer}
 .search .sel-btn:hover,.search .sel-btn.on{color:var(--ink);border-color:var(--edge2)}
 .sess .sel-box,.proj-h .sel-box{flex:none;width:14px;height:14px;border:1.5px solid var(--edge2);border-radius:4px;display:inline-grid;place-items:center;font-size:10px;line-height:1;color:transparent}
 .sess.picked{background:var(--sel);color:var(--ink)}
-.sess.picked .sel-box,.proj-h .sel-box.all{background:var(--gold);border-color:var(--gold);color:#16130c}
+.sess.picked .sel-box,.proj-h .sel-box.all{background:var(--gold);border-color:var(--gold);color:var(--on-gold)}
 .proj-h .sel-box.some{border-color:var(--gold);color:var(--gold)}
 .proj-h .sel-box{cursor:pointer;margin-right:2px}
 .sel-bar{display:flex;align-items:center;gap:6px;padding:8px 6px;border-top:1px solid var(--edge);font-size:12.5px;color:var(--mut)}
@@ -511,7 +571,7 @@ tests"). Scroll the row instead of breaking words:
 .sub-new-row input{width:170px;border:1px solid var(--edge2);border-radius:6px;background:var(--deep);color:var(--ink);padding:5px 8px;font-family:'Sometype Mono',monospace;font-size:12.5px}
 .sub-new-row input.num-input{width:74px}
 .sub-new-row .btn{border:1px solid var(--goldedge);background:transparent;color:var(--gold);cursor:pointer;padding:6px 14px;border-radius:6px;font-weight:700}
-.sub-new-row .btn:hover{background:rgba(200,169,97,.08)}
+.sub-new-row .btn:hover{background:color-mix(in srgb,var(--gold) 8%,transparent)}
 .sub-divider{height:1px;background:var(--edge);margin:14px 4px 12px}
 .sub-list-head{font-family:"Sometype Mono",monospace;font-size:11px;letter-spacing:.1em;color:var(--gold);font-weight:700;text-transform:uppercase;display:flex;align-items:center;gap:6px}
 .count-badge{font-family:"Sometype Mono",monospace;font-size:10px;color:var(--faint);background:var(--panel2);border-radius:8px;padding:1px 6px}
@@ -734,7 +794,7 @@ tests"). Scroll the row instead of breaking words:
 .mm-body{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
 .mm-text{font-size:13.5px;line-height:1.55;color:var(--ink);overflow-wrap:anywhere;white-space:pre-wrap}
 .mm-text.clamp{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
-.mm-text mark,.sk-row mark{background:rgba(200,169,97,.28);color:inherit;border-radius:2px;padding:0 1px}
+.mm-text mark,.sk-row mark{background:color-mix(in srgb,var(--gold) 28%,transparent);color:inherit;border-radius:2px;padding:0 1px}
 .mm-meta{display:flex;align-items:baseline;gap:12px;font-size:11.5px;color:var(--faint)}
 .mm-more{border:0;background:none;padding:0;color:var(--dim);font:11.5px Chivo,sans-serif;cursor:pointer;text-decoration:underline;text-decoration-color:var(--edge2);text-underline-offset:3px}
 .mm-more:hover{color:var(--ink)}
@@ -920,15 +980,15 @@ tests"). Scroll the row instead of breaking words:
 .user-q .uq-sec{display:flex;flex-direction:column;gap:8px}
 .user-q .uq-sec + .uq-sec{padding-top:12px;border-top:1px solid var(--edge)}
 .user-q .uq-top{display:flex;align-items:center;gap:8px}
-.user-q .uq-hdr{font-family:"Sometype Mono",monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);background:rgba(200,169,97,.1);border:1px solid var(--goldedge);border-radius:999px;padding:2px 9px}
+.user-q .uq-hdr{font-family:"Sometype Mono",monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--gold);background:color-mix(in srgb,var(--gold) 10%,transparent);border:1px solid var(--goldedge);border-radius:999px;padding:2px 9px}
 .user-q .uq-multi{font-size:11.5px;color:var(--faint)}
 .user-q .uq-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:6px}
 .user-q .uq-card{display:flex;align-items:flex-start;gap:11px;width:100%;text-align:left;border:1px solid var(--edge2);background:var(--panel2);color:var(--ink);cursor:pointer;padding:9px 12px;border-radius:9px;font:inherit;transition:border-color .12s,background .12s}
-.user-q .uq-card:hover{border-color:var(--goldedge);background:rgba(200,169,97,.05)}
+.user-q .uq-card:hover{border-color:var(--goldedge);background:color-mix(in srgb,var(--gold) 5%,transparent)}
 .user-q .uq-card:focus-visible{outline:2px solid var(--gold);outline-offset:1px}
-.user-q .uq-card.on{border-color:var(--gold);background:rgba(200,169,97,.1)}
+.user-q .uq-card.on{border-color:var(--gold);background:color-mix(in srgb,var(--gold) 10%,transparent)}
 .user-q .uq-k{flex:none;width:20px;height:20px;margin-top:1px;display:flex;align-items:center;justify-content:center;border:1px solid var(--edge2);border-radius:5px;font:11px "Sometype Mono",monospace;color:var(--dim)}
-.user-q .uq-card.on .uq-k{background:var(--gold);border-color:var(--gold);color:#16130c;font-weight:700}
+.user-q .uq-card.on .uq-k{background:var(--gold);border-color:var(--gold);color:var(--on-gold);font-weight:700}
 .user-q .uq-card[role=checkbox].on .uq-k{font-size:0}
 .user-q .uq-card[role=checkbox].on .uq-k::before{content:"\2713";font-size:12px}
 .user-q .uq-t{display:flex;flex-direction:column;gap:2px;min-width:0}
@@ -940,13 +1000,13 @@ tests"). Scroll the row instead of breaking words:
 .user-q .uq-hint{flex:1;font-family:"Sometype Mono",monospace;font-size:11px;color:var(--faint)}
 .user-q .uq-skip{border:0;background:transparent;color:var(--dim);cursor:pointer;font:12.5px Chivo,sans-serif;padding:6px 8px;border-radius:7px}
 .user-q .uq-skip:hover{color:var(--ink);background:var(--sel)}
-.user-q .uq-submit{border:0;background:var(--gold);color:#16130c;font:700 13px Chivo,sans-serif;padding:7px 16px;border-radius:8px;cursor:pointer}
+.user-q .uq-submit{border:0;background:var(--gold);color:var(--on-gold);font:700 13px Chivo,sans-serif;padding:7px 16px;border-radius:8px;cursor:pointer}
 .user-q .uq-submit:hover{filter:brightness(1.07)}
 .user-q .uq-submit:disabled{background:var(--sel);color:var(--faint);cursor:default;filter:none}
 /* the yes/no confirmation, in the same family */
 .user-q .uq-options{display:flex;flex-wrap:wrap;gap:8px}
 .user-q .uq-opt{border:1px solid var(--edge2);background:var(--panel2);color:var(--ink);cursor:pointer;padding:7px 16px;border-radius:8px;font:13px Chivo,sans-serif}
-.user-q .uq-opt:hover{border-color:var(--goldedge);background:rgba(200,169,97,.06)}
+.user-q .uq-opt:hover{border-color:var(--goldedge);background:color-mix(in srgb,var(--gold) 6%,transparent)}
 .user-q .uq-opt.uq-ok{background:var(--add);border-color:var(--add);color:#101a0c;font-weight:700}
 .user-q .uq-opt.uq-ok:hover{filter:brightness(1.07)}
 .user-q .uq-opt.uq-no{color:var(--del);border-color:var(--edge2);background:transparent}
@@ -966,16 +1026,16 @@ tests"). Scroll the row instead of breaking words:
 
 /* ===================== conversation refit (approved 2026-09-25) ===================== */
 /* thread rhythm: answers read as prose, not as a stack of announcements */
-.md{font-size:15px;line-height:1.65;text-wrap:pretty;overflow-wrap:break-word}
+.md{font-size:var(--msg-fs,15px);line-height:1.65;text-wrap:pretty;overflow-wrap:break-word}
 .key-foot .key-acts{display:flex;gap:10px}
-.user{align-self:flex-end;max-width:80%;background:var(--panel2);border:0;border-radius:14px 14px 4px 14px;padding:10px 14px;font-size:14.5px;line-height:1.55;position:relative}
+.user{align-self:flex-end;max-width:80%;background:var(--panel2);border:0;border-radius:14px 14px 4px 14px;padding:10px 14px;font-size:calc(var(--msg-fs,15px) - .5px);line-height:1.55;position:relative}
 /* Fork from here: under the message, on hover (or keyboard focus), so it does not crowd the thread. */
 .user .u-fork{position:absolute;right:2px;bottom:-22px;display:flex;align-items:center;gap:5px;height:22px;padding:0 8px;border:1px solid var(--edge2);border-radius:6px;background:var(--panel);color:var(--dim);font:12px Chivo,sans-serif;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .12s}
 .user:hover .u-fork,.user .u-fork:focus-visible{opacity:1;pointer-events:auto}
 .user .u-fork:hover{color:var(--gold);border-color:var(--goldedge)}
 .user.steer .u-fork{display:none}
 /* what you said while it worked: a compact note in your colour, and whether Vox has read it */
-.user.steer{max-width:70%;padding:8px 12px 9px;font-size:13.5px;background:rgba(200,169,97,.07);box-shadow:inset 0 0 0 1px var(--goldedge);border-radius:12px 12px 4px 12px;animation:runIn .2s ease}
+.user.steer{max-width:70%;padding:8px 12px 9px;font-size:13.5px;background:color-mix(in srgb,var(--gold) 7%,transparent);box-shadow:inset 0 0 0 1px var(--goldedge);border-radius:12px 12px 4px 12px;animation:runIn .2s ease}
 .steer-tag{display:flex;align-items:center;gap:7px;margin-bottom:4px;font:500 11.5px Chivo,sans-serif;color:var(--gold)}
 .steer-tag .tr-ic{width:13px;height:13px;stroke:var(--gold)}
 .steer-state{margin-left:auto;padding-left:14px;font:11px "Sometype Mono",monospace;color:var(--faint);white-space:nowrap}
@@ -1012,7 +1072,7 @@ tests"). Scroll the row instead of breaking words:
 .pt-step.is-done .pt-dot{background:var(--add);border-color:var(--add)}
 .pt-step.is-done::before{background:rgba(147,184,132,.45)}
 .pt-step.is-now{color:var(--ink)}
-.pt-step.is-now .pt-dot{border-color:var(--gold);box-shadow:0 0 0 3px rgba(200,169,97,.18);animation:railPulse 1.6s ease-in-out infinite}
+.pt-step.is-now .pt-dot{border-color:var(--gold);box-shadow:0 0 0 3px color-mix(in srgb,var(--gold) 18%,transparent);animation:railPulse 1.6s ease-in-out infinite}
 .pt-step.is-todo{color:var(--mut)}
 /* A plan the last run left unfinished: kept, but quiet -- it is a record, not work in progress. */
 .plan-tab.stale .pt-tab{color:var(--sub)}
@@ -1077,7 +1137,7 @@ tests"). Scroll the row instead of breaking words:
 /* The file or command on an action line, toned like inline code in answers: the code
    font on a faint tint, no box edge. */
 /* a row's subject: quiet type on a faint wash, no box */
-.tr-chip{font:12.5px "Sometype Mono",monospace;color:#cbc7c1;background:rgba(255,255,255,.045);border:0;border-radius:6px;padding:.08em .55em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:100%;flex:0 1 auto}
+.tr-chip{font:12.5px "Sometype Mono",monospace;color:var(--chip-ink);background:var(--wash);border:0;border-radius:6px;padding:.08em .55em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;max-width:100%;flex:0 1 auto}
 .tr-more{font:12px "Sometype Mono",monospace;color:var(--sub);flex:none}
 .tr-sp{flex:1;min-width:8px}
 .tr-meta{flex:none;font:12px "Sometype Mono",monospace;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%}
@@ -1086,7 +1146,7 @@ tests"). Scroll the row instead of breaking words:
 .tr-chev{flex:none;width:12px;height:12px;stroke:var(--sub);fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;opacity:0;transition:transform .15s,opacity .15s}
 .toolrow.can-open .top:hover .tr-chev,.toolrow.open > .top .tr-chev{opacity:1}
 .toolrow.open > .top .tr-chev{transform:rotate(90deg)}
-.tr-spin{width:13px;height:13px;flex:none;margin:0 1px;border-radius:50%;background:conic-gradient(var(--gold) 0 90deg,rgba(200,169,97,.18) 90deg 360deg);-webkit-mask:radial-gradient(circle,transparent 52%,#000 54%);mask:radial-gradient(circle,transparent 52%,#000 54%);animation:trspin .85s linear infinite}
+.tr-spin{width:13px;height:13px;flex:none;margin:0 1px;border-radius:50%;background:conic-gradient(var(--gold) 0 90deg,color-mix(in srgb,var(--gold) 18%,transparent) 90deg 360deg);-webkit-mask:radial-gradient(circle,transparent 52%,#000 54%);mask:radial-gradient(circle,transparent 52%,#000 54%);animation:trspin .85s linear infinite}
 @keyframes trspin{to{transform:rotate(360deg)}}
 .notice{display:flex;gap:9px;align-items:flex-start;padding:4px 0;margin:2px 0;font-size:13.5px;line-height:1.5;color:var(--dim);animation:rowIn .24s ease}
 .notice .tr-ic{margin-top:3px}
@@ -1100,7 +1160,7 @@ tests"). Scroll the row instead of breaking words:
 .pv-acts{display:flex;gap:6px;flex:none}
 .pv-acts[hidden]{display:none}
 .pv-btn{font:12.5px Chivo,sans-serif;color:var(--gold);background:none;border:1px solid var(--goldedge);border-radius:6px;padding:1px 10px;cursor:pointer}
-.pv-btn:hover{background:rgba(200,169,97,.1)}
+.pv-btn:hover{background:color-mix(in srgb,var(--gold) 10%,transparent)}
 .pv-btn.ghost{color:var(--mut);border-color:var(--edge2)}
 .pv-btn.ghost:hover{color:var(--ink);background:var(--panel2)}
 .pv-row:not(.opened) .top{cursor:default}
@@ -1119,11 +1179,11 @@ tests"). Scroll the row instead of breaking words:
 .tr-icb .tr-ic{width:13px;height:13px}
 .tr-icb.is-good{background:rgba(147,184,132,.15)} .tr-icb.is-good .tr-ic{stroke:var(--add)}
 .tr-icb.is-bad{background:rgba(207,122,102,.16)} .tr-icb.is-bad .tr-ic{stroke:var(--del)}
-.tr-icb.is-warn{background:rgba(200,169,97,.15)} .tr-icb.is-warn .tr-ic{stroke:var(--gold)}
+.tr-icb.is-warn{background:color-mix(in srgb,var(--gold) 15%,transparent)} .tr-icb.is-warn .tr-ic{stroke:var(--gold)}
 .tr-meta.pill{padding:1px 9px;border-radius:999px;font-size:11.5px;font-weight:500}
 .tr-meta.pill.is-good{background:rgba(147,184,132,.15);color:var(--add)}
 .tr-meta.pill.is-bad{background:rgba(207,122,102,.16);color:var(--del)}
-.tr-meta.pill.is-warn{background:rgba(200,169,97,.15);color:var(--gold)}
+.tr-meta.pill.is-warn{background:color-mix(in srgb,var(--gold) 15%,transparent);color:var(--gold)}
 /* what opens under a row: a box per part, code coloured, lines never broken mid-word */
 .tr-card.secs{border:0;background:none;display:flex;flex-direction:column;gap:8px;overflow:visible}
 .tr-sec{border:1px solid var(--edge2);border-radius:8px;background:var(--deep);overflow:hidden;min-width:0}
@@ -1160,7 +1220,7 @@ tests"). Scroll the row instead of breaking words:
 .tr-sub:hover{background:var(--panel2)}
 .tr-card > :last-child{border-bottom:0}
 .tr-role{flex:none;font:10px "Sometype Mono",monospace;letter-spacing:.1em;text-transform:uppercase;padding:1px 6px;border-radius:4px}
-.tr-role.build{color:var(--gold);background:rgba(200,169,97,.11)}
+.tr-role.build{color:var(--gold);background:color-mix(in srgb,var(--gold) 11%,transparent)}
 .tr-role.explore{color:#7fa08f;background:rgba(127,160,143,.11)}
 .tr-role.review{color:#b3907a;background:rgba(179,144,122,.11)}
 .tr-acts{display:flex;flex-direction:column;padding:4px 0}
@@ -1247,8 +1307,8 @@ tests"). Scroll the row instead of breaking words:
 .sh-goal #shGoalTxt{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;color:var(--fg,inherit)}
 .sh-goal-ic{font-size:14px;line-height:1}
 /* the goal, as a card: what it works toward, where it stands, what it has taken */
-.sh-goalcard{color:var(--mut);gap:9px;padding:5px 6px 5px 5px;margin:-2px 0;border-radius:9px;background:rgba(200,169,97,.06);box-shadow:inset 0 0 0 1px var(--goldedge)}
-.gc-ic{display:grid;place-items:center;width:24px;height:24px;flex:none;border-radius:7px;background:rgba(200,169,97,.13);color:var(--gold)}
+.sh-goalcard{color:var(--mut);gap:9px;padding:5px 6px 5px 5px;margin:-2px 0;border-radius:9px;background:color-mix(in srgb,var(--gold) 6%,transparent);box-shadow:inset 0 0 0 1px var(--goldedge)}
+.gc-ic{display:grid;place-items:center;width:24px;height:24px;flex:none;border-radius:7px;background:color-mix(in srgb,var(--gold) 13%,transparent);color:var(--gold)}
 .gc-ic svg{width:15px;height:15px;stroke:currentColor;fill:none;stroke-width:1.8}
 .gc-lab{flex:none;font:600 11.5px Chivo,sans-serif;color:var(--gold)}
 .gc-txt{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--ink);font-size:13px}
@@ -1264,14 +1324,14 @@ tests"). Scroll the row instead of breaking words:
 .gc-meta:empty{display:none}
 .sh-goalcard #shGoalTxt{color:var(--ink)}
 .sh-work{color:var(--mut)}
-.sh-work .spin{width:12px;height:12px;flex:none;border-radius:50%;background:conic-gradient(var(--gold) 0 90deg,rgba(200,169,97,.18) 90deg 360deg);-webkit-mask:radial-gradient(circle,transparent 52%,#000 54%);mask:radial-gradient(circle,transparent 52%,#000 54%);animation:spin .85s linear infinite}
+.sh-work .spin{width:12px;height:12px;flex:none;border-radius:50%;background:conic-gradient(var(--gold) 0 90deg,color-mix(in srgb,var(--gold) 18%,transparent) 90deg 360deg);-webkit-mask:radial-gradient(circle,transparent 52%,#000 54%);mask:radial-gradient(circle,transparent 52%,#000 54%);animation:spin .85s linear infinite}
 @keyframes spin{to{transform:rotate(360deg)}}
 .sh-work #shWorkTxt{overflow:hidden;text-overflow:ellipsis}
 .sh-work .tm{font:12px "Sometype Mono",monospace;color:var(--sub)}
 .sh-warn{color:var(--gold);white-space:normal;flex:1 1 auto}
 .sh-warn #shWarnTxt{flex:1;min-width:0}
 .sh-lnk{border:0;background:none;color:var(--gold);font:600 12.5px Chivo,sans-serif;cursor:pointer;padding:2px 4px;border-radius:5px;flex:none}
-.sh-lnk:hover{background:rgba(200,169,97,.1)}
+.sh-lnk:hover{background:color-mix(in srgb,var(--gold) 10%,transparent)}
 .sh-steer{color:var(--gold)}
 .sh-steer b{color:var(--mut);font-weight:400;overflow:hidden;text-overflow:ellipsis;max-width:260px}
 .sh-steer button{border:0;background:none;color:var(--sub);cursor:pointer;font:12px Chivo,sans-serif;padding:2px 6px;border-radius:5px}
@@ -1342,7 +1402,7 @@ tests"). Scroll the row instead of breaking words:
 .qrows[hidden]{display:none}
 .qhead{display:flex;align-items:center;gap:8px;padding:8px 12px 4px 14px;font:12px Chivo,sans-serif;color:var(--sub)}
 .qhead .q-title{font-weight:600;color:var(--mut)}
-.qhead .q-count{min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:rgba(200,169,97,.13);color:var(--gold);font:600 11px "Sometype Mono",monospace;display:inline-grid;place-items:center}
+.qhead .q-count{min-width:18px;height:18px;padding:0 5px;border-radius:999px;background:color-mix(in srgb,var(--gold) 13%,transparent);color:var(--gold);font:600 11px "Sometype Mono",monospace;display:inline-grid;place-items:center}
 .qhead .q-when{color:var(--faint)}
 .qhead .q-clear{margin-left:auto;border:0;background:none;color:var(--sub);cursor:pointer;font:12px Chivo,sans-serif;letter-spacing:0;text-transform:none;padding:2px 6px;border-radius:5px}
 .qhead .q-clear:hover{color:var(--del);background:var(--sel)}
@@ -1355,7 +1415,7 @@ tests"). Scroll the row instead of breaking words:
 .q-pill.drop-before{box-shadow:inset 0 2px 0 0 var(--gold)}
 .q-pill.drop-after{box-shadow:inset 0 -2px 0 0 var(--gold)}
 .qrows.reordering .q-text{user-select:none}
-.q-idx{font:600 10.5px "Sometype Mono",monospace;color:var(--gold);width:18px;height:18px;flex:none;border-radius:50%;background:rgba(200,169,97,.1);display:grid;place-items:center}
+.q-idx{font:600 10.5px "Sometype Mono",monospace;color:var(--gold);width:18px;height:18px;flex:none;border-radius:50%;background:color-mix(in srgb,var(--gold) 10%,transparent);display:grid;place-items:center}
 /* a queued row is just its words until you point at it: then its handle and actions show */
 .q-pill{border-radius:8px;margin:0 6px;transition:background .12s}
 .q-pill:hover,.q-pill:focus-within{background:var(--panel2)}
@@ -1374,7 +1434,7 @@ tests"). Scroll the row instead of breaking words:
 /* an approval replaces the text box */
 .ask{display:flex;flex-direction:column;gap:10px;padding:14px 16px}
 .ask[hidden]{display:none}
-.box.asking{border-color:var(--goldedge);box-shadow:0 0 0 3px rgba(200,169,97,.06)}
+.box.asking{border-color:var(--goldedge);box-shadow:0 0 0 3px color-mix(in srgb,var(--gold) 6%,transparent)}
 .ask-h{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap}
 .ask-h b{font-size:14px;font-weight:700;color:var(--ink)}
 .ask-h span{font-size:13px;color:var(--sub)}
@@ -1390,8 +1450,8 @@ tests"). Scroll the row instead of breaking words:
 .ask-draft b{color:var(--mut);font-weight:400}
 .b{font:600 12.5px Chivo,sans-serif;padding:7px 13px;border-radius:8px;border:1px solid var(--edge2);color:var(--mut);background:var(--panel2);cursor:pointer}
 .b:hover{color:var(--ink);border-color:var(--sub)}
-.b.pri{background:var(--gold);color:#0e0e10;border-color:var(--gold)}
-.b.pri:hover{background:#d8bb74;border-color:#d8bb74;color:#0e0e10}
+.b.pri{background:var(--gold);color:var(--on-gold);border-color:var(--gold)}
+.b.pri:hover{background:var(--gold-hi);border-color:var(--gold-hi);color:var(--on-gold)}
 .b.lnk{background:none;border-color:transparent;color:var(--dim)}
 .b.lnk:hover{color:var(--ink);background:var(--sel)}
 .b kbd{font:10.5px "Sometype Mono",monospace;opacity:.7;margin-left:6px}
@@ -1410,7 +1470,7 @@ tests"). Scroll the row instead of breaking words:
 .plan-sw i::after{content:"";position:absolute;top:2px;left:2px;width:11px;height:11px;border-radius:50%;background:var(--mut);transition:left .15s,background .15s}
 .plan-sw[aria-checked="true"]{color:var(--ink)}
 .plan-sw[aria-checked="true"] i{background:var(--gold)}
-.plan-sw[aria-checked="true"] i::after{left:13px;background:#0e0e10}
+.plan-sw[aria-checked="true"] i::after{left:13px;background:var(--on-gold)}
 .ctxm{display:flex;align-items:center;gap:6px;padding:0 6px;font:11.5px "Sometype Mono",monospace;color:var(--sub);flex:none;cursor:default}
 .ctxm[hidden]{display:none}
 .ctxm svg{transform:rotate(-90deg)}
@@ -1461,7 +1521,7 @@ tests"). Scroll the row instead of breaking words:
 .sesslist{gap:3px}
 .sesslist .empty{font-size:12.5px;color:var(--sub);padding:8px}
 .proj{display:flex;flex-direction:column;border-radius:9px;transition:background .2s,box-shadow .2s}
-.proj.open{background:rgba(255,255,255,.018);box-shadow:inset 0 0 0 1px var(--edge)}
+.proj.open{background:var(--wash-lo);box-shadow:inset 0 0 0 1px var(--edge)}
 .proj-h{display:flex;align-items:center;gap:8px;height:34px;padding:0 6px 0 8px;border-radius:8px;color:var(--mut);font-size:13.5px;font-weight:600;cursor:pointer;user-select:none;position:relative}
 .proj-h:hover{background:var(--panel2);color:var(--ink)}
 .proj-h:focus-visible{outline:2px solid var(--goldedge);outline-offset:-2px}
@@ -1491,7 +1551,7 @@ tests"). Scroll the row instead of breaking words:
 .mp-row .shr{flex:none;font:600 10px "Sometype Mono",monospace;color:#8fb3d9;background:rgba(143,179,217,.12);border:1px solid rgba(143,179,217,.35);border-radius:5px;padding:0 5px;margin-left:6px}
 .wh-share{flex:none;font:600 11px "Sometype Mono",monospace;color:#8fb3d9;background:rgba(143,179,217,.1);border:1px solid rgba(143,179,217,.3);border-radius:5px;padding:2px 8px;white-space:nowrap;cursor:help}
 #chipTeam.on b{color:var(--gold)}
-#chipTeam.on{border-color:rgba(200,169,97,.45);background:rgba(200,169,97,.08)}
+#chipTeam.on{border-color:color-mix(in srgb,var(--gold) 45%,transparent);background:color-mix(in srgb,var(--gold) 8%,transparent)}
 .sh-team{display:inline-flex;align-items:center;gap:10px;color:var(--mut);min-width:0}
 /* display above beat the hidden attribute: its empty "Try it / Not now" showed in the bar during every run. */
 .sh-team[hidden]{display:none}
@@ -1541,7 +1601,7 @@ html[data-split] .composer-keys,.pane-mode .composer-keys{display:none}
    keyboard, but clicking the list gives the keyboard to the first page, so the mark always moved there. */
 html[data-split].pane-on .work .workhead,.pane-mode.pane-on .workhead{box-shadow:inset 0 -2px 0 var(--gold)}
 .pane-flash .workhead{animation:paneFlash .7s ease}
-@keyframes paneFlash{0%,100%{background:transparent}30%{background:rgba(200,169,97,.16)}}
+@keyframes paneFlash{0%,100%{background:transparent}30%{background:color-mix(in srgb,var(--gold) 16%,transparent)}}
 .work{position:relative}
 /* Dragging a session: the new layout, over the panes (which step aside). */
 .split-map{position:fixed;z-index:90;display:none;grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-rows:minmax(0,1fr) minmax(0,1fr);gap:10px;padding:10px;background:var(--bg)}
@@ -1550,13 +1610,14 @@ html[data-split].pane-on .work .workhead,.pane-mode.pane-on .workhead{box-shadow
 .sm-cell b{font:600 14px Chivo,sans-serif;color:var(--ink);max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .sm-cell span{font:12px "Sometype Mono",monospace;color:var(--faint)}
 .sm-cell.sm-main{border-style:solid;border-color:var(--edge);background:var(--panel)}
-.sm-cell.hot{border-style:solid;border-color:var(--gold);background:rgba(200,169,97,.10)}
+.sm-cell.hot{border-style:solid;border-color:var(--gold);background:color-mix(in srgb,var(--gold) 10%,transparent)}
 .sm-cell.hot b,.sm-cell.hot span{color:var(--gold)}
 .sm-msg{grid-column:1 / 3;grid-row:1 / 3;border-style:solid}
 /* In the list: open in a pane. */
 .sess.in-pane{box-shadow:inset 2px 0 0 var(--edge2)}
 .sess.in-pane .s-t::after{content:"side by side";margin-left:8px;font:10.5px "Sometype Mono",monospace;color:var(--faint)}
 </style>
+<script src="appearance.js"></script>
 </head>
 <body>
 <div class="app">
@@ -1781,7 +1842,9 @@ html[data-split].pane-on .work .workhead,.pane-mode.pane-on .workhead{box-shadow
     <h2 id="setTitle">Settings</h2>
     <button type="button" data-set="account" aria-current="page"><svg viewBox="0 0 24 24"><circle cx="8" cy="15" r="4"/><path d="M11 12l9-9M17 6l3 3M15 8l2 2"/></svg>Account</button>
     <button type="button" data-set="spend"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M15 9.5c-.5-1-1.6-1.5-3-1.5-1.8 0-3 .9-3 2.1 0 2.9 6 1.4 6 4.3 0 1.2-1.2 2.1-3 2.1-1.4 0-2.6-.6-3-1.6M12 6v2M12 16v2"/></svg>Spending</button>
+    <button type="button" data-set="look"><svg viewBox="0 0 24 24"><path d="M12 3a9 9 0 1 0 0 18c1.1 0 1.6-.8 1.6-1.6 0-.5-.2-.9-.5-1.2-.3-.3-.5-.7-.5-1.2 0-.9.7-1.6 1.6-1.6H16a5 5 0 0 0 5-5C21 6.6 17 3 12 3z"/><circle cx="7.5" cy="11" r="1"/><circle cx="10" cy="7" r="1"/><circle cx="14.5" cy="7" r="1"/></svg>Appearance</button>
     <button type="button" data-set="web"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><line x1="20" y1="20" x2="16" y2="16"/></svg>Web search</button>
+    <button type="button" data-set="cu"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="12" rx="2"/><path d="M8 20h8M12 16v4"/><path d="M10 8.5l4.5 1.6-2 .8-.8 2z"/></svg>Computer use</button>
     <button type="button" data-set="notify"><svg viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>Notifications</button>
     <button type="button" data-set="subs"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="7" height="7" rx="1.5"/><rect x="14" y="4" width="7" height="7" rx="1.5"/><rect x="8.5" y="14" width="7" height="7" rx="1.5"/></svg>Sub-agents</button>
     <button type="button" data-set="local"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="12" rx="2"/><path d="M8 20h8M12 16v4"/></svg>Local models</button>
@@ -1826,6 +1889,45 @@ html[data-split].pane-on .work .workhead,.pane-mode.pane-on .workhead{box-shadow
       <header class="set-top"><h3>Web search</h3><p>Lets the agent find sources instead of guessing URLs. Each search is billed on top of model tokens.</p></header>
       <div class="set-scroll">
         <div class="set-group"><div class="set-row"><div class="set-txt"><div class="set-lbl">Search the web</div><div class="set-desc">Off means the agent can only read pages it already has links to. Sub-agents follow this too.</div></div><div class="set-ctl"><button type="button" class="tog" id="wsToggle" role="switch" aria-checked="true" aria-label="Search the web"></button><input type="hidden" id="fWebSearch" value="on"></div></div><div class="set-row ws-dep"><div class="set-txt"><div class="set-lbl">Engine</div><div class="set-desc">OpenRouter’s fee for each search on that engine.</div></div><div class="set-ctl"><div class="seg" id="wsEngine" role="group" aria-label="Search engine"><button type="button" data-v="exa">Exa<small>$0.007</small></button><button type="button" data-v="parallel">Parallel<small>$0.005</small></button><button type="button" data-v="perplexity">Perplexity<small>$0.005</small></button></div><input type="hidden" id="fWebEngine" value="exa"></div></div><div class="set-row ws-dep"><div class="set-txt"><div class="set-lbl">Results per search</div><div class="set-desc">What the agent gets back when it doesn’t ask for a number. Above 10, OpenRouter charges extra per result.</div></div><div class="set-ctl"><div class="num"><button type="button" class="num-b" data-num="-1" aria-label="Decrease results per search">−</button><input id="fWebResults" type="number" min="1" max="10" step="1" placeholder="5" aria-label="results per search"><button type="button" class="num-b" data-num="1" aria-label="Increase results per search">+</button></div></div></div></div>
+      </div>
+    </section>
+
+    <section class="set-page" data-set="look" hidden>
+      <header class="set-top"><h3>Appearance</h3><p>How VoxAI looks. Changes show at once, in every window.</p></header>
+      <div class="set-scroll">
+        <div class="set-group">
+          <div class="set-row"><div class="set-txt"><div class="set-lbl">Theme</div><div class="set-desc">System follows your computer’s light or dark setting, and changes when it does.</div></div><div class="set-ctl"><div class="seg" id="apTheme" role="group" aria-label="Theme"><button type="button" data-v="dark">Dark</button><button type="button" data-v="midnight">Midnight</button><button type="button" data-v="light">Light</button><button type="button" data-v="system">System</button></div></div></div>
+          <div class="set-row wide"><div class="set-txt"><div class="set-lbl">Accent colour</div><div class="set-desc">Buttons, switches, links and highlights. A colour of your own is made deeper or lighter if it would be hard to read on the theme.</div></div><div class="set-ctl"><div class="ap-swatches" id="apAccent" role="radiogroup" aria-label="Accent colour"></div></div></div>
+          <div class="set-row"><div class="set-txt"><div class="set-lbl">Message text</div><div class="set-desc">The size of the conversation’s text. The rest of the app stays as it is.</div></div><div class="set-ctl"><div class="seg" id="apSize" role="group" aria-label="Message text size"><button type="button" data-v="s">Small</button><button type="button" data-v="m">Default</button><button type="button" data-v="l">Large</button><button type="button" data-v="xl">Larger</button></div></div></div>
+          <div class="set-row"><div class="set-txt"><div class="set-lbl">Reduce motion</div><div class="set-desc">Turns off fades, slides and spinners. Starts on when your system asks for less motion.</div></div><div class="set-ctl"><button type="button" class="tog" id="apCalm" role="switch" aria-checked="false" aria-label="Reduce motion"></button></div></div>
+        </div>
+        <h4 class="set-sub">Preview</h4>
+        <div class="ap-prev" aria-hidden="true">
+          <div class="ap-bar"><span class="ap-mark"></span><b>VoxAI Coder</b><span class="ap-crumb">› bounce-game</span></div>
+          <div class="ap-body">
+            <div class="ap-user">Make the ball bounce a bit higher</div>
+            <div class="ap-ans">Raised the bounce in <code>src/ball.js</code> from 0.70 to 0.85, and checked it in the preview: it clears the paddle now.</div>
+            <div class="ap-acts"><span class="ap-tg" aria-hidden="true"></span><span class="ap-chip">Review changes</span><span class="ap-go">Send</span></div>
+          </div>
+        </div>
+        <div class="ap-foot"><button class="btn ghost" id="apReset" type="button">Back to the defaults</button><span class="set-hint">The terminal panel keeps its own dark colours.</span></div>
+      </div>
+    </section>
+
+    <section class="set-page" data-set="cu" hidden>
+      <header class="set-top"><h3>Computer use</h3><p>Lets the agent see and work in a browser and in the apps on your desktop, the way you would: read what is on screen, click, type and press keys. Press Esc or move the mouse to stop it at any time.</p></header>
+      <div class="set-scroll">
+        <div class="set-group">
+          <div class="set-row"><div class="set-txt"><div class="set-lbl">Use the browser</div><div class="set-desc">Open pages in the preview, read them, click and type in them: how it checks a page or app it built. On a real website (not this PC’s own pages) each click and keystroke asks you first.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="cuBrowserTog" role="switch" aria-checked="true" aria-label="Use the browser"></button></div></div>
+          <div class="set-row"><div class="set-txt"><div class="set-lbl">Use apps on your desktop</div><div class="set-desc">Your real mouse and keyboard, in any app. Every click, keystroke and look at a window asks you first; “Always for” an app covers it for that session. Passwords are never typed or read.</div></div><div class="set-ctl"><button type="button" class="tog nt-tog" id="cuDesktopTog" role="switch" aria-checked="true" aria-label="Use apps on your desktop"></button></div></div>
+        </div>
+        <h4 class="set-sub">This computer</h4>
+        <div class="set-group" id="cuStatus"><div class="set-row"><div class="set-txt"><div class="set-lbl">Checking…</div></div></div></div>
+        <h4 class="set-sub">How the agent does it</h4>
+        <div class="set-group">
+          <div class="set-row"><div class="set-txt"><div class="set-lbl">The computer-use skill</div><div class="set-desc">What the agent reads before it works in a desktop app: the steps, and what it must never do. The preview-browser skill does the same for pages.</div></div><div class="set-ctl"><button class="btn ghost" id="cuSkill" type="button">Show the skills</button></div></div>
+          <div class="set-row"><div class="set-txt"><div class="set-lbl">Try it</div><div class="set-desc">Puts an example request in the message box, for you to send or change.</div></div><div class="set-ctl"><button class="btn ghost" id="cuTry" type="button">Try it</button></div></div>
+        </div>
       </div>
     </section>
 
@@ -6567,7 +6669,7 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
 }
 window.voxai.onAgentEvent(onAgentEvt);
 // Settings > Notifications: switch id -> setting.
-const NT_TOGS = [['ntToast', 'notifyToast'], ['ntNative', 'notifyNative'], ['fCacheHour', 'claudeCacheHour'], ['ntTaskbar', 'notifyTaskbar'], ['ntTrayMin', 'trayOnMinimize'], ['ntTrayClose', 'trayOnClose']];
+const NT_TOGS = [['cuBrowserTog', 'cuBrowser'], ['cuDesktopTog', 'cuDesktop'], ['ntToast', 'notifyToast'], ['ntNative', 'notifyNative'], ['fCacheHour', 'claudeCacheHour'], ['ntTaskbar', 'notifyTaskbar'], ['ntTrayMin', 'trayOnMinimize'], ['ntTrayClose', 'trayOnClose']];
 // An approval answered from a Windows notification: the box stops asking.
 if (window.voxai.onPermDone) window.voxai.onPermDone(({ permId, allowed }) => {
   for (const v of viewStore.values()) {
@@ -7191,6 +7293,8 @@ function showSetPage(key){
   if (key === 'skills') loadSkills();
   if (key === 'account') { paintKeys(); checkUpdatesSoon(); }
   if (key === 'mcp') { mcpClose(); loadMcp(); }
+  if (key === 'look') paintAppearance();
+  if (key === 'cu') paintCuStatus();
 }
 /** Paint the switch, the engine picker, the percentages and the presets from the fields. */
 function syncSetControls(){
@@ -7252,8 +7356,140 @@ function prefillAdvanced(){
   NT_TOGS.forEach(([id, key]) => { const b = $(id); if (b) b.setAttribute('aria-checked', String(!!s[key])); });
   if ($('fWebEngine')) $('fWebEngine').value = s.webSearchEngine || 'exa';
   if ($('fWebResults')) $('fWebResults').value = String(s.webSearchMaxResults || 5);
+  AP = apFrom(s);
   syncSetControls();
 }
+// ===== Settings > Appearance (appearance.js does the theming) =====
+const AP_DEFAULT = { theme: 'dark', accent: 'gold', msgSize: 'm', reduceMotion: null };
+let AP = { ...AP_DEFAULT };   // set from the saved settings below (apFrom)
+function apFrom(s){
+  s = s || {};
+  return { theme: s.theme || 'dark', accent: s.accent || 'gold', msgSize: s.msgSize || 'm', reduceMotion: typeof s.reduceMotion === 'boolean' ? s.reduceMotion : null };
+}
+function paintAppearance(){
+  const VA = window.VoxAppearance;
+  if (!VA || !$('apTheme')) return;
+  const on = (box, v) => box.querySelectorAll('button[data-v]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.v === v)));
+  on($('apTheme'), AP.theme);
+  on($('apSize'), AP.msgSize);
+  $('apCalm').setAttribute('aria-checked', String(document.documentElement.classList.contains('calm')));
+  // The swatches show each accent as it looks on the theme in use.
+  const theme = VA.resolveTheme(AP.theme);
+  const box = $('apAccent');
+  if (!box.childElementCount) {
+    Object.entries(VA.ACCENTS).forEach(([k, a]) => {
+      const b = el('button', 'ap-sw');
+      b.type = 'button'; b.dataset.v = k; b.title = a.name;
+      b.setAttribute('role', 'radio'); b.setAttribute('aria-label', a.name);
+      b.onclick = () => setAppearance({ accent: k });
+      box.appendChild(b);
+    });
+    const c = el('label', 'ap-sw custom');
+    c.title = 'A colour of your own';
+    c.setAttribute('role', 'radio'); c.setAttribute('aria-label', 'A colour of your own');
+    const inp = document.createElement('input');
+    inp.type = 'color'; inp.id = 'apCustom'; inp.setAttribute('aria-label', 'Pick a colour of your own');
+    inp.addEventListener('input', () => setAppearance({ accent: inp.value }, true));
+    inp.addEventListener('change', () => setAppearance({ accent: inp.value }));
+    c.appendChild(inp);
+    box.appendChild(c);
+  }
+  const custom = /^#/.test(AP.accent);
+  box.querySelectorAll('.ap-sw').forEach((b) => {
+    const k = b.dataset.v;
+    if (k) b.style.background = VA.accentFor(k, theme).gold;
+    b.setAttribute('aria-checked', String(k ? AP.accent === k : custom));
+  });
+  if (custom && $('apCustom')) $('apCustom').value = AP.accent;
+}
+/** Change part of the look: shown at once, saved (and sent to the other panes by main) unless `previewOnly`. */
+let apSaveTimer = 0;
+function setAppearance(patch, previewOnly){
+  AP = { ...AP, ...patch };
+  if (window.VoxAppearance) window.VoxAppearance.apply(AP);
+  paintAppearance();
+  if (previewOnly) return;
+  clearTimeout(apSaveTimer);
+  apSaveTimer = setTimeout(async () => {
+    try { S = await window.voxai.saveSettings({ ...AP }); flashSettingsSaved('Saved'); }
+    catch (e) { flashSettingsSaved('Could not save: ' + ((e && e.message) || e), true); }
+  }, 150);
+}
+(function wireAppearance(){
+  try { AP = apFrom(window.voxai.appearance && window.voxai.appearance()); } catch { /* defaults */ }
+  if (!$('apTheme')) return;
+  $('apTheme').querySelectorAll('button[data-v]').forEach((b) => { b.onclick = () => setAppearance({ theme: b.dataset.v }); });
+  $('apSize').querySelectorAll('button[data-v]').forEach((b) => { b.onclick = () => setAppearance({ msgSize: b.dataset.v }); });
+  $('apCalm').onclick = () => setAppearance({ reduceMotion: !document.documentElement.classList.contains('calm') });
+  $('apReset').onclick = () => setAppearance({ ...AP_DEFAULT });
+  // Another pane (or window) changed it: follow.
+  if (window.voxai.onAppearance) window.voxai.onAppearance((a) => {
+    AP = apFrom(a);
+    if (window.VoxAppearance) window.VoxAppearance.apply(AP);
+    if ($('modalBg').classList.contains('show')) paintAppearance();
+  });
+})();
+
+// ===== Settings > Computer use =====
+async function paintCuStatus(){
+  const box = $('cuStatus');
+  if (!box || !window.voxai.cuStatus) return;
+  let r = null;
+  try { r = await window.voxai.cuStatus(); } catch { r = null; }
+  box.innerHTML = '';
+  const row = (label, desc, pill, cls, extra) => {
+    const rw = el('div', 'set-row');
+    const tx = el('div', 'set-txt');
+    tx.appendChild(el('div', 'set-lbl', esc(label)));
+    const d = el('div', 'set-desc', esc(desc));
+    if (extra) d.appendChild(extra);
+    tx.appendChild(d);
+    const ctl = el('div', 'set-ctl');
+    if (pill) ctl.appendChild(el('span', 'cu-pill ' + cls, esc(pill)));
+    rw.append(tx, ctl);
+    box.appendChild(rw);
+    return ctl;
+  };
+  const dsk = (r && r.desktop) || { ok: false, system: '', note: 'Could not check.' , missing: [] };
+  const desktopOn = $('cuDesktopTog').getAttribute('aria-checked') === 'true';
+  let cmd = null;
+  if (dsk.missing && dsk.missing.length) {
+    // Package names differ from the commands: xwininfo comes in x11-utils on Debian and Ubuntu.
+    const pk = dsk.missing.map((m) => (m === 'xwininfo' ? 'x11-utils' : m));
+    cmd = el('code', 'cu-cmd', esc('sudo apt install ' + pk.join(' ')));
+    cmd.title = 'On Debian or Ubuntu; docs/LINUX.md has Fedora and Arch';
+  }
+  const how = dsk.ok ? (dsk.system + ', through ' + dsk.how + '.' + (dsk.note ? ' ' + dsk.note : ''))
+    : ((dsk.missing && dsk.missing.length ? 'Needs ' + dsk.missing.join(' and ') + ' to reach windows. ' : '') + (dsk.note || ''));
+  row('Desktop apps', how.trim(), !desktopOn ? 'Turned off' : dsk.ok ? 'Ready' : 'Not available', !desktopOn ? 'off' : dsk.ok ? 'ok' : 'bad', cmd);
+  if (dsk.backend === 'linux') {
+    row('Screenshots', dsk.screenshots && dsk.screenshots.length ? 'Taken with ' + dsk.screenshots.join(', or ') + '.' : 'Nothing here can take one: install ImageMagick (import), or grim on Sway or Hyprland.',
+      dsk.screenshots && dsk.screenshots.length ? 'Ready' : 'Missing', dsk.screenshots && dsk.screenshots.length ? 'ok' : 'bad');
+  }
+  const browserOn = $('cuBrowserTog').getAttribute('aria-checked') === 'true';
+  row('The browser', 'The preview inside VoxAI. ' + (r && r.chrome ? 'When there is no preview to use, it opens ' + baseName(r.chrome) + ' instead.' : 'When there is no preview to use it needs Chrome, Edge, Brave or Chromium, and none was found.'),
+    browserOn ? 'Ready' : 'Turned off', browserOn ? 'ok' : 'off');
+  const again = row('Check again', 'After installing something, or changing a switch above.', '', '');
+  const b = el('button', 'btn ghost', 'Check again'); b.type = 'button'; b.onclick = paintCuStatus;
+  again.appendChild(b);
+}
+(function wireCu(){
+  if (!$('cuSkill')) return;
+  ['cuBrowserTog', 'cuDesktopTog'].forEach((id) => $(id).addEventListener('click', () => setTimeout(paintCuStatus, 0)));
+  $('cuSkill').onclick = () => {
+    showSetPage('skills');
+    const q = $('skSearch'); if (q) { q.value = 'computer'; q.dispatchEvent(new Event('input')); }
+  };
+  $('cuTry').onclick = () => {
+    const desktop = $('cuDesktopTog').getAttribute('aria-checked') === 'true';
+    const ex = desktop
+      ? (IS_MAC ? 'Open the preview and check the page works: click through it and tell me what you find.' : 'Open Notepad and type a short shopping list for a picnic.')
+      : 'Open the preview and check the page works: click through it and tell me what you find.';
+    closeModal();
+    const p = $('prompt'); if (p) { p.value = ex; p.focus(); p.dispatchEvent(new Event('input')); }
+  };
+})();
+
 function closeModal(){ $('modalBg').classList.remove('show'); if (typeof paintUpdate === 'function') paintUpdate(); }
 $('btnSettings').onclick = () => openModal('account');
 $('btnClose').onclick = closeModal;

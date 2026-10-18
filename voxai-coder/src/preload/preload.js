@@ -244,6 +244,12 @@ if (IS_APP_PAGE) contextBridge.exposeInMainWorld('voxai', {
   revealFile: (p, workdir) => ipcRenderer.invoke('files:reveal', { path: p, workdir }),
   // win32 | linux | darwin: the page lays itself out for it (title bar, shortcut labels).
   platform: process.platform,
+  // Settings > Appearance: read synchronously so the page is themed before it paints
+  // (appearance.js), and again whenever any window changes it.
+  appearance: () => { try { return ipcRenderer.sendSync('appearance:get'); } catch { return null; } },
+  onAppearance: (cb) => { const fn = (_e, a) => cb(a); ipcRenderer.on('appearance', fn); return () => ipcRenderer.removeListener('appearance', fn); },
+  // Settings > Computer use: what desktop control can do on this system.
+  cuStatus: () => ipcRenderer.invoke('cu:status'),
   pathForFile: (file) => { try { return (webUtils && webUtils.getPathForFile(file)) || ''; } catch { return ''; } },
   onMenu: (cb) => {
     const fn = (_e, ch) => cb(ch);

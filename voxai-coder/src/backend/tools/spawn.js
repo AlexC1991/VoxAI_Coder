@@ -210,6 +210,8 @@ function makeSpawnTool({ runner, agentOpts, userData, live, emit }) {
         priceIn: agentOpts.priceIn || 0,
         // Workers follow the parent's web-search setting (off means off for them too).
         webSearch: agentOpts.webSearch || null,
+        // And its Settings > Computer use switches: a desktop turned off is off for a coder too.
+        computerUse: agentOpts.computerUse || null,
         // The parent's vision flag describes the PARENT's model. A worker on a different
         // model is looked up for itself: taken as unknown, Team's Muse Spark coder (which
         // reads images) got its own screenshots as another model's descriptions.
