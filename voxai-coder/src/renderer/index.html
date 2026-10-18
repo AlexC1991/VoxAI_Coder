@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-yrioA85Gltz3EAKrQbSHe5fFEUpYbqxHtSCfiz60ORk='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'sha256-U09n9pZ5zaDweEVsWV2ETnWl/LUkjQ0m9QJJKsFOMAw='; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com data:; img-src 'self' data: blob:; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VoxAI Coder</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -964,6 +964,7 @@ tests"). Scroll the row instead of breaking words:
 /* ===================== conversation refit (approved 2026-09-25) ===================== */
 /* thread rhythm: answers read as prose, not as a stack of announcements */
 .md{font-size:15px;line-height:1.65;text-wrap:pretty;overflow-wrap:break-word}
+.key-foot .key-acts{display:flex;gap:10px}
 .user{align-self:flex-end;max-width:80%;background:var(--panel2);border:0;border-radius:14px 14px 4px 14px;padding:10px 14px;font-size:14.5px;line-height:1.55;position:relative}
 /* Fork from here: under the message, on hover (or keyboard focus), so it does not crowd the thread. */
 .user .u-fork{position:absolute;right:2px;bottom:-22px;display:flex;align-items:center;gap:5px;height:22px;padding:0 8px;border:1px solid var(--edge2);border-radius:6px;background:var(--panel);color:var(--dim);font:12px Chivo,sans-serif;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .12s}
@@ -1767,11 +1768,13 @@ html[data-split].pane-on .work .workhead,.pane-mode.pane-on .workhead{box-shadow
   <div class="set-main">
     <button type="button" class="set-x" id="btnClose" aria-label="Close settings">✕</button>
     <section class="set-page" data-set="account">
-      <header class="set-top"><h3>Account</h3><p>Your OpenRouter keys. Stored in the OS keychain when available and only ever sent to OpenRouter.</p></header>
+      <header class="set-top"><h3>Account</h3><p>Your keys, stored in the OS keychain when available. Each is only ever sent to its own service: OpenRouter, Anthropic or OpenAI.</p></header>
       <div class="set-scroll">
         <div class="set-group">
           <div class="set-row wide"><div class="set-txt"><div class="set-lbl">OpenRouter key</div><div class="set-desc">Every model call and web search is billed to this key.</div></div><div class="set-ctl"><div class="keyrow"><div class="key-saved" id="fKeySaved" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span id="fKeyMask"></span></div><input id="fKey" type="password" placeholder="Paste your key: sk-or-v1-…" autocomplete="off" aria-label="OpenRouter key"><button class="btn ghost" id="btnTest" type="button">Test</button></div><div class="key-foot"><span class="set-state" id="keyState">Not set yet.</span><button type="button" class="key-swap" id="btnKeySwap" hidden>Replace</button></div></div></div>
           <div class="set-row wide"><div class="set-txt"><div class="set-lbl">Management key <span class="opt">optional</span></div><div class="set-desc">Adds your full account usage history. Not needed to run the agent.</div></div><div class="set-ctl"><div class="keyrow"><div class="key-saved" id="fMgmtSaved" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span id="fMgmtMask"></span></div><input id="fMgmtKey" type="password" placeholder="Paste your key: sk-or-v1-…" autocomplete="off" aria-label="Management key"><button class="btn ghost" id="btnTestMgmt" type="button">Test</button></div><div class="key-foot"><span class="set-state" id="mgmtKeyState">Not set.</span><button type="button" class="key-swap" id="btnMgmtSwap" hidden>Replace</button></div></div></div>
+          <div class="set-row wide"><div class="set-txt"><div class="set-lbl">Anthropic key <span class="opt">optional</span></div><div class="set-desc">Claude models then go straight to Anthropic, billed to this key, with Anthropic’s own caching and thinking. Other models still go through OpenRouter.</div></div><div class="set-ctl"><div class="keyrow"><div class="key-saved" id="fAntSaved" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span id="fAntMask"></span></div><input id="fAntKey" type="password" placeholder="Paste your key: sk-ant-…" autocomplete="off" aria-label="Anthropic key"></div><div class="key-foot"><span class="set-state" id="antKeyState">Not set: Claude models go through OpenRouter.</span><span class="key-acts"><button type="button" class="key-swap" id="btnAntRemove" hidden>Remove</button><button type="button" class="key-swap" id="btnAntSwap" hidden>Replace</button></span></div></div></div>
+          <div class="set-row wide"><div class="set-txt"><div class="set-lbl">OpenAI key <span class="opt">optional</span></div><div class="set-desc">OpenAI’s own models (GPT, o-series) then go straight to OpenAI, billed to this key. Other models still go through OpenRouter.</div></div><div class="set-ctl"><div class="keyrow"><div class="key-saved" id="fOaiSaved" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span id="fOaiMask"></span></div><input id="fOaiKey" type="password" placeholder="Paste your key: sk-…" autocomplete="off" aria-label="OpenAI key"></div><div class="key-foot"><span class="set-state" id="oaiKeyState">Not set: OpenAI models go through OpenRouter.</span><span class="key-acts"><button type="button" class="key-swap" id="btnOaiRemove" hidden>Remove</button><button type="button" class="key-swap" id="btnOaiSwap" hidden>Replace</button></span></div></div></div>
           <div class="set-actions"><span class="set-hint" id="keyHint">Nothing to save.</span><button class="btn" id="btnSave" type="button" disabled>Save keys</button></div>
         </div>
         <div class="set-group">
@@ -6236,7 +6239,7 @@ function onAgentEvt({ sessionId: sid, runKey, event }){
       v.cost = (v.cost || 0) + step;
       v.rate = v.tokens ? (v.cost / v.tokens) * 1000000 : null;
     }
-    balanceSpend(step);
+    if (!u.direct) balanceSpend(step);   // billed to an Anthropic or OpenAI key, not OpenRouter
     // Only the session on screen: another one's usage (a pane, a run in the background) painted this header.
     if (v.tokens && v === actView()) updateSessStats(v);
   } else if (event.type === 'done') {
@@ -7166,6 +7169,7 @@ async function saveSettingsNow(withKeys){
   if (withKeys) {
     if ($('fKey').value) patch.openrouterKey = $('fKey').value;
     if ($('fMgmtKey').value) patch.managementKey = $('fMgmtKey').value;
+    for (const u of Object.values(KEY_UI)) if (u.patch && $(u.input) && $(u.input).value.trim()) patch[u.patch] = $(u.input).value.trim();
   }
   if ($('fCompact').value) patch.compactThreshold = Number($('fCompact').value).toString();
   if ($('fToolResultMax').value) patch.toolResultMaxChars = String(Math.round(Number($('fToolResultMax').value)));
@@ -7192,8 +7196,7 @@ async function saveSettingsNow(withKeys){
   }
   if (withKeys) {
     // Do not leave a secret sitting in a field once it is stored.
-    $('fKey').value = ''; $('fMgmtKey').value = '';
-    KEY_EDIT.or = false; KEY_EDIT.mg = false;
+    for (const [w, u] of Object.entries(KEY_UI)) { if ($(u.input)) $(u.input).value = ''; KEY_EDIT[w] = false; }
     paintKeys();
     refreshUsage(); loadModels();
   }
@@ -7220,7 +7223,7 @@ $('btnSave').onclick = () => { if (keysDirty()) saveSettingsNow(true); };
   sheet.querySelectorAll('.set-nav button[data-set]').forEach((b) => { b.onclick = () => showSetPage(b.dataset.set); });
   sheet.addEventListener('change', (e) => {
     const t = e.target;
-    if (!t || t.id === 'fKey' || t.id === 'fMgmtKey') return;
+    if (!t || /^f(Key|MgmtKey|AntKey|OaiKey)$/.test(t.id)) return;
     if (t.type === 'number') clampNum(t);
     syncSetControls();
     queueSettingsSave();
@@ -9146,36 +9149,47 @@ const KEY_EDIT = { or: false, mg: false };
 const KEY_UI = {
   or: { has: () => S && S.hasOpenRouterKey, tail: () => S && S.keyTail, store: () => S && S.keyStore, saved: 'fKeySaved', mask: 'fKeyMask', input: 'fKey', state: 'keyState', swap: 'btnKeySwap', none: 'Not set yet.' },
   mg: { has: () => S && S.hasManagementKey, tail: () => S && S.mkeyTail, store: () => S && S.mkeyStore, saved: 'fMgmtSaved', mask: 'fMgmtMask', input: 'fMgmtKey', state: 'mgmtKeyState', swap: 'btnMgmtSwap', none: 'Not set.' },
+  // Optional: those makers' models straight from them (backend/providers/direct.js). Removable.
+  an: { has: () => S && S.hasAnthropicKey, tail: () => S && S.akeyTail, store: () => S && S.akeyStore, saved: 'fAntSaved', mask: 'fAntMask', input: 'fAntKey', state: 'antKeyState', swap: 'btnAntSwap', remove: 'btnAntRemove', patch: 'anthropicKey', prefix: 'sk-ant-', none: 'Not set: Claude models go through OpenRouter.', saidSaved: 'Claude models go straight to Anthropic' },
+  oa: { has: () => S && S.hasOpenaiKey, tail: () => S && S.okeyTail, store: () => S && S.okeyStore, saved: 'fOaiSaved', mask: 'fOaiMask', input: 'fOaiKey', state: 'oaiKeyState', swap: 'btnOaiSwap', remove: 'btnOaiRemove', patch: 'openaiKey', prefix: 'sk-', none: 'Not set: OpenAI models go through OpenRouter.', saidSaved: 'OpenAI’s models go straight to OpenAI' },
 };
 function keyState(which, text, tone){
   const st = $(KEY_UI[which].state); if (!st) return;
   st.textContent = text; st.classList.toggle('ok', tone === 'ok'); st.classList.toggle('bad', tone === 'bad');
 }
 function paintKeys(){
-  for (const which of ['or', 'mg']) {
+  for (const which of Object.keys(KEY_UI)) {
     const u = KEY_UI[which]; if (!$(u.input)) continue;
     const has = !!u.has(), editing = KEY_EDIT[which] || !has;
     $(u.saved).hidden = editing;
     $(u.input).hidden = !editing;
-    $(u.mask).textContent = 'sk-or-v1-' + '•'.repeat(8) + (u.tail() || '');
+    $(u.mask).textContent = (u.prefix || 'sk-or-v1-') + '•'.repeat(8) + (u.tail() || '');
     const sw = $(u.swap); sw.hidden = !has; sw.textContent = KEY_EDIT[which] ? 'Keep the saved key' : 'Replace';
+    if (u.remove && $(u.remove)) $(u.remove).hidden = !has || !!KEY_EDIT[which];
     if (!has) keyState(which, u.none);
     else if (KEY_EDIT[which]) keyState(which, 'Paste the new key, then Save keys.');
-    else keyState(which, 'Saved' + (u.store() === 'keychain' ? ' in the system keychain' : '') + '.');
+    else keyState(which, 'Saved' + (u.store() === 'keychain' ? ' in the system keychain' : '') + (u.saidSaved ? ': ' + u.saidSaved : '') + '.');
   }
   keysDirty();
 }
 /** Save keys lights up only when a key has been typed. */
 function keysDirty(){
-  const dirty = !!(($('fKey') && $('fKey').value.trim()) || ($('fMgmtKey') && $('fMgmtKey').value.trim()));
+  const dirty = Object.values(KEY_UI).some((u) => $(u.input) && $(u.input).value.trim());
   const b = $('btnSave'); if (b) b.disabled = !dirty;
   const h = $('keyHint'); if (h) { h.textContent = dirty ? 'Not saved yet.' : 'Nothing to save.'; h.classList.toggle('dirty', dirty); }
   return dirty;
 }
 (function wireKeys(){
-  for (const which of ['or', 'mg']) {
+  for (const which of Object.keys(KEY_UI)) {
     const u = KEY_UI[which]; if (!$(u.input)) continue;
     $(u.input).addEventListener('input', keysDirty);
+    // An optional key can go: its maker's models then go back through OpenRouter.
+    if (u.remove && $(u.remove)) $(u.remove).onclick = async () => {
+      try { S = await window.voxai.saveSettings({ [u.patch]: '' }); } catch (e) { keyState(which, 'Could not remove it: ' + ((e && e.message) || e), 'bad'); return; }
+      KEY_EDIT[which] = false; $(u.input).value = '';
+      paintKeys(); loadModels();
+      keyState(which, 'Removed. ' + u.none.replace(/^Not set: /, ''), 'ok');
+    };
     $(u.swap).onclick = () => {
       KEY_EDIT[which] = !KEY_EDIT[which];
       if (!KEY_EDIT[which]) $(u.input).value = '';

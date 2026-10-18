@@ -870,9 +870,9 @@ async function drain(gen) {
       // The changes line above the box, and the Settings clean-up.
       check('the changes line reads from the left when it is alone, and opens from the keyboard', HM.includes(".shelf.only-chg .sh-sp{display:none}") && HM.includes("$('shelf').classList.toggle('only-chg', shown.length === 1 && shown[0].id === 'ctxBar');") && HM.includes("e.target.id === 'ctxBar' && e.target.classList.contains('can-open')) { e.preventDefault(); toggleDiff(); }"), 'right-aligned');
       check('Settings: the saved note floats instead of owning a strip', HM.includes('.set-status{position:absolute;') && !HM.includes('.set-status{display:flex;justify-content:flex-end;align-items:center;padding:0 26px;border-top'), 'strip');
-      check('Settings: the key state is said in words', HM.includes("else keyState(which, 'Saved' + (u.store() === 'keychain' ? ' in the system keychain' : '') + '.');") && !HM.includes('leave blank to keep'), 'log text');
+      check('Settings: the key state is said in words', HM.includes("else keyState(which, 'Saved' + (u.store() === 'keychain' ? ' in the system keychain' : '') + (u.saidSaved ? ': ' + u.saidSaved : '') + '.');") && !HM.includes('leave blank to keep'), 'log text');
       // Account: a saved key shows as itself, Save keys only lights up with something to save.
-      check('Account: a saved key shows its last four, with Replace', HM.includes("$(u.mask).textContent = 'sk-or-v1-' + '•'.repeat(8) + (u.tail() || '');") && read('src/main/main.js').includes('keyTail: keyTail(raw.openrouterKey),') && /function keyTail\(blob\) \{[\s\S]{0,200}k\.slice\(-4\)/.test(read('src/main/main.js')), 'empty box');
+      check('Account: a saved key shows its last four, with Replace', HM.includes("$(u.mask).textContent = (u.prefix || 'sk-or-v1-') + '•'.repeat(8) + (u.tail() || '');") && read('src/main/main.js').includes('keyTail: keyTail(raw.openrouterKey),') && /function keyTail\(blob\) \{[\s\S]{0,200}k\.slice\(-4\)/.test(read('src/main/main.js')), 'empty box');
       check('Account: Save keys is off until a key is typed', HM.includes('<button class="btn" id="btnSave" type="button" disabled>Save keys</button>') && HM.includes("const b = $('btnSave'); if (b) b.disabled = !dirty;"), 'always lit');
       check('Account: usage closes from its header and with Esc', HM.includes('id="btnUsageX"') && HM.includes("if (e.key === 'Escape' && $('usageModalBg').classList.contains('show')) { e.stopImmediatePropagation(); closeUsage(); }") && HM.includes('.um-body{flex:1;min-height:0;overflow:auto;'), 'scroll to close');
       check('Usage: every column sorts, and a second click flips it', ['model', 'tokens', 'requests', 'cost'].every((k) => HM.includes('<button type="button" class="um-sort" data-k="' + k + '"')) && HM.includes("USAGE_SORT = USAGE_SORT.k === k ? { k, dir: USAGE_SORT.dir === 'asc' ? 'desc' : 'asc' }") && HM.includes('USAGE_ROWS = USAGE_ROWS.concat(g.rows || []);'), 'fixed order');
@@ -2292,7 +2292,7 @@ async function drain(gen) {
       check('the balance ticks down with each step, and a lagging reading does not put money back', before === '' && ticked === '$19.97'
         && Math.abs(lag - 19.97) < 1e-9 && rechecks === 1 && Math.abs(caught - 19.97) < 1e-9 && spendShown === '$19.95' && topUp === 29.95,
         { before, ticked, lag, caught, spendShown, topUp, rechecks });
-      check('every session\'s steps count, on the first page only; Settings says it counts down', HTMLs.includes('    balanceSpend(step);') && HTMLs.includes('  if (PANE || !(usd > 0) || BAL.avail == null) return;')
+      check('every session\'s steps count, on the first page only; Settings says it counts down', HTMLs.includes('    if (!u.direct) balanceSpend(step);') && HTMLs.includes('  if (PANE || !(usd > 0) || BAL.avail == null) return;')
         && HTMLs.includes('Counts down as runs spend, and is checked with OpenRouter after each run.'), 'wiring');
       // Several projects at once, in one window: going back to a project whose run was still
       // going wiped the run's place in the thread (the command read "Running" for good, later steps

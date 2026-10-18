@@ -195,6 +195,15 @@ function getSettings(redacted = true) {
     // The last four characters only, so Settings can show which key is saved.
     keyTail: keyTail(raw.openrouterKey),
     mkeyTail: keyTail(raw.managementKey),
+    // Optional: Claude and OpenAI's own models straight from them (backend/providers/direct.js).
+    hasAnthropicKey: !!(raw.anthropicKey && raw.anthropicKey.enc),
+    anthropicKey: redacted ? undefined : decryptSecret(raw.anthropicKey),
+    akeyTail: keyTail(raw.anthropicKey),
+    akeyStore: (raw.anthropicKey && raw.anthropicKey.store) || 'none',
+    hasOpenaiKey: !!(raw.openaiKey && raw.openaiKey.enc),
+    openaiKey: redacted ? undefined : decryptSecret(raw.openaiKey),
+    okeyTail: keyTail(raw.openaiKey),
+    okeyStore: (raw.openaiKey && raw.openaiKey.store) || 'none',
   };
 }
 function saveSettings(patch) {
@@ -208,6 +217,12 @@ function saveSettings(patch) {
     if (patch.managementKey) raw.managementKey = encryptSecret(patch.managementKey);
     else delete raw.managementKey;
     delete patch.managementKey;
+  }
+  for (const k of ['anthropicKey', 'openaiKey']) {
+    if (patch[k] === undefined) continue;
+    if (patch[k]) raw[k] = encryptSecret(String(patch[k]).trim());
+    else delete raw[k];   // '' removes it: those models go back through OpenRouter
+    delete patch[k];
   }
   Object.assign(raw, patch);
   writeSettingsFile(raw);
@@ -519,6 +534,11 @@ let atlasFrac = 0.5; // share of width given to chat (0..1)
 // Capability cache for the OpenRouter catalogue, populated by the `openrouter:models`
 // handler and consulted before a run starts. See assertModelUsable().
 let modelCapCache = { at: 0, byId: new Map() };
+// Claude / OpenAI with the user's own keys: the router reads them here, and the catalogue's prices.
+require('../backend/providers/direct').configure({
+  getKeys: () => { const s = getSettings(false); return { anthropic: s.anthropicKey || '', openai: s.openaiKey || '' }; },
+  priceOf: (model) => modelCapCache.byId.get(model) || null,
+});
 
 // Models on this PC (local-engine.js): llama-server, started on demand. Its address goes to the
 // model code, which sends "local/..." model ids there instead of to OpenRouter.

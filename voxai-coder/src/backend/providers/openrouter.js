@@ -259,6 +259,11 @@ function scanToolCalls(text, names) {
 }
 
 async function chatCompletions(opts) {
+  // Claude or OpenAI with the user's own key for them (Settings > Account): straight to the maker.
+  const direct = require('./direct');
+  if (direct.routeOf(opts && opts.model)) return direct.chatCompletions(opts);
+  // A turn Anthropic sent (kept for its thinking, providers/anthropic.js) is not for anyone else.
+  if (opts && Array.isArray(opts.messages)) opts = { ...opts, messages: direct.stripRaw(opts.messages) };
   if (isLocal(opts && opts.model)) {
     const { model, messages, tools, maxTokens = 16384, temperature, signal, onEvent, slowStopMs = 0 } = opts;
     // Its own abort, so a request too slow to finish can be ended here and say why.
@@ -634,6 +639,9 @@ async function consumeSSE(body, onEvent, idleMs) {
 // `extra` merges into the request body (plugins, usage accounting, ...); `signal`
 // lets a caller abort. Both optional, so existing callers are unchanged.
 async function chatOnce({ apiKey, host = DEFAULT_HOST, model, messages, maxTokens = 64, extra = null, signal = undefined }) {
+  const direct = require('./direct');
+  if (direct.routeOf(model)) return direct.chatOnce({ model, messages, maxTokens, signal });
+  messages = direct.stripRaw(messages);
   if (isLocal(model)) return JSON.parse(await (await postLocal({ model, messages, max_tokens: maxTokens, stream: false }, signal)).text());
   const res = await post(host, {
     method: 'POST',
@@ -652,4 +660,4 @@ async function chatOnce({ apiKey, host = DEFAULT_HOST, model, messages, maxToken
   return JSON.parse(text);
 }
 
-module.exports = { helperEffort, chatCompletions, chatOnce, responseError, freeUse, localEndpoint, flexRoute, wireModel, isLocal, recoverToolCalls, watchLocalSpeed, DEFAULT_HOST, applyCacheBreakpoints, cacheMode, reasoningParam, normalizeReasoning, nearestEffort, EFFORTS };
+module.exports = { consumeSSE, helperEffort, chatCompletions, chatOnce, responseError, freeUse, localEndpoint, flexRoute, wireModel, isLocal, recoverToolCalls, watchLocalSpeed, DEFAULT_HOST, applyCacheBreakpoints, cacheMode, reasoningParam, normalizeReasoning, nearestEffort, EFFORTS };

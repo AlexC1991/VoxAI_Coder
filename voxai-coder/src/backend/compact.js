@@ -328,7 +328,8 @@ function compactSession(session, opts = {}) {
     };
     if (fits) {
       session.compactedAt = new Date().toISOString();
-      session.messages = compacted;
+      // A summary edits the history: thinking kept for Anthropic (providers/anthropic.js) no longer fits it.
+      session.messages = require('./providers/direct').stripRaw(compacted);
       session.stops = [];   // their positions were in the old numbering
       best.session = session;
       return best;
@@ -340,7 +341,7 @@ function compactSession(session, opts = {}) {
   // request is as small as we can make it (never silently send oversized).
   if (best) {
     session.compactedAt = new Date().toISOString();
-    session.messages = best.compactedMessages;
+    session.messages = require('./providers/direct').stripRaw(best.compactedMessages);
     session.stops = [];
     best.session = session;
     delete best.compactedMessages;

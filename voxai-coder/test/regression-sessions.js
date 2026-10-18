@@ -612,8 +612,8 @@ function loadWith(file, stubs) {
     check('hidden sections really hide', HTML.includes('.set-page[hidden]{display:none}'), 'display:flex beats [hidden]');
     check('the do-nothing Cache TTL field is gone', !HTML.includes('fCacheTtl'), 'still there');
     check('changes save as they are made', code.includes('queueSettingsSave();') && code.includes('function saveSettingsNow(withKeys)'), 'Save button only');
-    check('...but never the keys', code.includes("if (!t || t.id === 'fKey' || t.id === 'fMgmtKey') return;") && /if \(withKeys\) \{\s*if \(\$\('fKey'\)\.value\)/.test(code), 'half-typed keys saved');
-    check('a stored key leaves the field', code.includes("$('fKey').value = ''; $('fMgmtKey').value = '';"), 'secret left in the field');
+    check('...but never the keys', code.includes("if (!t || /^f(Key|MgmtKey|AntKey|OaiKey)$/.test(t.id)) return;") && /if \(withKeys\) \{\s*if \(\$\('fKey'\)\.value\)/.test(code), 'half-typed keys saved');
+    check('a stored key leaves the field (every key, the Anthropic and OpenAI ones too)', code.includes("for (const [w, u] of Object.entries(KEY_UI)) { if ($(u.input)) $(u.input).value = ''; KEY_EDIT[w] = false; }"), 'secret left in the field');
     check('clearing the sub-agent model saves', code.includes("patch.subagentModel = $('fSubModel').value.trim();"), 'cannot reset');
     check('steppers stay inside their limits', code.includes('function clampNum(inp)'), 'unbounded');
     check('the status row opens Account', code.includes("st.onclick = () => openModal('account')"), 'dead row');

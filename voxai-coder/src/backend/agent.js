@@ -1125,6 +1125,7 @@ async function* runAgent(opts) {
     let content = '';
     const toolCalls = [];
     let finishReason = null;
+    let turnRaw = null;
     try {
       // A busy or failing provider, or a rate limit, usually passes in seconds; each one
       // used to end the run. Retried twice, a few seconds apart -- only while nothing of
@@ -1199,6 +1200,8 @@ async function* runAgent(opts) {
       content = r.content;
       toolCalls.push(...r.toolCalls);
       finishReason = r.finishReason || null;
+      // Anthropic's own turn (direct key): its thinking goes back with the tool results.
+      turnRaw = (r.raw && r.raw.anthropic) || null;
       effortNext = null;   // the lower level was for one turn
       // 'length' = the model was cut off at max_tokens mid-generation. Any tool call
       // in this turn may carry truncated arguments JSON, so say so rather than
@@ -1370,6 +1373,7 @@ async function* runAgent(opts) {
     session.messages.push({
       role: 'assistant', content: content || null,
       tool_calls: toolCalls.map((t) => ({ id: t.id, type: 'function', function: { name: t.name, arguments: t.arguments } })),
+      ...(turnRaw ? { _anthropic: turnRaw } : {}),
     });
 
     const turnImages = [];
